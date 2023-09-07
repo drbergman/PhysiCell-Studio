@@ -172,6 +172,10 @@ class ICs(QWidget):
 
         self.setupSubstratePlotParameters()
 
+        # self.mpl_connect("")
+        # self.mpl_connect("self.enter_ics_tab_cb)
+        self.installEventFilter(self)
+
         # self.output_dir = "."   # for nanoHUB
 
         #-------------------------------------------
@@ -638,7 +642,7 @@ class ICs(QWidget):
         self.save_button_substrates.clicked.connect(self.save_substrate_cb)
         hbox.addWidget(self.save_button_substrates)
 
-        self.import_substrate_button = QPushButton("Import config/ics.csv")
+        self.import_substrate_button = QPushButton("Import ./config/ics.csv")
         self.import_substrate_button.setFixedWidth(230)
         self.import_substrate_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
         self.import_substrate_button.clicked.connect(self.import_substrate_cb)
@@ -788,20 +792,21 @@ class ICs(QWidget):
         except:
             pass
 
-    def change_plot_range(self):
-        # print("\n----- change_plot_range:")
-        # print("----- my_xmin= ",self.my_xmin.text())
-        # print("----- my_xmax= ",self.my_xmax.text())
-        try:  # due to the initial callback
-            self.plot_xmin = float(self.my_xmin.text())
-            self.plot_xmax = float(self.my_xmax.text())
-            self.plot_ymin = float(self.my_ymin.text())
-            self.plot_ymax = float(self.my_ymax.text())
-            self.plot_zmin = float(self.my_zmin.text())
-            self.plot_zmax = float(self.my_zmax.text())
-            self.update_plots()
-        except:
-            pass
+    # DB found this to be unused (2023-09-07)
+    # def change_plot_range(self):
+    #     # print("\n----- change_plot_range:")
+    #     # print("----- my_xmin= ",self.my_xmin.text())
+    #     # print("----- my_xmax= ",self.my_xmax.text())
+    #     try:  # due to the initial callback
+    #         self.plot_xmin = float(self.my_xmin.text())
+    #         self.plot_xmax = float(self.my_xmax.text())
+    #         self.plot_ymin = float(self.my_ymin.text())
+    #         self.plot_ymax = float(self.my_ymax.text())
+    #         self.plot_zmin = float(self.my_zmin.text())
+    #         self.plot_zmax = float(self.my_zmax.text())
+    #         self.update_plots()
+    #     except:
+    #         pass
 
         # self.update_plots()
 
@@ -1056,7 +1061,7 @@ class ICs(QWidget):
         self.canvas.mpl_connect("button_press_event", self.button_press) # for cell placement when point selected
         self.canvas.mpl_connect("button_press_event", self.mousePressed) # for substrate placement when point not selected
         self.canvas.mpl_connect("motion_notify_event", self.mouseMoved) # for substrate placement when point not selected
-        self.canvas.mpl_connect("figure_leave_event", self.mouseLeft)
+        self.canvas.mpl_connect("figure_leave_event", self.mouseLeftFigure)
         self.canvas.setStyleSheet("background-color:transparent;")
 
         self.ax0 = self.figure.add_subplot(111, adjustable='box')
@@ -1102,6 +1107,7 @@ class ICs(QWidget):
             return
         self.mouse_pressed = not (self.mouse_pressed)
         if self.mouse_pressed is False:
+            self.update_substrate_plot(check_time_delay=False)
             return
         x, y, z = self.getPos(event)
         if (x is None) or (y is None) or (z is None):
@@ -1127,8 +1133,9 @@ class ICs(QWidget):
         check_time_delay = True
         self.update_substrate_plot(check_time_delay)
 
-    def mouseLeft(self, event):
+    def mouseLeftFigure(self, event):
         self.mouse_pressed = False
+        self.update_substrate_plot(check_time_delay=False)
 
     def setSubstrateValues(self):
         # self.current_substrate_values[self.current_voxel_subs[0],self.current_voxel_subs[1],self.current_voxel_subs[2]] = self.current_substrate_set_value
@@ -2155,7 +2162,7 @@ class ICs(QWidget):
     def add_new_substrate(self, sub_name):
         self.substrate_list.append(sub_name)
         self.substrate_combobox.addItem(sub_name)
-        self.all_substrate_values = np.concatenate((self.all_substrate_values, np.zeros(self.ny,self.nx)), axis=2)
+        self.all_substrate_values = np.concatenate((self.all_substrate_values, np.zeros((self.ny,self.nx,1))), axis=2)
 
     def delete_substrate(self, item_idx):
         subname = self.substrate_combobox.itemText(item_idx)
@@ -2163,7 +2170,6 @@ class ICs(QWidget):
         self.all_substrate_values = np.delete(self.all_substrate_values, ind, axis=2)
         self.substrate_list.remove(subname)
         self.substrate_combobox.removeItem(item_idx)
-
 
     def renamed_substrate(self, old_name,new_name):
         self.substrate_list = [new_name if x==old_name else x for x in self.substrate_list]
@@ -2203,3 +2209,25 @@ class ICs(QWidget):
                 self.current_substrate_values = self.all_substrate_values[:,:,self.substrate_combobox.currentIndex()]
             check_time_delay = False
             self.update_substrate_plot(check_time_delay)
+
+    def checkForNewGrid(self):
+        if float(self.config_tab.xmin.text())!=self.plot_xmin or float(self.config_tab.xmax.text())!=self.plot_xmax or float(self.config_tab.xdel.text())!=self.xdel \
+            or float(self.config_tab.ymin.text())!=self.plot_ymin or float(self.config_tab.ymax.text())!=self.plot_ymax or float(self.config_tab.ydel.text())!=self.ydel:
+            self.reset_plot_range()
+            self.setupSubstratePlotParameters()
+            self.ax0.set_xlim(self.plot_xmin, self.plot_xmax)
+            self.ax0.set_ylim(self.plot_ymin, self.plot_ymax)
+            self.substrate_plot = self.ax0.imshow(self.current_substrate_values, origin="lower",extent=(0, 1, 0, 1), transform=self.ax0.transAxes, vmin=0,vmax=1)
+            self.canvas.update()
+            self.canvas.draw()
+
+    # def enter_ics_tab_cb(self):
+    #     self.checkForNewGrid()
+
+    def eventFilter(self, source, event):
+        # print(event.type())
+        # print(f"focus in event is {QtCore.QEvent.Show}")
+        if event.type() == QtCore.QEvent.Show:
+            self.checkForNewGrid()
+            # print(f"A. source = {source}")
+        return False

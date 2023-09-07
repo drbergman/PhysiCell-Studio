@@ -51,6 +51,7 @@ class Config(QWidget):
 
         self.studio_flag = studio_flag
         self.vis_tab = None
+        self.ics_tab = None
 
         self.xml_root = None
 
@@ -111,6 +112,7 @@ class Config(QWidget):
         self.xmin = QLineEdit()
         self.xmin.setEnabled(domain_enabled)
         self.xmin.setValidator(QtGui.QDoubleValidator())
+        # self.xmin.textChanged.connect(self.xmin_changed_cb)
         self.config_tab_layout.addWidget(self.xmin, idx_row,1,1,1) # w, row, column, rowspan, colspan
 
         label = QLabel("Xmax")
@@ -120,6 +122,7 @@ class Config(QWidget):
         self.xmax = QLineEdit()
         self.xmax.setEnabled(domain_enabled)
         self.xmax.setValidator(QtGui.QDoubleValidator())
+        # self.xmax.textChanged.connect(self.xmax_changed_cb)
         self.config_tab_layout.addWidget(self.xmax, idx_row,3,1,1) # w, row, column, rowspan, colspan
 
         label = QLabel("dx")
@@ -129,6 +132,7 @@ class Config(QWidget):
         self.xdel = QLineEdit()
         self.xdel.setEnabled(domain_enabled)
         self.xdel.setValidator(QtGui.QDoubleValidator())
+        # self.xdel.textChanged.connect(self.xdel_changed_cb)
         self.config_tab_layout.addWidget(self.xdel, idx_row,5,1,1) # w, row, column, rowspan, colspan
 
         #----------
@@ -140,6 +144,7 @@ class Config(QWidget):
         self.ymin = QLineEdit()
         self.ymin.setEnabled(domain_enabled)
         self.ymin.setValidator(QtGui.QDoubleValidator())
+        # self.ymin.textChanged.connect(self.ymin_changed_cb)
         self.config_tab_layout.addWidget(self.ymin, idx_row,1,1,1) # w, row, column, rowspan, colspan
 
         label = QLabel("Ymax")
@@ -149,6 +154,7 @@ class Config(QWidget):
         self.ymax = QLineEdit()
         self.ymax.setEnabled(domain_enabled)
         self.ymax.setValidator(QtGui.QDoubleValidator())
+        # self.ymax.textChanged.connect(self.ymax_changed_cb)
         self.config_tab_layout.addWidget(self.ymax, idx_row,3,1,1) # w, row, column, rowspan, colspan
 
         label = QLabel("dy")
@@ -158,6 +164,7 @@ class Config(QWidget):
         self.ydel = QLineEdit()
         self.ydel.setEnabled(domain_enabled)
         self.ydel.setValidator(QtGui.QDoubleValidator())
+        # self.ydel.textChanged.connect(self.ydel_changed_cb)
         self.config_tab_layout.addWidget(self.ydel, idx_row,5,1,1) # w, row, column, rowspan, colspan
 
         #----------
@@ -169,6 +176,7 @@ class Config(QWidget):
         self.zmin = QLineEdit()
         self.zmin.setEnabled(domain_enabled)
         self.zmin.setValidator(QtGui.QDoubleValidator())
+        # self.zmin.textChanged.connect(self.zmin_changed_cb)
         self.config_tab_layout.addWidget(self.zmin, idx_row,1,1,1) # w, row, column, rowspan, colspan
 
         label = QLabel("Zmax")
@@ -178,6 +186,7 @@ class Config(QWidget):
         self.zmax = QLineEdit()
         self.zmax.setEnabled(domain_enabled)
         self.zmax.setValidator(QtGui.QDoubleValidator())
+        # self.zmax.textChanged.connect(self.zmax_changed_cb)
         self.config_tab_layout.addWidget(self.zmax, idx_row,3,1,1) # w, row, column, rowspan, colspan
 
         label = QLabel("dz")
@@ -187,6 +196,7 @@ class Config(QWidget):
         self.zdel = QLineEdit()
         self.zdel.setEnabled(domain_enabled)
         self.zdel.setValidator(QtGui.QDoubleValidator())
+        # self.zdel.textChanged.connect(self.zdel_changed_cb)
         self.config_tab_layout.addWidget(self.zdel, idx_row,5,1,1) # w, row, column, rowspan, colspan
 
         #============  Misc ================================
@@ -1009,6 +1019,68 @@ class Config(QWidget):
         for idx in range(len(self.substrate_list)):
             if old_name == self.svg_substrate_to_plot_dropdown.itemText(idx):
                 self.svg_substrate_to_plot_dropdown.setItemText(idx, new_name)
+
+    # def xmin_changed_cb(self):
+    #     if self.ics_tab is None:
+    #         return
+    #     self.ics_tab.plot_xmin = float(self.xmin.text())
+    #     self.reset_substrate_ics()
+
+    # def xmax_changed_cb(self):
+    #     if self.ics_tab is None:
+    #         return
+    #     self.ics_tab.plot_xmax = float(self.xmax.text())
+    #     self.reset_substrate_ics()
+
+    # def xdel_changed_cb(self):
+    #     if self.ics_tab is None:
+    #         return
+    #     self.ics_tab.xdel = float(self.xdel.text())
+    #     self.reset_substrate_ics()
+
+    # def ymin_changed_cb(self):
+    #     if self.ics_tab is None:
+    #         return
+    #     self.ics_tab.plot_ymin = float(self.ymin.text())
+    #     self.reset_substrate_ics()
+
+    # def ymax_changed_cb(self):
+    #     if self.ics_tab is None:
+    #         return
+    #     self.ics_tab.plot_ymax = float(self.ymax.text())
+    #     self.reset_substrate_ics()
+
+    # def ydel_changed_cb(self):
+    #     if self.ics_tab is None:
+    #         return
+    #     self.ics_tab.ydel = float(self.ydel.text())
+    #     self.reset_substrate_ics()
+
+    # def zmin_changed_cb(self):
+    #     if self.ics_tab is None:
+    #         return
+    #     self.ics_tab.plot_zmin = float(self.zmin.text())
+    #     self.reset_substrate_ics()
+
+    # def zmax_changed_cb(self):
+    #     if self.ics_tab is None:
+    #         return
+    #     self.ics_tab.plot_zmax = float(self.zmax.text())
+    #     self.reset_substrate_ics()
+
+    # def zdel_changed_cb(self):
+    #     if self.ics_tab is None:
+    #         return
+    #     self.ics_tab.zdel = float(self.zdel.text())
+    #     self.reset_substrate_ics()
+
+    # def reset_substrate_ics(self):
+    #     if self.ics_tab is not None:
+    #         self.ics_tab.setupSubstratePlotParameters()
+    #         self.ics_tab.ax0.set_xlim(self.ics_tab.plot_xmin, self.ics_tab.plot_xmax)
+    #         self.ics_tab.ax0.set_ylim(self.ics_tab.plot_ymin, self.ics_tab.plot_ymax)
+    #         self.ics_tab.canvas.update()
+    #         self.ics_tab.canvas.draw()
 
     #-----------------------------------------------------------------------------------------
     
