@@ -902,7 +902,7 @@ PhysiCell Studio is provided "AS IS" without warranty of any kind. &nbsp; In no 
             self.user_params_tab.fill_xml()
             if self.rules_flag:
                 self.rules_tab.fill_xml()
-
+            
             self.setWindowTitle(self.title_prefix + self.current_xml_file)
 
             # print("\n\n ===================================")
@@ -912,7 +912,7 @@ PhysiCell Studio is provided "AS IS" without warranty of any kind. &nbsp; In no 
             # self.tree.write(out_file)  # originally
             self.tree.write(self.current_xml_file)
             pretty_print(self.current_xml_file, self.current_xml_file)
-    
+
         except CellDefException as e:
             self.show_error_message(str(e) + " : save_cb(): Error: Please finish the definition before saving.")
 

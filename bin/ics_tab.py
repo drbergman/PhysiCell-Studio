@@ -168,6 +168,7 @@ class ICs(QWidget):
 
         self.substrate_list = []
         self.current_substrate_ind = None
+        self.full_substrate_ic_fname = "./config/ics.csv"
 
         self.setupSubstratePlotParameters()
 
@@ -1995,16 +1996,17 @@ class ICs(QWidget):
         if len(dir_name) > 0 and not os.path.isdir(dir_name):
             os.makedirs(dir_name)
             time.sleep(1)
-        full_fname = os.path.join(dir_name,"ics.csv") # also hardcode this for now
-        print("save_substrate_cb(): full_fname=",full_fname)
+        self.full_substrate_ic_fname = os.path.join(dir_name,"ics.csv") # also hardcode this for now
+        print("save_substrate_cb(): self.full_substrate_ic_fname=",self.full_substrate_ic_fname)
 
         print("----- Writing .csv file for substrate")
-        print("----- full_fname=",full_fname)
+        print("----- self.full_substrate_ic_fname=",self.full_substrate_ic_fname)
         X = np.tile(self.plot_xx,self.ny).reshape((-1,1))
         Y = np.repeat(self.plot_yy,self.nx).reshape((-1,1))
         Z = np.zeros(self.nx*self.ny).reshape((-1,1))
         C = self.all_substrate_values.reshape((len(X),-1))
-        np.savetxt(full_fname, np.concatenate((X,Y,Z, C), axis=1), delimiter=',')
+        np.savetxt(self.full_substrate_ic_fname, np.concatenate((X,Y,Z, C), axis=1), delimiter=',')
+        self.enable_csv_for_substrate_ics = True
 
     #--------------------------------------------------
     def import_cb(self):
@@ -2186,6 +2188,7 @@ class ICs(QWidget):
         self.current_substrate_values = np.zeros((self.ny, self.nx)) # set it up for plotting
         # self.current_substrate_values = np.zeros((self.ny, self.nx, self.nz))
         self.all_substrate_values = np.zeros((self.ny, self.nx, len(self.substrate_list)))
+        self.enable_csv_for_substrate_ics = False # since we're reseting this here, might as well disable this
 
     def import_substrate_cb(self):
         with open('./config/ics.csv', newline='') as csvfile:

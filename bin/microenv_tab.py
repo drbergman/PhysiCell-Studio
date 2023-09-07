@@ -1348,5 +1348,14 @@ class SubstrateDef(QWidget):
         else:
             self.xml_root.find(".//options//track_internalized_substrates_in_each_agent").text = 'false'
     
+        if self.ics_tab.enable_csv_for_substrate_ics is True:
+            if self.xml_root.find(".//microenvironment_setup//options//initial_condition") is None:
+                # add this eleement if it does not exist
+                elm = ET.Element("initial_condition", {"type":"csv", "enabled":'True'})
+                ET.SubElement(elm, 'filename')
+                self.xml_root.find('.//microenvironment_setup//options').insert(2,elm) # [calculate_gradients, track_internalized_substrates_in_each_agent, initial_condition]
+            self.xml_root.find(".//microenvironment_setup//options//initial_condition").attrib['type'] = 'csv'
+            self.xml_root.find(".//microenvironment_setup//options//initial_condition").attrib['enabled'] = 'true'
+            self.xml_root.find(".//microenvironment_setup//options//initial_condition//filename").text = self.ics_tab.full_substrate_ic_fname
     def clear_gui(self):
         pass
