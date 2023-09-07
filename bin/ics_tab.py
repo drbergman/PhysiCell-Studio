@@ -95,6 +95,8 @@ class ICs(QWidget):
         self.plot_xmax = 500
         self.plot_ymin = -500
         self.plot_ymax = 500
+        self.plot_zmin = -20
+        self.plot_zmax = 20
 
         # self.nanohub_flag = nanohub_flag
 
@@ -157,6 +159,24 @@ class ICs(QWidget):
 
         self.figsize_width_svg = basic_length
         self.figsize_height_svg = basic_length
+
+        self.mouse_pressed = False
+        self.current_voxel_subs = None
+
+        self.xdel = float(self.config_tab.xdel.text())
+        self.nx = int(np.ceil((self.plot_xmax - self.plot_xmin) / self.xdel))
+        self.plot_xx = np.arange(0,self.nx)*self.xdel+self.plot_xmin+0.5*self.xdel
+        self.ydel = float(self.config_tab.ydel.text())
+        self.ny = int(np.ceil((self.plot_ymax - self.plot_ymin) / self.ydel))
+        self.plot_yy = np.arange(0,self.ny)*self.ydel+self.plot_ymin+0.5*self.ydel
+        self.zdel = float(self.config_tab.zdel.text())
+        # self.nz = int(np.ceil((self.plot_zmax - self.plot_zmin) / self.zdel))
+        self.nz = 1 # only let this work for 2d
+        self.plot_zz = np.arange(0,self.nz)*self.zdel+self.plot_zmin+0.5*self.zdel
+        self.current_substrate_values = np.zeros((self.ny, self.nx)) # set it up for plotting
+        # self.current_substrate_values = np.zeros((self.ny, self.nx, self.nz))
+
+        self.substrate_set_value = 1.0
 
         # self.output_dir = "."   # for nanoHUB
 
@@ -545,6 +565,17 @@ class ICs(QWidget):
         hbox.addStretch(1)  # not sure about this, but keeps buttons shoved to left
         self.vbox.addLayout(hbox)
 
+
+        #--------------------- substrate save button
+        hbox = QHBoxLayout()
+        self.save_button_substrates = QPushButton("Save Substrate")
+        self.save_button_substrates.setFixedWidth(int(np.ceil(1.2*btn_width)))
+        self.save_button_substrates.setStyleSheet("QPushButton {background-color: yellow; color: black;}")
+        self.save_button_substrates.clicked.connect(self.save_substrate_cb)
+        hbox.addWidget(self.save_button_substrates)
+
+        self.vbox.addLayout(hbox)
+
         #---------------------
         splitter = QSplitter()
         self.scroll_params = QScrollArea()
@@ -595,6 +626,8 @@ class ICs(QWidget):
         self.plot_xmax = float(self.config_tab.xmax.text())
         self.plot_ymin = float(self.config_tab.ymin.text())
         self.plot_ymax = float(self.config_tab.ymax.text())
+        self.plot_zmin = float(self.config_tab.zmin.text())
+        self.plot_zmax = float(self.config_tab.zmax.text())
         try:  # due to the initial callback
             # self.my_xmin.setText(str(self.xmin))
             # self.my_xmax.setText(str(self.xmax))
@@ -694,6 +727,8 @@ class ICs(QWidget):
             self.plot_xmax = float(self.my_xmax.text())
             self.plot_ymin = float(self.my_ymin.text())
             self.plot_ymax = float(self.my_ymax.text())
+            self.plot_zmin = float(self.my_zmin.text())
+            self.plot_zmax = float(self.my_zmax.text())
             self.update_plots()
         except:
             pass
@@ -877,6 +912,8 @@ class ICs(QWidget):
         self.plot_xmax = float(self.config_tab.xmax.text())
         self.plot_ymin = float(self.config_tab.ymin.text())
         self.plot_ymax = float(self.config_tab.ymax.text())
+        self.plot_zmin = float(self.config_tab.zmin.text())
+        self.plot_zmax = float(self.config_tab.zmax.text())
         self.ax0.set_xlim(self.plot_xmin, self.plot_xmax)
         self.ax0.set_ylim(self.plot_ymin, self.plot_ymax)
         # self.update_plots()
@@ -944,11 +981,12 @@ class ICs(QWidget):
         # print("\nics_tab:  --------- create_figure(): ------- creating figure, canvas, ax0")
         self.figure = plt.figure()
         self.canvas = FigureCanvasQTAgg(self.figure)
-        self.canvas.mpl_connect("button_press_event", self.button_press)
+        self.canvas.mpl_connect("button_press_event", self.button_press) # for cell placement when point selected
+        self.canvas.mpl_connect("button_press_event", self.mousePressed) # for substrate placement when point not selected
+        self.canvas.mpl_connect("motion_notify_event", self.mouseMoved) # for substrate placement when point not selected
         self.canvas.setStyleSheet("background-color:transparent;")
 
         self.ax0 = self.figure.add_subplot(111, adjustable='box')
-
         # self.reset_model()
 
         # print("ics_tab:  create_figure(): ------- creating dummy contourf")
@@ -958,9 +996,13 @@ class ICs(QWidget):
         # X, Y = np.meshgrid(xlist, ylist)
         # Z = np.sqrt(X**2 + Y**2) + 10*np.random.rand()
 
-        # self.cmap = plt.cm.get_cmap("viridis")
-        # self.mysubstrate = self.ax0.contourf(X, Y, Z, cmap=self.cmap)
-
+        self.cmap = plt.cm.get_cmap("viridis")
+        # self.substrate_plot = self.ax0.contourf(self.plot_xx, self.plot_yy, self.current_substrate_values, cmap=self.cmap)
+        # self.substrate_plot = self.ax0.imshow(self.current_substrate_values, origin="lower", cmap=self.cmap, transform=self.ax0.transAxes)
+        self.substrate_plot = self.ax0.imshow(self.current_substrate_values, origin="lower",extent=(0, 1, 0, 1), transform=self.ax0.transAxes, vmin=0,vmax=1)
+        self.time_of_last_substrate_plot_update = time.time()
+        self.substrate_plot_time_delay = 0.1
+        
         # print("ics_tab:  ------------create_figure():  # axes = ",len(self.figure.axes))
 
         self.ax0.set_xlim(self.plot_xmin, self.plot_xmax)
@@ -971,7 +1013,76 @@ class ICs(QWidget):
         self.canvas.update()
         self.canvas.draw()
 
+        # self.canvas.mousePressEvent = self.mousePressed
+        # self.canvas.mouseMoveEvent = self.mouseMoved
+        # self.canvas.mouseReleaseEvent = self.mouseReleased
     #---------------------------------------------------------------------------
+    def getPos(self, event):
+        x = event.xdata  # or "None" if outside plot domain
+        y = event.ydata
+        z = 0.0
+        return x, y, z
+
+    def mousePressed(self, event):
+        if self.create_point is True:
+            return
+        self.mouse_pressed = not (self.mouse_pressed)
+        if self.mouse_pressed is False:
+            return
+        x, y, z = self.getPos(event)
+        if (x is None) or (y is None) or (z is None):
+            self.current_voxel_subs = None
+            return
+        self.current_voxel_subs = self.getAllVoxelSubs(x, y ,z)
+        self.setSubstrateValues()
+        self.update_substrate_plot()
+
+    def mouseMoved(self, event):
+        if (self.create_point is True) or (self.mouse_pressed is False):
+            return
+        x, y, z = self.getPos(event)
+        if (x is None) or (y is None) or (z is None):
+            self.current_voxel_subs = None
+            return
+        current_voxel_subs = self.getAllVoxelSubs(x, y, z)
+        if all(current_voxel_subs == self.current_voxel_subs):
+            return # only do something if in new voxel
+        self.current_voxel_subs = current_voxel_subs     
+        self.setSubstrateValues()   
+        self.update_substrate_plot()
+
+    def setSubstrateValues(self):
+        # self.current_substrate_values[self.current_voxel_subs[0],self.current_voxel_subs[1],self.current_voxel_subs[2]] = self.substrate_set_value
+        self.current_substrate_values[self.current_voxel_subs[1],self.current_voxel_subs[0]] = self.substrate_set_value
+
+    def getAllVoxelSubs(self, x, y, z):
+        x = self.getSingleVoxelSub(x, self.plot_xmin, self.xdel)
+        y = self.getSingleVoxelSub(y, self.plot_ymin, self.ydel)
+        z = self.getSingleVoxelSub(z, self.plot_zmin, self.zdel)
+        return np.array([x, y, z])
+
+    def getAllVoxelCoords(self, x, y, z):
+        x = self.getSingleVoxelCoord(x, self.plot_xmin, self.xdel)
+        y = self.getSingleVoxelCoord(y, self.plot_ymin, self.ydel)
+        z = self.getSingleVoxelCoord(z, self.plot_zmin, self.zdel)
+        return np.array([x, y, z])
+
+    def getSingleVoxelSub(self, x, xmin, dx):
+        return int((x - ((x-xmin) % dx) - xmin) / dx)
+
+    def getSingleVoxelCoord(self, x, xmin, dx):
+        remainder = (x-xmin) % dx
+        return x - remainder + 0.5 * dx
+    
+    def update_substrate_plot(self):
+        if time.time() > self.time_of_last_substrate_plot_update+self.substrate_plot_time_delay:
+            # self.substrate_plot = self.ax0.contourf(self.plot_xx, self.plot_yy, self.current_substrate_values, cmap=self.cmap)
+            self.substrate_plot.set_data(self.current_substrate_values)
+            # self.substrate_plot = self.ax0.imshow(self.current_substrate_values, origin="lower",extent=(0, 1, 0, 1), transform=self.ax0.transAxes)
+            self.canvas.update()
+            self.canvas.draw()
+            self.time_of_last_substrate_plot_update = time.time()
+
     def circles(self, x, y, s, c='b', vmin=None, vmax=None, **kwargs):
         """
         See https://gist.github.com/syrte/592a062c562cd2a98a83 
@@ -1799,6 +1910,18 @@ class ICs(QWidget):
             print("----- Writing v1 (with cell indices) .csv file for cells")
             print("----- full_fname=",full_fname)
             np.savetxt(full_fname, self.csv_array, delimiter=',')
+
+    def save_substrate_cb(self):
+        dir_name = self.csv_folder.text() # just use the same folder for now
+        if len(dir_name) > 0 and not os.path.isdir(dir_name):
+            os.makedirs(dir_name)
+            time.sleep(1)
+        full_fname = os.path.join(dir_name,"substrate_test.csv") # also hardcode this for now
+        print("save_substrate_cb(): full_fname=",full_fname)
+
+        print("----- Writing .csv file for substrate")
+        print("----- full_fname=",full_fname)
+        np.savetxt(full_fname, np.transpose(self.current_substrate_values), delimiter=',')
 
     #--------------------------------------------------
     def import_cb(self):
