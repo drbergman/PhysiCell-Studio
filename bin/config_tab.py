@@ -999,7 +999,7 @@ class Config(QWidget):
         self.substrate_list.append(sub_name)
         self.svg_substrate_to_plot_dropdown.addItem(sub_name)
 
-    def delete_substrate(self, item_idx, new_substrate):
+    def delete_substrate(self, item_idx):
         subname = self.svg_substrate_to_plot_dropdown.itemText(item_idx)
         self.substrate_list.remove(subname)
         self.svg_substrate_to_plot_dropdown.removeItem(item_idx)
