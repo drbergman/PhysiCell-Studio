@@ -1930,7 +1930,7 @@ class ICs(QWidget):
         self.ax0.cla()
         self.ax0.set_xlim(self.plot_xmin, self.plot_xmax)
         self.ax0.set_ylim(self.plot_ymin, self.plot_ymax)
-        self.setupSubstratePlotParameters()
+        self.substrate_plot = self.ax0.imshow(self.current_substrate_values, origin="lower",extent=(0, 1, 0, 1), transform=self.ax0.transAxes, vmin=0,vmax=1)
         self.canvas.update()
         self.canvas.draw()
 
@@ -2167,6 +2167,9 @@ class ICs(QWidget):
     def delete_substrate(self, item_idx):
         subname = self.substrate_combobox.itemText(item_idx)
         ind = self.substrate_list.index(subname)
+        print(f"ind = {ind}. shape = {self.all_substrate_values.shape}")
+        if self.current_substrate_ind==ind:
+            self.current_substrate_ind = None # if this was the current substrate for ic plotting, then do not bother saving the current values
         self.all_substrate_values = np.delete(self.all_substrate_values, ind, axis=2)
         self.substrate_list.remove(subname)
         self.substrate_combobox.removeItem(item_idx)
