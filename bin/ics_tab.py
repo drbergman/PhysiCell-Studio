@@ -175,8 +175,13 @@ class ICs(QWidget):
         self.substrate_value_updater = self.point_updater
         self.substrate_updater_pars = {}
 
-        # self.mpl_connect("")
-        # self.mpl_connect("self.enter_ics_tab_cb)
+        # after reading the docs and thinking about it, this is what I (DB) think is happening:
+        # ICs has installed an event filter for itself (self). So, any event being sent to ICs is first intercepted by this filter.
+        # What filter you ask? The function eventFilter that belongs to this class below!
+        # Any event that goes to ICs first gets sent through that filter.
+        # If the filter returns True, the event is discarded and not sent on; this would be bad because then nothing would work because no events would make it past the filter.
+        # If the filter returns False, then the event passes along to the target objects (self in this case) or any other installed event filters (those would actually take precedence over self).
+        # Though now I'm wondering how you could set this up to filter events to other targets since they all seem to be processed by the same eventFilter function, which brings into question why you'd pass in the target here...
         self.installEventFilter(self)
 
         # self.output_dir = "."   # for nanoHUB
@@ -2230,7 +2235,6 @@ class ICs(QWidget):
         self.substrate_updater_pars["y_ind_stretch"] = int(np.floor(R2/self.ydel))
 
     def setupGaussianRectangleUpdater(self):
-        print("in gaussian setup")
         self.substrate_updater_pars = {}
         updater_ready = True
         try:
@@ -2247,7 +2251,6 @@ class ICs(QWidget):
             updater_ready = False
 
         if updater_ready is False:
-            print("update not ready")
             self.substrate_value_updater = self.null_updater
             return
         
@@ -2257,7 +2260,6 @@ class ICs(QWidget):
         xx = self.xdel * np.arange(-self.substrate_updater_pars["x_ind_stretch"],self.substrate_updater_pars["x_ind_stretch"]+1).reshape((1,-1))
         yy = self.ydel * np.arange(-self.substrate_updater_pars["y_ind_stretch"],self.substrate_updater_pars["y_ind_stretch"]+1).reshape((-1,1))
         r2 = xx**2 + yy**2
-        print(r2)
         self.current_substrate_set_value = float(self.substrate_set_value.text())
         self.current_substrate_set_value = self.current_substrate_set_value * np.exp(-0.5*r2/(sigma*sigma))
 
@@ -2290,7 +2292,6 @@ class ICs(QWidget):
     def delete_substrate(self, item_idx):
         subname = self.substrate_combobox.itemText(item_idx)
         ind = self.substrate_list.index(subname)
-        print(f"ind = {ind}. shape = {self.all_substrate_values.shape}")
         if self.current_substrate_ind==ind:
             self.current_substrate_ind = None # if this was the current substrate for ic plotting, then do not bother saving the current values
         self.all_substrate_values = np.delete(self.all_substrate_values, ind, axis=2)
@@ -2305,21 +2306,18 @@ class ICs(QWidget):
 
     def substrate_par_1_value_changed_cb(self):
         if self.brush_combobox.currentText() == "rectangle":
-            print(f"setting up rectangle updater")
             self.setupRectangleUpdater()
         elif self.brush_combobox.currentText() == "gaussian_rectangle":
             self.setupGaussianRectangleUpdater()
 
     def substrate_par_2_value_changed_cb(self):
         if self.brush_combobox.currentText() == "rectangle":
-            print(f"setting up rectangle updater")
             self.setupRectangleUpdater()
         elif self.brush_combobox.currentText() == "gaussian_rectangle":
             self.setupGaussianRectangleUpdater()
 
     def substrate_par_3_value_changed_cb(self):
         if self.brush_combobox.currentText() == "gaussian_rectangle":
-            print(f"setting up gaussian rectangle updater")
             self.setupGaussianRectangleUpdater()
 
     def setupSubstratePlotParameters(self):
@@ -2363,13 +2361,7 @@ class ICs(QWidget):
             self.canvas.update()
             self.canvas.draw()
 
-    # def enter_ics_tab_cb(self):
-    #     self.checkForNewGrid()
-
     def eventFilter(self, source, event):
-        # print(event.type())
-        # print(f"focus in event is {QtCore.QEvent.Show}")
         if event.type() == QtCore.QEvent.Show:
             self.checkForNewGrid()
-            # print(f"A. source = {source}")
-        return False
+        return False # A False return value makes sure that this intercepted event goes on to the target object or any other eventFilter's
