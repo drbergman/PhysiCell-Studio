@@ -172,6 +172,9 @@ class ICs(QWidget):
 
         self.setupSubstratePlotParameters()
 
+        self.substrate_value_updater = self.point_updater
+        self.substrate_updater_pars = {}
+
         # self.mpl_connect("")
         # self.mpl_connect("self.enter_ics_tab_cb)
         self.installEventFilter(self)
@@ -600,7 +603,7 @@ class ICs(QWidget):
         
         self.brush_combobox = QComboBox()
         self.brush_combobox.addItem("point")
-        # self.brush_combobox.addItem("rectangle")
+        self.brush_combobox.addItem("rectangle")
         self.brush_combobox.currentIndexChanged.connect(self.brush_combobox_changed_cb)
         self.brush_combobox.setFixedWidth(200)  # how wide is sufficient?
         hbox.addWidget(self.brush_combobox)
@@ -617,13 +620,13 @@ class ICs(QWidget):
         self.substrate_set_value.setEnabled(True)
         self.substrate_set_value.setText(str(self.current_substrate_set_value))
         self.substrate_set_value.textChanged.connect(self.substrate_set_value_changed_cb)
-        self.substrate_set_value.setValidator(QtGui.QDoubleValidator(0.,10000.,2))
+        self.substrate_set_value.setValidator(QtGui.QDoubleValidator(0.,10000.,4))
         hbox.addWidget(self.substrate_set_value)
         hbox.addStretch(1)  # not sure about this, but keeps buttons shoved to left
 
         self.substrate_par_1_label = QLabel()
         self.substrate_par_1_label.setAlignment(QtCore.Qt.AlignRight)
-        hbox.addWidget(label)
+        hbox.addWidget(self.substrate_par_1_label)
 
         self.substrate_par_1_value = QLineEdit()
         self.substrate_par_1_value.setFixedWidth(fixed_width_value)  # how wide is sufficient?
@@ -631,6 +634,17 @@ class ICs(QWidget):
         self.substrate_par_1_value.textChanged.connect(self.substrate_par_1_value_changed_cb)
         self.substrate_par_1_value.setValidator(QtGui.QDoubleValidator(0.,10000.,2))
         hbox.addWidget(self.substrate_par_1_value)
+
+        self.substrate_par_2_label = QLabel()
+        self.substrate_par_2_label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(self.substrate_par_2_label)
+
+        self.substrate_par_2_value = QLineEdit()
+        self.substrate_par_2_value.setFixedWidth(fixed_width_value)  # how wide is sufficient?
+        self.substrate_par_2_value.setEnabled(False)
+        self.substrate_par_2_value.textChanged.connect(self.substrate_par_2_value_changed_cb)
+        self.substrate_par_2_value.setValidator(QtGui.QDoubleValidator(0.,10000.,2))
+        hbox.addWidget(self.substrate_par_2_value)
         hbox.addStretch(1)  # not sure about this, but keeps buttons shoved to left
         
         self.vbox.addLayout(hbox)
@@ -1114,7 +1128,7 @@ class ICs(QWidget):
             self.current_voxel_subs = None
             return
         self.current_voxel_subs = self.getAllVoxelSubs(x, y ,z)
-        self.setSubstrateValues()
+        self.substrate_value_updater()
         check_time_delay = True
         self.update_substrate_plot(check_time_delay)
 
@@ -1129,7 +1143,7 @@ class ICs(QWidget):
         if all(current_voxel_subs == self.current_voxel_subs):
             return # only do something if in new voxel
         self.current_voxel_subs = current_voxel_subs     
-        self.setSubstrateValues()   
+        self.substrate_value_updater()   
         check_time_delay = True
         self.update_substrate_plot(check_time_delay)
 
@@ -1137,9 +1151,18 @@ class ICs(QWidget):
         self.mouse_pressed = False
         self.update_substrate_plot(check_time_delay=False)
 
-    def setSubstrateValues(self):
+    def null_updater(self):
+        return
+    
+    def point_updater(self):
         # self.current_substrate_values[self.current_voxel_subs[0],self.current_voxel_subs[1],self.current_voxel_subs[2]] = self.current_substrate_set_value
         self.current_substrate_values[self.current_voxel_subs[1],self.current_voxel_subs[0]] = self.current_substrate_set_value
+
+    def rectangle_updater(self):
+        xL = [max(0,self.current_voxel_subs[0]-self.substrate_updater_pars["x_ind_stretch"]),min(self.nx,self.current_voxel_subs[0]+self.substrate_updater_pars["x_ind_stretch"]+1)]
+        yL = [max(0,self.current_voxel_subs[1]-self.substrate_updater_pars["y_ind_stretch"]),min(self.ny,self.current_voxel_subs[1]+self.substrate_updater_pars["y_ind_stretch"]+1)]
+        self.current_substrate_values[yL[0]:yL[1],xL[0]:xL[1]] = self.current_substrate_set_value
+        print(self.current_substrate_values[yL[0]:yL[1],xL[0]:xL[1]])
 
     def getAllVoxelSubs(self, x, y, z):
         x = self.getSingleVoxelSub(x, self.plot_xmin, self.xdel)
@@ -2133,10 +2156,39 @@ class ICs(QWidget):
         self.update_substrate_plot(check_time_delay)
 
     def brush_combobox_changed_cb(self):
-        print(f"current text = ")
-        if self.brush_combobox.currentText() is "rectangle":
-            self.substrate_par_1_label.Text("R1")
+        if self.brush_combobox.currentText() == "point":
+            self.substrate_par_1_label.setText("")
+            self.substrate_par_1_value.setEnabled(False)
+            self.substrate_par_2_label.setText("")
+            self.substrate_par_2_value.setEnabled(False)
+            self.substrate_value_updater = self.point_updater
+        elif self.brush_combobox.currentText() == "rectangle":
+            self.substrate_par_1_label.setText("R1")
             self.substrate_par_1_value.setEnabled(True)
+            self.substrate_par_2_label.setText("R2")
+            self.substrate_par_2_value.setEnabled(True)
+            self.setupRectangleUpdater()
+
+    def setupRectangleUpdater(self):
+        self.substrate_updater_pars = {}
+        updater_ready = True
+        try:
+            R1 = float(self.substrate_par_1_value.text())
+        except:
+            updater_ready = False
+        try:
+            R2 = float(self.substrate_par_2_value.text())
+        except:
+            updater_ready = False
+        if updater_ready is False:
+            self.substrate_value_updater = self.null_updater
+            return
+        
+        self.substrate_value_updater = self.rectangle_updater
+        self.substrate_updater_pars["x_ind_stretch"] = int(np.floor(R1/self.xdel))
+        self.substrate_updater_pars["y_ind_stretch"] = int(np.floor(R2/self.ydel))
+        print(f"finalizing rectangle! x stretch = {self.substrate_updater_pars['x_ind_stretch']}, y stretch = {self.substrate_updater_pars['y_ind_stretch']}")
+
 
     def substrate_set_value_changed_cb(self):
         try:  # due to the initial callback
@@ -2181,7 +2233,14 @@ class ICs(QWidget):
                 self.substrate_combobox.setItemText(idx, new_name)
 
     def substrate_par_1_value_changed_cb(self):
-        0
+        if self.brush_combobox.currentText() == "rectangle":
+            print(f"setting up rectangle updater")
+            self.setupRectangleUpdater()
+
+    def substrate_par_2_value_changed_cb(self):
+        if self.brush_combobox.currentText() == "rectangle":
+            print(f"setting up rectangle updater")
+            self.setupRectangleUpdater()
 
     def setupSubstratePlotParameters(self):
         self.xdel = float(self.config_tab.xdel.text())
