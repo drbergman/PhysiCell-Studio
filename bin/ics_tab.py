@@ -604,6 +604,7 @@ class ICs(QWidget):
         self.brush_combobox = QComboBox()
         self.brush_combobox.addItem("point")
         self.brush_combobox.addItem("rectangle")
+        self.brush_combobox.addItem("gaussian_rectangle")
         self.brush_combobox.currentIndexChanged.connect(self.brush_combobox_changed_cb)
         self.brush_combobox.setFixedWidth(200)  # how wide is sufficient?
         hbox.addWidget(self.brush_combobox)
@@ -645,6 +646,17 @@ class ICs(QWidget):
         self.substrate_par_2_value.textChanged.connect(self.substrate_par_2_value_changed_cb)
         self.substrate_par_2_value.setValidator(QtGui.QDoubleValidator(0.,10000.,2))
         hbox.addWidget(self.substrate_par_2_value)
+
+        self.substrate_par_3_label = QLabel()
+        self.substrate_par_3_label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(self.substrate_par_3_label)
+
+        self.substrate_par_3_value = QLineEdit()
+        self.substrate_par_3_value.setFixedWidth(fixed_width_value)  # how wide is sufficient?
+        self.substrate_par_3_value.setEnabled(False)
+        self.substrate_par_3_value.textChanged.connect(self.substrate_par_3_value_changed_cb)
+        self.substrate_par_3_value.setValidator(QtGui.QDoubleValidator(0.,10000.,3))
+        hbox.addWidget(self.substrate_par_3_value)
         hbox.addStretch(1)  # not sure about this, but keeps buttons shoved to left
         
         self.vbox.addLayout(hbox)
@@ -1159,10 +1171,25 @@ class ICs(QWidget):
         self.current_substrate_values[self.current_voxel_subs[1],self.current_voxel_subs[0]] = self.current_substrate_set_value
 
     def rectangle_updater(self):
-        xL = [max(0,self.current_voxel_subs[0]-self.substrate_updater_pars["x_ind_stretch"]),min(self.nx,self.current_voxel_subs[0]+self.substrate_updater_pars["x_ind_stretch"]+1)]
-        yL = [max(0,self.current_voxel_subs[1]-self.substrate_updater_pars["y_ind_stretch"]),min(self.ny,self.current_voxel_subs[1]+self.substrate_updater_pars["y_ind_stretch"]+1)]
-        self.current_substrate_values[yL[0]:yL[1],xL[0]:xL[1]] = self.current_substrate_set_value
-        print(self.current_substrate_values[yL[0]:yL[1],xL[0]:xL[1]])
+        # (i,j) refering to the (x,y) coordinates even though the matrix is the transpose of this
+        min_i = max(0,self.current_voxel_subs[0]-self.substrate_updater_pars["x_ind_stretch"])
+        max_i = min(self.nx,self.current_voxel_subs[0]+self.substrate_updater_pars["x_ind_stretch"]+1)
+        min_j = max(0,self.current_voxel_subs[1]-self.substrate_updater_pars["y_ind_stretch"])
+        max_j = min(self.ny,self.current_voxel_subs[1]+self.substrate_updater_pars["y_ind_stretch"]+1)
+        self.current_substrate_values[min_j:max_j,min_i:max_i] = self.current_substrate_set_value
+
+    def gaussian_rectangle_updater(self):
+        dx = self.substrate_updater_pars["x_ind_stretch"]-self.current_voxel_subs[0]
+        min_i_rect = max(0,dx)
+        max_i_rect = min(2*self.substrate_updater_pars["x_ind_stretch"] + 1,self.nx + dx)
+        min_i_all = min_i_rect - dx
+        max_i_all = max_i_rect - dx
+        dy = self.substrate_updater_pars["y_ind_stretch"]-self.current_voxel_subs[1]
+        min_j_rect = max(0,dy)
+        max_j_rect = min(2*self.substrate_updater_pars["y_ind_stretch"] + 1,self.ny + dy)
+        min_j_all = min_j_rect - dy
+        max_j_all = max_j_rect - dy
+        self.current_substrate_values[min_j_all:max_j_all,min_i_all:max_i_all] = np.maximum(self.current_substrate_values[min_j_all:max_j_all,min_i_all:max_i_all],self.current_substrate_set_value[min_j_rect:max_j_rect,min_i_rect:max_i_rect])
 
     def getAllVoxelSubs(self, x, y, z):
         x = self.getSingleVoxelSub(x, self.plot_xmin, self.xdel)
@@ -2161,13 +2188,26 @@ class ICs(QWidget):
             self.substrate_par_1_value.setEnabled(False)
             self.substrate_par_2_label.setText("")
             self.substrate_par_2_value.setEnabled(False)
+            self.substrate_par_3_label.setText("")
+            self.substrate_par_3_value.setEnabled(False)
             self.substrate_value_updater = self.point_updater
         elif self.brush_combobox.currentText() == "rectangle":
             self.substrate_par_1_label.setText("R1")
             self.substrate_par_1_value.setEnabled(True)
             self.substrate_par_2_label.setText("R2")
             self.substrate_par_2_value.setEnabled(True)
+            self.substrate_par_3_label.setText("")
+            self.substrate_par_3_value.setEnabled(False)
             self.setupRectangleUpdater()
+        elif self.brush_combobox.currentText() == "gaussian_rectangle":
+            self.substrate_par_1_label.setText("R1")
+            self.substrate_par_1_value.setEnabled(True)
+            self.substrate_par_2_label.setText("R2")
+            self.substrate_par_2_value.setEnabled(True)
+            self.substrate_par_3_label.setText("\sigma")
+            self.substrate_par_3_value.setEnabled(True)
+            self.setupGaussianRectangleUpdater()
+
 
     def setupRectangleUpdater(self):
         self.substrate_updater_pars = {}
@@ -2180,6 +2220,7 @@ class ICs(QWidget):
             R2 = float(self.substrate_par_2_value.text())
         except:
             updater_ready = False
+
         if updater_ready is False:
             self.substrate_value_updater = self.null_updater
             return
@@ -2187,8 +2228,38 @@ class ICs(QWidget):
         self.substrate_value_updater = self.rectangle_updater
         self.substrate_updater_pars["x_ind_stretch"] = int(np.floor(R1/self.xdel))
         self.substrate_updater_pars["y_ind_stretch"] = int(np.floor(R2/self.ydel))
-        print(f"finalizing rectangle! x stretch = {self.substrate_updater_pars['x_ind_stretch']}, y stretch = {self.substrate_updater_pars['y_ind_stretch']}")
 
+    def setupGaussianRectangleUpdater(self):
+        print("in gaussian setup")
+        self.substrate_updater_pars = {}
+        updater_ready = True
+        try:
+            R1 = float(self.substrate_par_1_value.text())
+        except:
+            updater_ready = False
+        try:
+            R2 = float(self.substrate_par_2_value.text())
+        except:
+            updater_ready = False
+        try:
+            sigma = float(self.substrate_par_3_value.text())
+        except:
+            updater_ready = False
+
+        if updater_ready is False:
+            print("update not ready")
+            self.substrate_value_updater = self.null_updater
+            return
+        
+        self.substrate_value_updater = self.gaussian_rectangle_updater
+        self.substrate_updater_pars["x_ind_stretch"] = int(np.floor(R1/self.xdel))
+        self.substrate_updater_pars["y_ind_stretch"] = int(np.floor(R2/self.ydel))
+        xx = self.xdel * np.arange(-self.substrate_updater_pars["x_ind_stretch"],self.substrate_updater_pars["x_ind_stretch"]+1).reshape((1,-1))
+        yy = self.ydel * np.arange(-self.substrate_updater_pars["y_ind_stretch"],self.substrate_updater_pars["y_ind_stretch"]+1).reshape((-1,1))
+        r2 = xx**2 + yy**2
+        print(r2)
+        self.current_substrate_set_value = float(self.substrate_set_value.text())
+        self.current_substrate_set_value = self.current_substrate_set_value * np.exp(-0.5*r2/(sigma*sigma))
 
     def substrate_set_value_changed_cb(self):
         try:  # due to the initial callback
@@ -2236,11 +2307,20 @@ class ICs(QWidget):
         if self.brush_combobox.currentText() == "rectangle":
             print(f"setting up rectangle updater")
             self.setupRectangleUpdater()
+        elif self.brush_combobox.currentText() == "gaussian_rectangle":
+            self.setupGaussianRectangleUpdater()
 
     def substrate_par_2_value_changed_cb(self):
         if self.brush_combobox.currentText() == "rectangle":
             print(f"setting up rectangle updater")
             self.setupRectangleUpdater()
+        elif self.brush_combobox.currentText() == "gaussian_rectangle":
+            self.setupGaussianRectangleUpdater()
+
+    def substrate_par_3_value_changed_cb(self):
+        if self.brush_combobox.currentText() == "gaussian_rectangle":
+            print(f"setting up gaussian rectangle updater")
+            self.setupGaussianRectangleUpdater()
 
     def setupSubstratePlotParameters(self):
         self.xdel = float(self.config_tab.xdel.text())
