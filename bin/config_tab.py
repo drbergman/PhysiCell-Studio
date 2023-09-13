@@ -52,6 +52,7 @@ class Config(QWidget):
 
         self.studio_flag = studio_flag
         self.vis_tab = None
+        self.ics_tab = None
 
         self.xml_root = None
 
@@ -114,6 +115,7 @@ class Config(QWidget):
         self.xmin = QLineEdit()
         self.xmin.setEnabled(domain_enabled)
         self.xmin.setValidator(QtGui.QDoubleValidator())
+        # self.xmin.textChanged.connect(self.xmin_changed_cb)
         self.config_tab_layout.addWidget(self.xmin, idx_row,1,1,1) # w, row, column, rowspan, colspan
 
         label = QLabel("Xmax")
@@ -123,6 +125,7 @@ class Config(QWidget):
         self.xmax = QLineEdit()
         self.xmax.setEnabled(domain_enabled)
         self.xmax.setValidator(QtGui.QDoubleValidator())
+        # self.xmax.textChanged.connect(self.xmax_changed_cb)
         self.config_tab_layout.addWidget(self.xmax, idx_row,3,1,1) # w, row, column, rowspan, colspan
 
         label = QLabel("dx")
@@ -132,6 +135,7 @@ class Config(QWidget):
         self.xdel = QLineEdit()
         self.xdel.setEnabled(domain_enabled)
         self.xdel.setValidator(QtGui.QDoubleValidator())
+        # self.xdel.textChanged.connect(self.xdel_changed_cb)
         self.config_tab_layout.addWidget(self.xdel, idx_row,5,1,1) # w, row, column, rowspan, colspan
 
         #----------
@@ -143,6 +147,7 @@ class Config(QWidget):
         self.ymin = QLineEdit()
         self.ymin.setEnabled(domain_enabled)
         self.ymin.setValidator(QtGui.QDoubleValidator())
+        # self.ymin.textChanged.connect(self.ymin_changed_cb)
         self.config_tab_layout.addWidget(self.ymin, idx_row,1,1,1) # w, row, column, rowspan, colspan
 
         label = QLabel("Ymax")
@@ -152,6 +157,7 @@ class Config(QWidget):
         self.ymax = QLineEdit()
         self.ymax.setEnabled(domain_enabled)
         self.ymax.setValidator(QtGui.QDoubleValidator())
+        # self.ymax.textChanged.connect(self.ymax_changed_cb)
         self.config_tab_layout.addWidget(self.ymax, idx_row,3,1,1) # w, row, column, rowspan, colspan
 
         label = QLabel("dy")
@@ -161,6 +167,7 @@ class Config(QWidget):
         self.ydel = QLineEdit()
         self.ydel.setEnabled(domain_enabled)
         self.ydel.setValidator(QtGui.QDoubleValidator())
+        # self.ydel.textChanged.connect(self.ydel_changed_cb)
         self.config_tab_layout.addWidget(self.ydel, idx_row,5,1,1) # w, row, column, rowspan, colspan
 
         #----------
@@ -172,6 +179,7 @@ class Config(QWidget):
         self.zmin = QLineEdit()
         self.zmin.setEnabled(domain_enabled)
         self.zmin.setValidator(QtGui.QDoubleValidator())
+        # self.zmin.textChanged.connect(self.zmin_changed_cb)
         self.config_tab_layout.addWidget(self.zmin, idx_row,1,1,1) # w, row, column, rowspan, colspan
 
         label = QLabel("Zmax")
@@ -181,6 +189,7 @@ class Config(QWidget):
         self.zmax = QLineEdit()
         self.zmax.setEnabled(domain_enabled)
         self.zmax.setValidator(QtGui.QDoubleValidator())
+        # self.zmax.textChanged.connect(self.zmax_changed_cb)
         self.config_tab_layout.addWidget(self.zmax, idx_row,3,1,1) # w, row, column, rowspan, colspan
 
         label = QLabel("dz")
@@ -190,6 +199,7 @@ class Config(QWidget):
         self.zdel = QLineEdit()
         self.zdel.setEnabled(domain_enabled)
         self.zdel.setValidator(QtGui.QDoubleValidator())
+        # self.zdel.textChanged.connect(self.zdel_changed_cb)
         self.config_tab_layout.addWidget(self.zdel, idx_row,5,1,1) # w, row, column, rowspan, colspan
 
         #============  Misc ================================
@@ -1095,7 +1105,7 @@ class Config(QWidget):
         self.substrate_list.append(sub_name)
         self.svg_substrate_to_plot_dropdown.addItem(sub_name)
 
-    def delete_substrate(self, item_idx, new_substrate):
+    def delete_substrate(self, item_idx):
         subname = self.svg_substrate_to_plot_dropdown.itemText(item_idx)
         self.substrate_list.remove(subname)
         self.svg_substrate_to_plot_dropdown.removeItem(item_idx)

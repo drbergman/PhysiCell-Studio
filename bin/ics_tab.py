@@ -95,6 +95,8 @@ class ICs(QWidget):
         self.plot_xmax = 500
         self.plot_ymin = -500
         self.plot_ymax = 500
+        self.plot_zmin = -20
+        self.plot_zmax = 20
 
         # self.nanohub_flag = nanohub_flag
 
@@ -158,6 +160,30 @@ class ICs(QWidget):
         self.figsize_width_svg = basic_length
         self.figsize_height_svg = basic_length
 
+        self.mouse_pressed = False
+        self.current_voxel_subs = None
+
+
+        self.current_substrate_set_value = 1.0
+
+        self.substrate_list = []
+        self.current_substrate_ind = None
+        self.full_substrate_ic_fname = "./config/ics.csv"
+
+        self.setupSubstratePlotParameters()
+
+        self.substrate_value_updater = self.point_updater
+        self.substrate_updater_pars = {}
+
+        # after reading the docs and thinking about it, this is what I (DB) think is happening:
+        # ICs has installed an event filter for itself (self). So, any event being sent to ICs is first intercepted by this filter.
+        # What filter you ask? The function eventFilter that belongs to this class below!
+        # Any event that goes to ICs first gets sent through that filter.
+        # If the filter returns True, the event is discarded and not sent on; this would be bad because then nothing would work because no events would make it past the filter.
+        # If the filter returns False, then the event passes along to the target objects (self in this case) or any other installed event filters (those would actually take precedence over self).
+        # Though now I'm wondering how you could set this up to filter events to other targets since they all seem to be processed by the same eventFilter function, which brings into question why you'd pass in the target here...
+        self.installEventFilter(self)
+
         # self.output_dir = "."   # for nanoHUB
 
         #-------------------------------------------
@@ -196,6 +222,13 @@ class ICs(QWidget):
         self.ics_params.setLayout(self.vbox)
 
         #----
+        label = QLabel("Cell Initital Conditions")
+        label.setFixedHeight(label_height)
+        label.setStyleSheet("background-color: orange")
+        label.setAlignment(QtCore.Qt.AlignCenter)
+        idx_row = 0
+        self.vbox.addWidget(label) # w, row, column, rowspan, colspan
+
         hbox = QHBoxLayout()
         label = QLabel("cell type")
         label.setAlignment(QtCore.Qt.AlignRight)
@@ -545,6 +578,109 @@ class ICs(QWidget):
         hbox.addStretch(1)  # not sure about this, but keeps buttons shoved to left
         self.vbox.addLayout(hbox)
 
+
+        #--------------------- substrate save button
+
+        label = QLabel("Substrate Initital Conditions")
+        label.setFixedHeight(label_height)
+        label.setStyleSheet("background-color: orange")
+        label.setAlignment(QtCore.Qt.AlignCenter)
+        idx_row = 0
+        self.vbox.addWidget(label) # w, row, column, rowspan, colspan
+
+
+        hbox = QHBoxLayout()
+        label = QLabel("Substrate")
+        label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(label)
+        
+        self.substrate_combobox = QComboBox()
+        self.substrate_combobox.setFixedWidth(200)  # how wide is sufficient?
+        self.substrate_combobox.currentIndexChanged.connect(self.substrate_combobox_changed_cb)
+        hbox.addWidget(self.substrate_combobox)
+        hbox.addStretch(1)  # not sure about this, but keeps buttons shoved to left
+        self.vbox.addLayout(hbox)
+
+        hbox = QHBoxLayout()
+        label = QLabel("Brush")
+        label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(label)
+        
+        self.brush_combobox = QComboBox()
+        self.brush_combobox.addItem("point")
+        self.brush_combobox.addItem("rectangle")
+        self.brush_combobox.addItem("gaussian_rectangle")
+        self.brush_combobox.currentIndexChanged.connect(self.brush_combobox_changed_cb)
+        self.brush_combobox.setFixedWidth(200)  # how wide is sufficient?
+        hbox.addWidget(self.brush_combobox)
+        hbox.addStretch(1)  # not sure about this, but keeps buttons shoved to left
+        self.vbox.addLayout(hbox)
+
+        hbox = QHBoxLayout()
+        label = QLabel("Value")
+        label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(label)
+        
+        self.substrate_set_value = QLineEdit()
+        self.substrate_set_value.setFixedWidth(fixed_width_value)  # how wide is sufficient?
+        self.substrate_set_value.setEnabled(True)
+        self.substrate_set_value.setText(str(self.current_substrate_set_value))
+        self.substrate_set_value.textChanged.connect(self.substrate_set_value_changed_cb)
+        self.substrate_set_value.setValidator(QtGui.QDoubleValidator(0.,10000.,4))
+        hbox.addWidget(self.substrate_set_value)
+        hbox.addStretch(1)  # not sure about this, but keeps buttons shoved to left
+
+        self.substrate_par_1_label = QLabel()
+        self.substrate_par_1_label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(self.substrate_par_1_label)
+
+        self.substrate_par_1_value = QLineEdit()
+        self.substrate_par_1_value.setFixedWidth(fixed_width_value)  # how wide is sufficient?
+        self.substrate_par_1_value.setEnabled(False)
+        self.substrate_par_1_value.textChanged.connect(self.substrate_par_1_value_changed_cb)
+        self.substrate_par_1_value.setValidator(QtGui.QDoubleValidator(0.,10000.,2))
+        hbox.addWidget(self.substrate_par_1_value)
+
+        self.substrate_par_2_label = QLabel()
+        self.substrate_par_2_label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(self.substrate_par_2_label)
+
+        self.substrate_par_2_value = QLineEdit()
+        self.substrate_par_2_value.setFixedWidth(fixed_width_value)  # how wide is sufficient?
+        self.substrate_par_2_value.setEnabled(False)
+        self.substrate_par_2_value.textChanged.connect(self.substrate_par_2_value_changed_cb)
+        self.substrate_par_2_value.setValidator(QtGui.QDoubleValidator(0.,10000.,2))
+        hbox.addWidget(self.substrate_par_2_value)
+
+        self.substrate_par_3_label = QLabel()
+        self.substrate_par_3_label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(self.substrate_par_3_label)
+
+        self.substrate_par_3_value = QLineEdit()
+        self.substrate_par_3_value.setFixedWidth(fixed_width_value)  # how wide is sufficient?
+        self.substrate_par_3_value.setEnabled(False)
+        self.substrate_par_3_value.textChanged.connect(self.substrate_par_3_value_changed_cb)
+        self.substrate_par_3_value.setValidator(QtGui.QDoubleValidator(0.,10000.,3))
+        hbox.addWidget(self.substrate_par_3_value)
+        hbox.addStretch(1)  # not sure about this, but keeps buttons shoved to left
+        
+        self.vbox.addLayout(hbox)
+
+        hbox = QHBoxLayout()
+        self.save_button_substrates = QPushButton("Save Substrate")
+        self.save_button_substrates.setFixedWidth(int(np.ceil(1.2*btn_width)))
+        self.save_button_substrates.setStyleSheet("QPushButton {background-color: yellow; color: black;}")
+        self.save_button_substrates.clicked.connect(self.save_substrate_cb)
+        hbox.addWidget(self.save_button_substrates)
+
+        self.import_substrate_button = QPushButton("Import ./config/ics.csv")
+        self.import_substrate_button.setFixedWidth(230)
+        self.import_substrate_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
+        self.import_substrate_button.clicked.connect(self.import_substrate_cb)
+        self.vbox.addWidget(self.import_substrate_button)
+
+        self.vbox.addLayout(hbox)
+
         #---------------------
         splitter = QSplitter()
         self.scroll_params = QScrollArea()
@@ -595,6 +731,8 @@ class ICs(QWidget):
         self.plot_xmax = float(self.config_tab.xmax.text())
         self.plot_ymin = float(self.config_tab.ymin.text())
         self.plot_ymax = float(self.config_tab.ymax.text())
+        self.plot_zmin = float(self.config_tab.zmin.text())
+        self.plot_zmax = float(self.config_tab.zmax.text())
         try:  # due to the initial callback
             # self.my_xmin.setText(str(self.xmin))
             # self.my_xmax.setText(str(self.xmax))
@@ -685,18 +823,21 @@ class ICs(QWidget):
         except:
             pass
 
-    def change_plot_range(self):
-        # print("\n----- change_plot_range:")
-        # print("----- my_xmin= ",self.my_xmin.text())
-        # print("----- my_xmax= ",self.my_xmax.text())
-        try:  # due to the initial callback
-            self.plot_xmin = float(self.my_xmin.text())
-            self.plot_xmax = float(self.my_xmax.text())
-            self.plot_ymin = float(self.my_ymin.text())
-            self.plot_ymax = float(self.my_ymax.text())
-            self.update_plots()
-        except:
-            pass
+    # DB found this to be unused (2023-09-07)
+    # def change_plot_range(self):
+    #     # print("\n----- change_plot_range:")
+    #     # print("----- my_xmin= ",self.my_xmin.text())
+    #     # print("----- my_xmax= ",self.my_xmax.text())
+    #     try:  # due to the initial callback
+    #         self.plot_xmin = float(self.my_xmin.text())
+    #         self.plot_xmax = float(self.my_xmax.text())
+    #         self.plot_ymin = float(self.my_ymin.text())
+    #         self.plot_ymax = float(self.my_ymax.text())
+    #         self.plot_zmin = float(self.my_zmin.text())
+    #         self.plot_zmax = float(self.my_zmax.text())
+    #         self.update_plots()
+    #     except:
+    #         pass
 
         # self.update_plots()
 
@@ -868,6 +1009,7 @@ class ICs(QWidget):
         # print("\nics_tab:  --- reset_info()")
         self.celltype_combobox.clear()
         self.fill_celltype_combobox()
+        self.fill_substrates_comboboxes()
         self.csv_array = np.empty([1,4])
         self.csv_array = np.delete(self.csv_array,0,0)
         self.numcells_l = []
@@ -877,8 +1019,11 @@ class ICs(QWidget):
         self.plot_xmax = float(self.config_tab.xmax.text())
         self.plot_ymin = float(self.config_tab.ymin.text())
         self.plot_ymax = float(self.config_tab.ymax.text())
+        self.plot_zmin = float(self.config_tab.zmin.text())
+        self.plot_zmax = float(self.config_tab.zmax.text())
         self.ax0.set_xlim(self.plot_xmin, self.plot_xmax)
         self.ax0.set_ylim(self.plot_ymin, self.plot_ymax)
+        self.setupSubstratePlotParameters()
         # self.update_plots()
         self.canvas.update()
         self.canvas.draw()
@@ -944,11 +1089,13 @@ class ICs(QWidget):
         # print("\nics_tab:  --------- create_figure(): ------- creating figure, canvas, ax0")
         self.figure = plt.figure()
         self.canvas = FigureCanvasQTAgg(self.figure)
-        self.canvas.mpl_connect("button_press_event", self.button_press)
+        self.canvas.mpl_connect("button_press_event", self.button_press) # for cell placement when point selected
+        self.canvas.mpl_connect("button_press_event", self.mousePressed) # for substrate placement when point not selected
+        self.canvas.mpl_connect("motion_notify_event", self.mouseMoved) # for substrate placement when point not selected
+        self.canvas.mpl_connect("figure_leave_event", self.mouseLeftFigure)
         self.canvas.setStyleSheet("background-color:transparent;")
 
         self.ax0 = self.figure.add_subplot(111, adjustable='box')
-
         # self.reset_model()
 
         # print("ics_tab:  create_figure(): ------- creating dummy contourf")
@@ -957,21 +1104,126 @@ class ICs(QWidget):
         # ylist = np.linspace(-3.0, 3.0, 50)
         # X, Y = np.meshgrid(xlist, ylist)
         # Z = np.sqrt(X**2 + Y**2) + 10*np.random.rand()
-
-        # self.cmap = plt.cm.get_cmap("viridis")
-        # self.mysubstrate = self.ax0.contourf(X, Y, Z, cmap=self.cmap)
-
+        
         # print("ics_tab:  ------------create_figure():  # axes = ",len(self.figure.axes))
 
         self.ax0.set_xlim(self.plot_xmin, self.plot_xmax)
         self.ax0.set_ylim(self.plot_ymin, self.plot_ymax)
         self.ax0.set_aspect(1.0)
 
+        self.cmap = plt.cm.get_cmap("viridis")
+        # self.substrate_plot = self.ax0.contourf(self.plot_xx, self.plot_yy, self.current_substrate_values, cmap=self.cmap)
+        # self.substrate_plot = self.ax0.imshow(self.current_substrate_values, origin="lower", cmap=self.cmap, transform=self.ax0.transAxes)
+        self.setupSubstratePlotParameters()
+        self.substrate_plot = self.ax0.imshow(self.current_substrate_values, origin="lower",extent=(0, 1, 0, 1), transform=self.ax0.transAxes, vmin=0,vmax=1)
+        self.time_of_last_substrate_plot_update = time.time()
+        self.substrate_plot_time_delay = 0.1
+
         # self.update_plots()
         self.canvas.update()
         self.canvas.draw()
 
+        # self.canvas.mousePressEvent = self.mousePressed
+        # self.canvas.mouseMoveEvent = self.mouseMoved
+        # self.canvas.mouseReleaseEvent = self.mouseReleased
     #---------------------------------------------------------------------------
+    def getPos(self, event):
+        x = event.xdata  # or "None" if outside plot domain
+        y = event.ydata
+        z = 0.0
+        return x, y, z
+
+    def mousePressed(self, event):
+        if self.create_point is True:
+            return
+        self.mouse_pressed = not (self.mouse_pressed)
+        if self.mouse_pressed is False:
+            self.update_substrate_plot(check_time_delay=False)
+            return
+        x, y, z = self.getPos(event)
+        if (x is None) or (y is None) or (z is None):
+            self.current_voxel_subs = None
+            return
+        self.current_voxel_subs = self.getAllVoxelSubs(x, y ,z)
+        self.substrate_value_updater()
+        check_time_delay = True
+        self.update_substrate_plot(check_time_delay)
+
+    def mouseMoved(self, event):
+        if (self.create_point is True) or (self.mouse_pressed is False):
+            return
+        x, y, z = self.getPos(event)
+        if (x is None) or (y is None) or (z is None):
+            self.current_voxel_subs = None
+            return
+        current_voxel_subs = self.getAllVoxelSubs(x, y, z)
+        if all(current_voxel_subs == self.current_voxel_subs):
+            return # only do something if in new voxel
+        self.current_voxel_subs = current_voxel_subs     
+        self.substrate_value_updater()   
+        check_time_delay = True
+        self.update_substrate_plot(check_time_delay)
+
+    def mouseLeftFigure(self, event):
+        self.mouse_pressed = False
+        self.update_substrate_plot(check_time_delay=False)
+
+    def null_updater(self):
+        return
+    
+    def point_updater(self):
+        # self.current_substrate_values[self.current_voxel_subs[0],self.current_voxel_subs[1],self.current_voxel_subs[2]] = self.current_substrate_set_value
+        self.current_substrate_values[self.current_voxel_subs[1],self.current_voxel_subs[0]] = self.current_substrate_set_value
+
+    def rectangle_updater(self):
+        # (i,j) refering to the (x,y) coordinates even though the matrix is the transpose of this
+        min_i = max(0,self.current_voxel_subs[0]-self.substrate_updater_pars["x_ind_stretch"])
+        max_i = min(self.nx,self.current_voxel_subs[0]+self.substrate_updater_pars["x_ind_stretch"]+1)
+        min_j = max(0,self.current_voxel_subs[1]-self.substrate_updater_pars["y_ind_stretch"])
+        max_j = min(self.ny,self.current_voxel_subs[1]+self.substrate_updater_pars["y_ind_stretch"]+1)
+        self.current_substrate_values[min_j:max_j,min_i:max_i] = self.current_substrate_set_value
+
+    def gaussian_rectangle_updater(self):
+        dx = self.substrate_updater_pars["x_ind_stretch"]-self.current_voxel_subs[0]
+        min_i_rect = max(0,dx)
+        max_i_rect = min(2*self.substrate_updater_pars["x_ind_stretch"] + 1,self.nx + dx)
+        min_i_all = min_i_rect - dx
+        max_i_all = max_i_rect - dx
+        dy = self.substrate_updater_pars["y_ind_stretch"]-self.current_voxel_subs[1]
+        min_j_rect = max(0,dy)
+        max_j_rect = min(2*self.substrate_updater_pars["y_ind_stretch"] + 1,self.ny + dy)
+        min_j_all = min_j_rect - dy
+        max_j_all = max_j_rect - dy
+        self.current_substrate_values[min_j_all:max_j_all,min_i_all:max_i_all] = np.maximum(self.current_substrate_values[min_j_all:max_j_all,min_i_all:max_i_all],self.current_substrate_set_value[min_j_rect:max_j_rect,min_i_rect:max_i_rect])
+
+    def getAllVoxelSubs(self, x, y, z):
+        x = self.getSingleVoxelSub(x, self.plot_xmin, self.xdel)
+        y = self.getSingleVoxelSub(y, self.plot_ymin, self.ydel)
+        z = self.getSingleVoxelSub(z, self.plot_zmin, self.zdel)
+        return np.array([x, y, z])
+
+    def getAllVoxelCoords(self, x, y, z):
+        x = self.getSingleVoxelCoord(x, self.plot_xmin, self.xdel)
+        y = self.getSingleVoxelCoord(y, self.plot_ymin, self.ydel)
+        z = self.getSingleVoxelCoord(z, self.plot_zmin, self.zdel)
+        return np.array([x, y, z])
+
+    def getSingleVoxelSub(self, x, xmin, dx):
+        return int((x - ((x-xmin) % dx) - xmin) / dx)
+
+    def getSingleVoxelCoord(self, x, xmin, dx):
+        remainder = (x-xmin) % dx
+        return x - remainder + 0.5 * dx
+    
+    def update_substrate_plot(self, check_time_delay):
+        if (not check_time_delay) or (time.time() > self.time_of_last_substrate_plot_update+self.substrate_plot_time_delay):
+            # self.substrate_plot = self.ax0.contourf(self.plot_xx, self.plot_yy, self.current_substrate_values, cmap=self.cmap)
+            self.substrate_plot.set_data(self.current_substrate_values)
+            # self.substrate_plot = self.ax0.imshow(self.current_substrate_values, origin="lower",extent=(0, 1, 0, 1), transform=self.ax0.transAxes)
+            self.canvas.update()
+            self.canvas.draw()
+            self.time_of_last_substrate_plot_update = time.time()
+
     def circles(self, x, y, s, c='b', vmin=None, vmax=None, **kwargs):
         """
         See https://gist.github.com/syrte/592a062c562cd2a98a83 
@@ -1733,6 +1985,7 @@ class ICs(QWidget):
         self.ax0.cla()
         self.ax0.set_xlim(self.plot_xmin, self.plot_xmax)
         self.ax0.set_ylim(self.plot_ymin, self.plot_ymax)
+        self.substrate_plot = self.ax0.imshow(self.current_substrate_values, origin="lower",extent=(0, 1, 0, 1), transform=self.ax0.transAxes, vmin=0,vmax=1)
         self.canvas.update()
         self.canvas.draw()
 
@@ -1799,6 +2052,31 @@ class ICs(QWidget):
             print("----- Writing v1 (with cell indices) .csv file for cells")
             print("----- full_fname=",full_fname)
             np.savetxt(full_fname, self.csv_array, delimiter=',')
+
+    def save_substrate_cb(self):
+        dir_name = self.csv_folder.text() # just use the same folder for now
+        if len(dir_name) > 0 and not os.path.isdir(dir_name):
+            os.makedirs(dir_name)
+            time.sleep(1)
+        self.full_substrate_ic_fname = os.path.join(dir_name,"ics.csv") # also hardcode this for now
+        print("save_substrate_cb(): self.full_substrate_ic_fname=",self.full_substrate_ic_fname)
+
+        print("----- Writing .csv file for substrate")
+        print("----- self.full_substrate_ic_fname=",self.full_substrate_ic_fname)
+        X = np.tile(self.plot_xx,self.ny).reshape((-1,1))
+        Y = np.repeat(self.plot_yy,self.nx).reshape((-1,1))
+        Z = np.zeros(self.nx*self.ny).reshape((-1,1))
+        C = self.all_substrate_values.reshape((len(X),-1))
+        nonzero_substrates = (C!=0).any(axis=0)
+        if ~nonzero_substrates.any():
+            # then no substrates are being saved; just disable ics and move on
+            self.enable_csv_for_substrate_ics = False
+            return
+        C = C[:,nonzero_substrates] # remove columns of all zeros corresponding to substrates that were not set
+        substrates_to_save = [self.substrate_list[i] for i in range(len(self.substrate_list)) if nonzero_substrates[i]]
+        header = f'x,y,z,{",".join(substrates_to_save)}'
+        np.savetxt(self.full_substrate_ic_fname, np.concatenate((X,Y,Z,C), axis=1), delimiter=',',header=header,comments='')
+        self.enable_csv_for_substrate_ics = True
 
     #--------------------------------------------------
     def import_cb(self):
@@ -1907,3 +2185,195 @@ class ICs(QWidget):
     def fill_gui(self):
         self.csv_folder.setText(self.config_tab.csv_folder.text())
         self.output_file.setText(self.config_tab.csv_file.text())
+        self.fill_substrates_comboboxes()
+
+    def substrate_combobox_changed_cb(self):
+        self.current_substrate_ind = self.substrate_combobox.currentIndex()
+        self.current_substrate_values = self.all_substrate_values[:,:,self.current_substrate_ind]
+        check_time_delay = False
+        self.update_substrate_plot(check_time_delay)
+
+    def brush_combobox_changed_cb(self):
+        if self.brush_combobox.currentText() == "point":
+            self.substrate_par_1_label.setText("")
+            self.substrate_par_1_value.setEnabled(False)
+            self.substrate_par_2_label.setText("")
+            self.substrate_par_2_value.setEnabled(False)
+            self.substrate_par_3_label.setText("")
+            self.substrate_par_3_value.setEnabled(False)
+            self.substrate_value_updater = self.point_updater
+        elif self.brush_combobox.currentText() == "rectangle":
+            self.substrate_par_1_label.setText("R1")
+            self.substrate_par_1_value.setEnabled(True)
+            self.substrate_par_2_label.setText("R2")
+            self.substrate_par_2_value.setEnabled(True)
+            self.substrate_par_3_label.setText("")
+            self.substrate_par_3_value.setEnabled(False)
+            self.setupRectangleUpdater()
+        elif self.brush_combobox.currentText() == "gaussian_rectangle":
+            self.substrate_par_1_label.setText("R1")
+            self.substrate_par_1_value.setEnabled(True)
+            self.substrate_par_2_label.setText("R2")
+            self.substrate_par_2_value.setEnabled(True)
+            self.substrate_par_3_label.setText("\sigma")
+            self.substrate_par_3_value.setEnabled(True)
+            self.setupGaussianRectangleUpdater()
+
+
+    def setupRectangleUpdater(self):
+        self.substrate_updater_pars = {}
+        updater_ready = True
+        try:
+            R1 = float(self.substrate_par_1_value.text())
+        except:
+            updater_ready = False
+        try:
+            R2 = float(self.substrate_par_2_value.text())
+        except:
+            updater_ready = False
+
+        if updater_ready is False:
+            self.substrate_value_updater = self.null_updater
+            return
+        
+        self.substrate_value_updater = self.rectangle_updater
+        self.substrate_updater_pars["x_ind_stretch"] = int(np.floor(R1/self.xdel))
+        self.substrate_updater_pars["y_ind_stretch"] = int(np.floor(R2/self.ydel))
+
+    def setupGaussianRectangleUpdater(self):
+        self.substrate_updater_pars = {}
+        updater_ready = True
+        try:
+            R1 = float(self.substrate_par_1_value.text())
+        except:
+            updater_ready = False
+        try:
+            R2 = float(self.substrate_par_2_value.text())
+        except:
+            updater_ready = False
+        try:
+            sigma = float(self.substrate_par_3_value.text())
+        except:
+            updater_ready = False
+
+        if updater_ready is False:
+            self.substrate_value_updater = self.null_updater
+            return
+        
+        self.substrate_value_updater = self.gaussian_rectangle_updater
+        self.substrate_updater_pars["x_ind_stretch"] = int(np.floor(R1/self.xdel))
+        self.substrate_updater_pars["y_ind_stretch"] = int(np.floor(R2/self.ydel))
+        xx = self.xdel * np.arange(-self.substrate_updater_pars["x_ind_stretch"],self.substrate_updater_pars["x_ind_stretch"]+1).reshape((1,-1))
+        yy = self.ydel * np.arange(-self.substrate_updater_pars["y_ind_stretch"],self.substrate_updater_pars["y_ind_stretch"]+1).reshape((-1,1))
+        r2 = xx**2 + yy**2
+        self.current_substrate_set_value = float(self.substrate_set_value.text())
+        self.current_substrate_set_value = self.current_substrate_set_value * np.exp(-0.5*r2/(sigma*sigma))
+
+    def substrate_set_value_changed_cb(self):
+        try:  # due to the initial callback
+            self.current_substrate_set_value = float(self.substrate_set_value.text())
+        except:
+            pass
+
+    def fill_substrates_comboboxes(self):
+        logging.debug(f'ics_tab.py: ------- fill_substrates_comboboxes')
+        self.substrate_list.clear()  # rwh/todo: where/why/how is this list maintained?
+        self.substrate_combobox.clear()
+        uep = self.config_tab.xml_root.find('.//microenvironment_setup')  # find unique entry point
+        if uep:
+            idx = 0
+            num_vars = len(uep.findall('variable'))
+            self.all_substrate_values = np.zeros((self.ny, self.nx, num_vars))
+            for var in uep.findall('variable'):
+                logging.debug(f' --> {var.attrib["name"]}')
+                name = var.attrib['name']
+                self.substrate_list.append(name)
+                self.substrate_combobox.addItem(name)
+
+    def add_new_substrate(self, sub_name):
+        self.substrate_list.append(sub_name)
+        self.substrate_combobox.addItem(sub_name)
+        self.all_substrate_values = np.concatenate((self.all_substrate_values, np.zeros((self.ny,self.nx,1))), axis=2)
+
+    def delete_substrate(self, item_idx):
+        subname = self.substrate_combobox.itemText(item_idx)
+        ind = self.substrate_list.index(subname)
+        if self.current_substrate_ind==ind:
+            self.current_substrate_ind = None # if this was the current substrate for ic plotting, then do not bother saving the current values
+        self.all_substrate_values = np.delete(self.all_substrate_values, ind, axis=2)
+        self.substrate_list.remove(subname)
+        self.substrate_combobox.removeItem(item_idx)
+
+    def renamed_substrate(self, old_name,new_name):
+        self.substrate_list = [new_name if x==old_name else x for x in self.substrate_list]
+        for idx in range(len(self.substrate_list)):
+            if old_name == self.substrate_combobox.itemText(idx):
+                self.substrate_combobox.setItemText(idx, new_name)
+
+    def substrate_par_1_value_changed_cb(self):
+        if self.brush_combobox.currentText() == "rectangle":
+            self.setupRectangleUpdater()
+        elif self.brush_combobox.currentText() == "gaussian_rectangle":
+            self.setupGaussianRectangleUpdater()
+
+    def substrate_par_2_value_changed_cb(self):
+        if self.brush_combobox.currentText() == "rectangle":
+            self.setupRectangleUpdater()
+        elif self.brush_combobox.currentText() == "gaussian_rectangle":
+            self.setupGaussianRectangleUpdater()
+
+    def substrate_par_3_value_changed_cb(self):
+        if self.brush_combobox.currentText() == "gaussian_rectangle":
+            self.setupGaussianRectangleUpdater()
+
+    def setupSubstratePlotParameters(self):
+        self.xdel = float(self.config_tab.xdel.text())
+        self.nx = int(np.ceil((self.plot_xmax - self.plot_xmin) / self.xdel))
+        self.plot_xx = np.arange(0,self.nx)*self.xdel+self.plot_xmin+0.5*self.xdel
+        self.ydel = float(self.config_tab.ydel.text())
+        self.ny = int(np.ceil((self.plot_ymax - self.plot_ymin) / self.ydel))
+        self.plot_yy = np.arange(0,self.ny)*self.ydel+self.plot_ymin+0.5*self.ydel
+        self.zdel = float(self.config_tab.zdel.text())
+        # self.nz = int(np.ceil((self.plot_zmax - self.plot_zmin) / self.zdel))
+        self.nz = 1 # only let this work for 2d
+        self.plot_zz = np.arange(0,self.nz)*self.zdel+self.plot_zmin+0.5*self.zdel
+        self.current_substrate_values = np.zeros((self.ny, self.nx)) # set it up for plotting
+        # self.current_substrate_values = np.zeros((self.ny, self.nx, self.nz))
+        self.all_substrate_values = np.zeros((self.ny, self.nx, len(self.substrate_list)))
+        self.enable_csv_for_substrate_ics = False # since we're reseting this here, might as well disable this
+
+    def import_substrate_cb(self):
+        with open('./config/ics.csv', newline='') as csvfile:
+            data = list(csv.reader(csvfile))
+            if data[0][0]=='x': # check for header row
+                substrate_names = data[0][3:]
+                col_inds = [self.substrate_list.index(name) for name in substrate_names]
+                data = data[1:]
+            else:
+                col_inds = range(len(data[0]))
+            data = np.array([[float(x) for x in y] for y in np.array(data)])
+            if data.shape[0] != (self.nx*self.ny):
+                # we could help the user out and load up what is there to work with, but they're probably better served by just getting a reality check with a reset to zeros
+                print(f"WARNING: Substrate IC CSV did not have the correct number of voxels ({data.shape[0]}!={self.nx*self.ny}). Reseting all concentrations to 0.")
+                self.setupSubstratePlotParameters()
+            else:
+                self.all_substrate_values[:,:,col_inds] = data[:,3:].reshape((self.ny, self.nx, -1))
+                self.current_substrate_values = self.all_substrate_values[:,:,self.substrate_combobox.currentIndex()]
+            check_time_delay = False
+            self.update_substrate_plot(check_time_delay)
+
+    def checkForNewGrid(self):
+        if float(self.config_tab.xmin.text())!=self.plot_xmin or float(self.config_tab.xmax.text())!=self.plot_xmax or float(self.config_tab.xdel.text())!=self.xdel \
+            or float(self.config_tab.ymin.text())!=self.plot_ymin or float(self.config_tab.ymax.text())!=self.plot_ymax or float(self.config_tab.ydel.text())!=self.ydel:
+            self.reset_plot_range()
+            self.setupSubstratePlotParameters()
+            self.ax0.set_xlim(self.plot_xmin, self.plot_xmax)
+            self.ax0.set_ylim(self.plot_ymin, self.plot_ymax)
+            self.substrate_plot = self.ax0.imshow(self.current_substrate_values, origin="lower",extent=(0, 1, 0, 1), transform=self.ax0.transAxes, vmin=0,vmax=1)
+            self.canvas.update()
+            self.canvas.draw()
+
+    def eventFilter(self, source, event):
+        if event.type() == QtCore.QEvent.Show:
+            self.checkForNewGrid()
+        return False # A False return value makes sure that this intercepted event goes on to the target object or any other eventFilter's
