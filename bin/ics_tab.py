@@ -2067,7 +2067,15 @@ class ICs(QWidget):
         Y = np.repeat(self.plot_yy,self.nx).reshape((-1,1))
         Z = np.zeros(self.nx*self.ny).reshape((-1,1))
         C = self.all_substrate_values.reshape((len(X),-1))
-        np.savetxt(self.full_substrate_ic_fname, np.concatenate((X,Y,Z, C), axis=1), delimiter=',')
+        nonzero_substrates = (C!=0).any(axis=0)
+        if ~nonzero_substrates.any():
+            # then no substrates are being saved; just disable ics and move on
+            self.enable_csv_for_substrate_ics = False
+            return
+        C = C[:,nonzero_substrates] # remove columns of all zeros corresponding to substrates that were not set
+        substrates_to_save = [self.substrate_list[i] for i in range(len(self.substrate_list)) if nonzero_substrates[i]]
+        header = f'x,y,z,{",".join(substrates_to_save)}'
+        np.savetxt(self.full_substrate_ic_fname, np.concatenate((X,Y,Z,C), axis=1), delimiter=',',header=header,comments='')
         self.enable_csv_for_substrate_ics = True
 
     #--------------------------------------------------
@@ -2180,8 +2188,6 @@ class ICs(QWidget):
         self.fill_substrates_comboboxes()
 
     def substrate_combobox_changed_cb(self):
-        if self.current_substrate_ind is not None:
-            self.all_substrate_values[:,:,self.current_substrate_ind] = self.current_substrate_values
         self.current_substrate_ind = self.substrate_combobox.currentIndex()
         self.current_substrate_values = self.all_substrate_values[:,:,self.current_substrate_ind]
         check_time_delay = False
@@ -2339,13 +2345,19 @@ class ICs(QWidget):
     def import_substrate_cb(self):
         with open('./config/ics.csv', newline='') as csvfile:
             data = list(csv.reader(csvfile))
+            if data[0][0]=='x': # check for header row
+                substrate_names = data[0][3:]
+                col_inds = [self.substrate_list.index(name) for name in substrate_names]
+                data = data[1:]
+            else:
+                col_inds = range(len(data[0]))
             data = np.array([[float(x) for x in y] for y in np.array(data)])
             if data.shape[0] != (self.nx*self.ny):
                 # we could help the user out and load up what is there to work with, but they're probably better served by just getting a reality check with a reset to zeros
                 print(f"WARNING: Substrate IC CSV did not have the correct number of voxels ({data.shape[0]}!={self.nx*self.ny}). Reseting all concentrations to 0.")
                 self.setupSubstratePlotParameters()
             else:
-                self.all_substrate_values = data[:,3:].reshape((self.ny, self.nx, -1))
+                self.all_substrate_values[:,:,col_inds] = data[:,3:].reshape((self.ny, self.nx, -1))
                 self.current_substrate_values = self.all_substrate_values[:,:,self.substrate_combobox.currentIndex()]
             check_time_delay = False
             self.update_substrate_plot(check_time_delay)
