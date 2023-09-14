@@ -1114,7 +1114,14 @@ class ICs(QWidget):
         # self.substrate_plot = self.ax0.contourf(self.plot_xx, self.plot_yy, self.current_substrate_values, cmap=self.cmap)
         # self.substrate_plot = self.ax0.imshow(self.current_substrate_values, origin="lower", cmap=self.cmap, transform=self.ax0.transAxes)
         self.setupSubstratePlotParameters()
-        self.substrate_plot = self.ax0.imshow(self.current_substrate_values, origin="lower",extent=(0, 1, 0, 1), transform=self.ax0.transAxes, vmin=0,vmax=1)
+        self.substrate_plot = self.ax0.imshow(self.current_substrate_values, origin="lower",extent=(0, 1, 0, 1), transform=self.ax0.transAxes, vmin=0,vmax=1, interpolation='nearest')
+        
+        ax1_divider = make_axes_locatable(self.ax0)
+        self.cax1 = ax1_divider.append_axes("right", size="4%", pad="2%")
+        self.cbar1 = self.figure.colorbar(self.substrate_plot, cax=self.cax1)
+        self.cbar1.ax.tick_params(labelsize=self.fontsize)
+        self.cbar1.set_label(self.substrate_combobox.currentText()) 
+        
         self.time_of_last_substrate_plot_update = time.time()
         self.substrate_plot_time_delay = 0.1
 
@@ -1216,9 +1223,8 @@ class ICs(QWidget):
     
     def update_substrate_plot(self, check_time_delay):
         if (not check_time_delay) or (time.time() > self.time_of_last_substrate_plot_update+self.substrate_plot_time_delay):
-            # self.substrate_plot = self.ax0.contourf(self.plot_xx, self.plot_yy, self.current_substrate_values, cmap=self.cmap)
             self.substrate_plot.set_data(self.current_substrate_values)
-            # self.substrate_plot = self.ax0.imshow(self.current_substrate_values, origin="lower",extent=(0, 1, 0, 1), transform=self.ax0.transAxes)
+            # self.substrate_plot.set_clim(vmin=np.min(self.current_substrate_values),vmax=np.max(self.current_substrate_values))
             self.canvas.update()
             self.canvas.draw()
             self.time_of_last_substrate_plot_update = time.time()
@@ -1984,7 +1990,7 @@ class ICs(QWidget):
         self.ax0.cla()
         self.ax0.set_xlim(self.plot_xmin, self.plot_xmax)
         self.ax0.set_ylim(self.plot_ymin, self.plot_ymax)
-        self.substrate_plot = self.ax0.imshow(self.current_substrate_values, origin="lower",extent=(0, 1, 0, 1), transform=self.ax0.transAxes, vmin=0,vmax=1)
+        self.substrate_plot = self.ax0.imshow(self.current_substrate_values, origin="lower",extent=(0, 1, 0, 1), transform=self.ax0.transAxes, vmin=0,vmax=1, interpolation='nearest')
         self.canvas.update()
         self.canvas.draw()
 
@@ -2190,6 +2196,7 @@ class ICs(QWidget):
         self.current_substrate_ind = self.substrate_combobox.currentIndex()
         self.current_substrate_values = self.all_substrate_values[:,:,self.current_substrate_ind]
         check_time_delay = False
+        self.cbar1.set_label(self.substrate_combobox.currentText())
         self.update_substrate_plot(check_time_delay)
 
     def brush_combobox_changed_cb(self):
@@ -2203,7 +2210,7 @@ class ICs(QWidget):
             self.substrate_par_3_label.setText("")
             self.substrate_par_3_value.setEnabled(False)
             self.substrate_par_3_value.setStyleSheet("background-color: lightgray; color: black")
-            self.substrate_value_updater = self.point_updater
+            self.setupPointUpdater()
         elif self.brush_combobox.currentText() == "rectangle":
             self.substrate_par_1_label.setText("R1")
             self.substrate_par_1_value.setEnabled(True)
@@ -2227,6 +2234,9 @@ class ICs(QWidget):
             self.substrate_par_3_value.setStyleSheet("background-color: white; color: black")
             self.setupGaussianRectangleUpdater()
 
+    def setupPointUpdater(self):
+        self.substrate_value_updater = self.point_updater
+        self.current_substrate_set_value = float(self.substrate_set_value.text())
 
     def setupRectangleUpdater(self):
         self.substrate_updater_pars = {}
@@ -2245,6 +2255,7 @@ class ICs(QWidget):
             return
         
         self.substrate_value_updater = self.rectangle_updater
+        self.current_substrate_set_value = float(self.substrate_set_value.text())
         self.substrate_updater_pars["x_ind_stretch"] = int(np.floor(R1/self.xdel))
         self.substrate_updater_pars["y_ind_stretch"] = int(np.floor(R2/self.ydel))
 
@@ -2279,10 +2290,28 @@ class ICs(QWidget):
 
     def substrate_set_value_changed_cb(self):
         try:  # due to the initial callback
-            self.current_substrate_set_value = float(self.substrate_set_value.text())
+            if self.brush_combobox.currentText() == "point":
+                self.setupPointUpdater()
+            elif self.brush_combobox.currentText() == "rectangle":
+                self.setupRectangleUpdater()
+            elif self.brush_combobox.currentText() == "gaussian_rectangle":
+                self.setupGaussianRectangleUpdater()
         except:
             pass
-
+        try: # for when the value is being set and isn't a number yet, e.g. '', or '.'
+            min_val = min(float(self.substrate_set_value.text()),np.min(self.current_substrate_values))
+            min_pos_val = min(float(self.substrate_set_value.text()),np.min(self.current_substrate_values[self.current_substrate_values>0]))
+            max_val = max(float(self.substrate_set_value.text()),np.max(self.current_substrate_values))
+            if max_val > 100*min_pos_val:
+                self.substrate_plot.set_norm(matplotlib.colors.LogNorm(vmin=min_pos_val, vmax=max_val))
+                self.substrate_plot.set_clim(vmin=min_pos_val,vmax=max_val)
+            else:
+                self.substrate_plot.set_norm(matplotlib.colors.Normalize(vmin=min_val, vmax=max_val))
+                self.substrate_plot.set_clim(vmin=min_val,vmax=max_val)
+            self.update_substrate_plot(check_time_delay=False)
+        except:
+            pass
+        
     def fill_substrates_comboboxes(self):
         logging.debug(f'ics_tab.py: ------- fill_substrates_comboboxes')
         self.substrate_list.clear()  # rwh/todo: where/why/how is this list maintained?
@@ -2377,7 +2406,7 @@ class ICs(QWidget):
             self.setupSubstratePlotParameters()
             self.ax0.set_xlim(self.plot_xmin, self.plot_xmax)
             self.ax0.set_ylim(self.plot_ymin, self.plot_ymax)
-            self.substrate_plot = self.ax0.imshow(self.current_substrate_values, origin="lower",extent=(0, 1, 0, 1), transform=self.ax0.transAxes, vmin=0,vmax=1)
+            self.substrate_plot = self.ax0.imshow(self.current_substrate_values, origin="lower",extent=(0, 1, 0, 1), transform=self.ax0.transAxes, vmin=0,vmax=1, interpolation='nearest')
             self.canvas.update()
             self.canvas.draw()
 
