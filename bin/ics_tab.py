@@ -414,7 +414,7 @@ class ICs(QWidget):
         hbox = QHBoxLayout()
 
         cvalue_width = 70
-        label = QLabel("o1")  # omega 1: starting angle for a "ring" of cells
+        label = QLabel("\u03b81")  # omega 1: starting angle for a "ring" of cells
         label.setFixedWidth(30)
         # label.setFixedWidth(label_width)
         label.setAlignment(QtCore.Qt.AlignRight)
@@ -432,7 +432,7 @@ class ICs(QWidget):
         hbox.addWidget(self.o1val)
 
         #------
-        label = QLabel("o2")
+        label = QLabel("\u03b82")
         label.setFixedWidth(30)
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
@@ -613,10 +613,7 @@ class ICs(QWidget):
         self.brush_combobox.currentIndexChanged.connect(self.brush_combobox_changed_cb)
         self.brush_combobox.setFixedWidth(200)  # how wide is sufficient?
         hbox.addWidget(self.brush_combobox)
-        hbox.addStretch(1)  # not sure about this, but keeps buttons shoved to left
-        self.vbox.addLayout(hbox)
 
-        hbox = QHBoxLayout()
         label = QLabel("Value")
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
@@ -629,7 +626,9 @@ class ICs(QWidget):
         self.substrate_set_value.setValidator(QtGui.QDoubleValidator(0.,10000.,4))
         hbox.addWidget(self.substrate_set_value)
         hbox.addStretch(1)  # not sure about this, but keeps buttons shoved to left
+        self.vbox.addLayout(hbox)
 
+        hbox = QHBoxLayout()
         self.substrate_par_1_label = QLabel()
         self.substrate_par_1_label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(self.substrate_par_1_label)
@@ -2197,26 +2196,35 @@ class ICs(QWidget):
         if self.brush_combobox.currentText() == "point":
             self.substrate_par_1_label.setText("")
             self.substrate_par_1_value.setEnabled(False)
+            self.substrate_par_1_value.setStyleSheet("background-color: lightgray; color: black")
             self.substrate_par_2_label.setText("")
             self.substrate_par_2_value.setEnabled(False)
+            self.substrate_par_2_value.setStyleSheet("background-color: lightgray; color: black")
             self.substrate_par_3_label.setText("")
             self.substrate_par_3_value.setEnabled(False)
+            self.substrate_par_3_value.setStyleSheet("background-color: lightgray; color: black")
             self.substrate_value_updater = self.point_updater
         elif self.brush_combobox.currentText() == "rectangle":
             self.substrate_par_1_label.setText("R1")
             self.substrate_par_1_value.setEnabled(True)
+            self.substrate_par_1_value.setStyleSheet("background-color: white; color: black")
             self.substrate_par_2_label.setText("R2")
             self.substrate_par_2_value.setEnabled(True)
+            self.substrate_par_2_value.setStyleSheet("background-color: white; color: black")
             self.substrate_par_3_label.setText("")
             self.substrate_par_3_value.setEnabled(False)
+            self.substrate_par_3_value.setStyleSheet("background-color: lightgray; color: black")
             self.setupRectangleUpdater()
         elif self.brush_combobox.currentText() == "gaussian_rectangle":
             self.substrate_par_1_label.setText("R1")
             self.substrate_par_1_value.setEnabled(True)
+            self.substrate_par_1_value.setStyleSheet("background-color: white; color: black")
             self.substrate_par_2_label.setText("R2")
             self.substrate_par_2_value.setEnabled(True)
-            self.substrate_par_3_label.setText("\sigma")
+            self.substrate_par_2_value.setStyleSheet("background-color: white; color: black")
+            self.substrate_par_3_label.setText("\u03c3")
             self.substrate_par_3_value.setEnabled(True)
+            self.substrate_par_3_value.setStyleSheet("background-color: white; color: black")
             self.setupGaussianRectangleUpdater()
 
 
