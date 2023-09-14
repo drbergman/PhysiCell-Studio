@@ -2201,7 +2201,7 @@ class ICs(QWidget):
             self.substrate_par_2_value.setEnabled(False)
             self.substrate_par_3_label.setText("")
             self.substrate_par_3_value.setEnabled(False)
-            self.substrate_value_updater = self.point_updater
+            self.setupPointUpdater()
         elif self.brush_combobox.currentText() == "rectangle":
             self.substrate_par_1_label.setText("R1")
             self.substrate_par_1_value.setEnabled(True)
@@ -2219,6 +2219,9 @@ class ICs(QWidget):
             self.substrate_par_3_value.setEnabled(True)
             self.setupGaussianRectangleUpdater()
 
+    def setupPointUpdater(self):
+        self.substrate_value_updater = self.point_updater
+        self.current_substrate_set_value = float(self.substrate_set_value.text())
 
     def setupRectangleUpdater(self):
         self.substrate_updater_pars = {}
@@ -2237,6 +2240,7 @@ class ICs(QWidget):
             return
         
         self.substrate_value_updater = self.rectangle_updater
+        self.current_substrate_set_value = float(self.substrate_set_value.text())
         self.substrate_updater_pars["x_ind_stretch"] = int(np.floor(R1/self.xdel))
         self.substrate_updater_pars["y_ind_stretch"] = int(np.floor(R2/self.ydel))
 
@@ -2271,7 +2275,12 @@ class ICs(QWidget):
 
     def substrate_set_value_changed_cb(self):
         try:  # due to the initial callback
-            self.current_substrate_set_value = float(self.substrate_set_value.text())
+            if self.brush_combobox.currentText() == "point":
+                self.setupPointUpdater()
+            elif self.brush_combobox.currentText() == "rectangle":
+                self.setupRectangleUpdater()
+            elif self.brush_combobox.currentText() == "gaussian_rectangle":
+                self.setupGaussianRectangleUpdater()
         except:
             pass
 
