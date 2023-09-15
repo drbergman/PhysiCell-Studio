@@ -706,6 +706,18 @@ class ICs(QWidget):
         # self.cmax.setEnabled(False)
         hbox.addWidget(self.cmax)
 
+        label = QLabel("scale")
+        label.setAlignment(QtCore.Qt.AlignCenter)
+        hbox.addWidget(label)
+
+        self.color_scale_combobox = QComboBox()
+        self.color_scale_combobox.currentIndexChanged.connect(self.color_scale_combobox_changed_cb)
+        self.color_scale_combobox.setFixedWidth(100)  # how wide is sufficient?
+        self.color_scale_combobox.addItem("auto")
+        self.color_scale_combobox.addItem("linear")
+        self.color_scale_combobox.addItem("log")
+        hbox.addWidget(self.color_scale_combobox)
+
         hbox.addStretch(1)  # not sure about this, but keeps buttons shoved to left
 
         self.vbox.addLayout(hbox)
@@ -2491,13 +2503,13 @@ class ICs(QWidget):
     def update_substrate_clims(self):
         if  self.fix_cmap_checkbox.isChecked() is True:
             min_val = float(self.cmin.text())
-            min_pos_val = min_val
+            min_pos_val = min_val if min_val>0 else 1e-16
             max_val = float(self.cmax.text())
         else:
             min_val = min(float(self.substrate_set_value.text()),np.min(self.current_substrate_values))
             min_pos_val = np.min(self.current_substrate_values[self.current_substrate_values>0],initial=float(self.substrate_set_value.text()))
             max_val = max(float(self.substrate_set_value.text()),np.max(self.current_substrate_values))
-        if min_pos_val > 0 and max_val > 100*min_pos_val:
+        if (self.color_scale_combobox.currentText()=="log") or (self.color_scale_combobox.currentText()=="auto" and min_pos_val > 0 and max_val > 100*min_pos_val):
             self.substrate_plot.set_norm(matplotlib.colors.LogNorm(vmin=min_pos_val, vmax=max_val))
             self.substrate_plot.set_clim(vmin=min_pos_val,vmax=max_val)
         else:
@@ -2507,3 +2519,9 @@ class ICs(QWidget):
         # except: # for initialization
         #     print("     hit exception")
         #     pass
+
+    def color_scale_combobox_changed_cb(self):
+        try:
+            self.update_substrate_clims()
+        except:
+            pass
