@@ -163,7 +163,6 @@ class ICs(QWidget):
         self.mouse_pressed = False
         self.current_voxel_subs = None
 
-
         self.current_substrate_set_value = 1.0
 
         self.substrate_list = []
@@ -666,6 +665,52 @@ class ICs(QWidget):
         self.vbox.addLayout(hbox)
 
         hbox = QHBoxLayout()
+        # groupbox = QGroupBox()
+        # groupbox.setStyleSheet("QGroupBox { border: 1px solid black;}")
+
+        self.fix_cmap_checkbox = QCheckBox_custom('fix: ')
+        self.fix_cmap_flag = False
+        self.fix_cmap_checkbox.setEnabled(True)
+        self.fix_cmap_checkbox.setChecked(self.fix_cmap_flag)
+        self.fix_cmap_checkbox.clicked.connect(self.fix_cmap_toggle_cb)
+        hbox.addWidget(self.fix_cmap_checkbox)
+
+        cvalue_width = 60
+        label = QLabel("cmin")
+        # label.setFixedWidth(label_width)
+        label.setAlignment(QtCore.Qt.AlignCenter)
+        # label.setAlignment(QtCore.Qt.AlignLeft)
+        hbox.addWidget(label)
+        self.cmin = QLineEdit()
+        self.cmin.setText('0.0')
+        self.cmin.setEnabled(False)
+        self.cmin.setStyleSheet("background-color: lightgray;")
+        # self.cmin.textChanged.connect(self.change_plot_range)
+        self.cmin.editingFinished.connect(self.cmin_cmax_cb)
+        self.cmin.setFixedWidth(cvalue_width)
+        self.cmin.setValidator(QtGui.QDoubleValidator())
+        # self.cmin.setEnabled(False)
+        hbox.addWidget(self.cmin)
+
+        label = QLabel("cmax")
+        # label.setFixedWidth(label_width)
+        label.setAlignment(QtCore.Qt.AlignCenter)
+        hbox.addWidget(label)
+        self.cmax = QLineEdit()
+        self.cmax.setText('1.0')
+        self.cmax.setEnabled(False)
+        self.cmax.setStyleSheet("background-color: lightgray;")
+        self.cmax.editingFinished.connect(self.cmin_cmax_cb)
+        self.cmax.setFixedWidth(cvalue_width)
+        self.cmax.setValidator(QtGui.QDoubleValidator())
+        # self.cmax.setEnabled(False)
+        hbox.addWidget(self.cmax)
+
+        hbox.addStretch(1)  # not sure about this, but keeps buttons shoved to left
+
+        self.vbox.addLayout(hbox)
+
+        hbox = QHBoxLayout()
         self.save_button_substrates = QPushButton("Save Substrate")
         self.save_button_substrates.setFixedWidth(int(np.ceil(1.2*btn_width)))
         self.save_button_substrates.setStyleSheet("QPushButton {background-color: yellow; color: black;}")
@@ -676,7 +721,7 @@ class ICs(QWidget):
         self.import_substrate_button.setFixedWidth(230)
         self.import_substrate_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
         self.import_substrate_button.clicked.connect(self.import_substrate_cb)
-        self.vbox.addWidget(self.import_substrate_button)
+        hbox.addWidget(self.import_substrate_button)
 
         self.vbox.addLayout(hbox)
 
@@ -858,7 +903,7 @@ class ICs(QWidget):
             idx += 1
         # print('field_dict= ',self.field_dict)
         # print('field_min_max= ',self.field_min_max)
-        # self.substrates_combobox.setCurrentIndex(2)  # not working; gets reset to oxygen somehow after a Run
+        # self.substrate_combobox.setCurrentIndex(2)  # not working; gets reset to oxygen somehow after a Run
 
     def celltype_combobox_changed_cb(self,idx):
         try:
@@ -1008,7 +1053,7 @@ class ICs(QWidget):
         # print("\nics_tab:  --- reset_info()")
         self.celltype_combobox.clear()
         self.fill_celltype_combobox()
-        self.fill_substrates_comboboxes()
+        self.fill_substrate_combobox()
         self.csv_array = np.empty([1,4])
         self.csv_array = np.delete(self.csv_array,0,0)
         self.numcells_l = []
@@ -2190,13 +2235,14 @@ class ICs(QWidget):
     def fill_gui(self):
         self.csv_folder.setText(self.config_tab.csv_folder.text())
         self.output_file.setText(self.config_tab.csv_file.text())
-        self.fill_substrates_comboboxes()
+        self.fill_substrate_combobox()
 
     def substrate_combobox_changed_cb(self):
         self.current_substrate_ind = self.substrate_combobox.currentIndex()
         self.current_substrate_values = self.all_substrate_values[:,:,self.current_substrate_ind]
         check_time_delay = False
         self.cbar1.set_label(self.substrate_combobox.currentText())
+        self.update_substrate_clims()
         self.update_substrate_plot(check_time_delay)
 
     def brush_combobox_changed_cb(self):
@@ -2299,21 +2345,12 @@ class ICs(QWidget):
         except:
             pass
         try: # for when the value is being set and isn't a number yet, e.g. '', or '.'
-            min_val = min(float(self.substrate_set_value.text()),np.min(self.current_substrate_values))
-            min_pos_val = min(float(self.substrate_set_value.text()),np.min(self.current_substrate_values[self.current_substrate_values>0]))
-            max_val = max(float(self.substrate_set_value.text()),np.max(self.current_substrate_values))
-            if max_val > 100*min_pos_val:
-                self.substrate_plot.set_norm(matplotlib.colors.LogNorm(vmin=min_pos_val, vmax=max_val))
-                self.substrate_plot.set_clim(vmin=min_pos_val,vmax=max_val)
-            else:
-                self.substrate_plot.set_norm(matplotlib.colors.Normalize(vmin=min_val, vmax=max_val))
-                self.substrate_plot.set_clim(vmin=min_val,vmax=max_val)
-            self.update_substrate_plot(check_time_delay=False)
+            self.update_substrate_clims()
         except:
             pass
         
-    def fill_substrates_comboboxes(self):
-        logging.debug(f'ics_tab.py: ------- fill_substrates_comboboxes')
+    def fill_substrate_combobox(self):
+        logging.debug(f'ics_tab.py: ------- fill_substrate_combobox')
         self.substrate_list.clear()  # rwh/todo: where/why/how is this list maintained?
         self.substrate_combobox.clear()
         uep = self.config_tab.xml_root.find('.//microenvironment_setup')  # find unique entry point
@@ -2326,6 +2363,7 @@ class ICs(QWidget):
                 name = var.attrib['name']
                 self.substrate_list.append(name)
                 self.substrate_combobox.addItem(name)
+                idx += 1
 
     def add_new_substrate(self, sub_name):
         self.substrate_list.append(sub_name)
@@ -2414,3 +2452,58 @@ class ICs(QWidget):
         if event.type() == QtCore.QEvent.Show:
             self.checkForNewGrid()
         return False # A False return value makes sure that this intercepted event goes on to the target object or any other eventFilter's
+    
+
+    def fix_cmap_toggle_cb(self,bval):
+        # print("fix_cmap_toggle_cb():")
+        self.fix_cmap_flag = bval
+        self.cmin.setEnabled(bval)
+        self.cmax.setEnabled(bval)
+        if bval:
+            self.cmin.setStyleSheet("background-color: white;")
+            self.cmax.setStyleSheet("background-color: white;")
+        else:
+            self.cmin.setStyleSheet("background-color: lightgray;")
+            self.cmax.setStyleSheet("background-color: lightgray;")
+
+            # self.substrate_combobox.addItem(s)
+        # field_name = self.field_dict[self.substrate_choice.value]
+        # print("self.field_dict= ",self.field_dict)
+        # field_name = self.field_dict[self.substrate_combobox.currentText()]
+        field_name = self.substrate_combobox.currentText()
+        # print("field_name= ",field_name)
+        # print(self.cmap_fixed_toggle.value)
+        # if (self.colormap_fixed_toggle.value):  # toggle on fixed range
+        # --- rwh: TODO
+        try:
+            self.update_substrate_clims()
+        except:
+            print("------- ics_tab: fix_cmap_toggle_cb(): exception updating field_min_max for ",field_name)
+
+        # print("\n>>> calling update_plots() from "+ inspect.stack()[0][3])
+
+    def cmin_cmax_cb(self):
+        try:  # due to the initial callback
+            self.update_substrate_clims()
+        except:
+            pass
+
+    def update_substrate_clims(self):
+        if  self.fix_cmap_checkbox.isChecked() is True:
+            min_val = float(self.cmin.text())
+            min_pos_val = min_val
+            max_val = float(self.cmax.text())
+        else:
+            min_val = min(float(self.substrate_set_value.text()),np.min(self.current_substrate_values))
+            min_pos_val = np.min(self.current_substrate_values[self.current_substrate_values>0],initial=float(self.substrate_set_value.text()))
+            max_val = max(float(self.substrate_set_value.text()),np.max(self.current_substrate_values))
+        if min_pos_val > 0 and max_val > 100*min_pos_val:
+            self.substrate_plot.set_norm(matplotlib.colors.LogNorm(vmin=min_pos_val, vmax=max_val))
+            self.substrate_plot.set_clim(vmin=min_pos_val,vmax=max_val)
+        else:
+            self.substrate_plot.set_norm(matplotlib.colors.Normalize(vmin=min_val, vmax=max_val))
+            self.substrate_plot.set_clim(vmin=min_val,vmax=max_val)
+        self.update_substrate_plot(check_time_delay=False)
+        # except: # for initialization
+        #     print("     hit exception")
+        #     pass
