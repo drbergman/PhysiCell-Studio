@@ -173,6 +173,7 @@ class ICs(QWidget):
 
         self.substrate_value_updater = self.point_updater
         self.substrate_updater_pars = {}
+        self.substrate_color_pars = {}
 
         # after reading the docs and thinking about it, this is what I (DB) think is happening:
         # ICs has installed an event filter for itself (self). So, any event being sent to ICs is first intercepted by this filter.
@@ -724,13 +725,13 @@ class ICs(QWidget):
 
         hbox = QHBoxLayout()
         self.save_button_substrates = QPushButton("Save Substrate")
-        self.save_button_substrates.setFixedWidth(int(np.ceil(1.2*btn_width)))
+        self.save_button_substrates.setFixedWidth(110)
         self.save_button_substrates.setStyleSheet("QPushButton {background-color: yellow; color: black;}")
         self.save_button_substrates.clicked.connect(self.save_substrate_cb)
         hbox.addWidget(self.save_button_substrates)
 
         self.import_substrate_button = QPushButton("Import ./config/ics.csv")
-        self.import_substrate_button.setFixedWidth(230)
+        self.import_substrate_button.setFixedWidth(150)
         self.import_substrate_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
         self.import_substrate_button.clicked.connect(self.import_substrate_cb)
         hbox.addWidget(self.import_substrate_button)
@@ -2253,6 +2254,13 @@ class ICs(QWidget):
         self.current_substrate_ind = self.substrate_combobox.currentIndex()
         self.current_substrate_values = self.all_substrate_values[:,:,self.current_substrate_ind]
         check_time_delay = False
+        if self.substrate_combobox.currentText() not in self.substrate_color_pars.keys():
+            self.substrate_color_pars[self.substrate_combobox.currentText()] = {"fixed":False,"cmin":0,"cmax":1,"scale":"auto"}
+        self.fix_cmap_checkbox.setChecked(self.substrate_color_pars[self.substrate_combobox.currentText()]["fixed"])
+        self.fix_cmap_toggle_cb(self.fix_cmap_checkbox.isChecked()) # force this callback to gray out boxes etc
+        self.cmin.setText(str(self.substrate_color_pars[self.substrate_combobox.currentText()]["cmin"]))
+        self.cmax.setText(str(self.substrate_color_pars[self.substrate_combobox.currentText()]["cmax"]))
+        self.color_scale_combobox.setCurrentText(self.substrate_color_pars[self.substrate_combobox.currentText()]["scale"])
         self.cbar1.set_label(self.substrate_combobox.currentText())
         self.update_substrate_clims()
         self.update_substrate_plot(check_time_delay)
@@ -2477,7 +2485,7 @@ class ICs(QWidget):
         else:
             self.cmin.setStyleSheet("background-color: lightgray;")
             self.cmax.setStyleSheet("background-color: lightgray;")
-
+        self.substrate_color_pars[self.substrate_combobox.currentText()]["fixed"] = bval
             # self.substrate_combobox.addItem(s)
         # field_name = self.field_dict[self.substrate_choice.value]
         # print("self.field_dict= ",self.field_dict)
@@ -2496,20 +2504,23 @@ class ICs(QWidget):
 
     def cmin_cmax_cb(self):
         try:  # due to the initial callback
+            self.substrate_color_pars[self.substrate_combobox.currentText()]["cmin"] = self.cmin.text()
+            self.substrate_color_pars[self.substrate_combobox.currentText()]["cmax"] = self.cmax.text()
             self.update_substrate_clims()
         except:
             pass
 
     def update_substrate_clims(self):
-        if  self.fix_cmap_checkbox.isChecked() is True:
-            min_val = float(self.cmin.text())
-            min_pos_val = min_val if min_val>0 else 1e-16
-            max_val = float(self.cmax.text())
+        # if  self.fix_cmap_checkbox.isChecked() is True:
+        if  self.substrate_color_pars[self.substrate_combobox.currentText()]["fixed"] is True:
+            min_val = float(self.substrate_color_pars[self.substrate_combobox.currentText()]["cmin"])
+            min_pos_val = min_val
+            max_val = float(self.substrate_color_pars[self.substrate_combobox.currentText()]["cmax"])
         else:
             min_val = min(float(self.substrate_set_value.text()),np.min(self.current_substrate_values))
             min_pos_val = np.min(self.current_substrate_values[self.current_substrate_values>0],initial=float(self.substrate_set_value.text()))
             max_val = max(float(self.substrate_set_value.text()),np.max(self.current_substrate_values))
-        if (self.color_scale_combobox.currentText()=="log") or (self.color_scale_combobox.currentText()=="auto" and min_pos_val > 0 and max_val > 100*min_pos_val):
+        if (min_pos_val>0) and ((self.substrate_color_pars[self.substrate_combobox.currentText()]["scale"]=="log") or (self.substrate_color_pars[self.substrate_combobox.currentText()]["scale"]=="auto" and max_val > 100*min_pos_val)):
             self.substrate_plot.set_norm(matplotlib.colors.LogNorm(vmin=min_pos_val, vmax=max_val))
             self.substrate_plot.set_clim(vmin=min_pos_val,vmax=max_val)
         else:
@@ -2522,6 +2533,7 @@ class ICs(QWidget):
 
     def color_scale_combobox_changed_cb(self):
         try:
+            self.substrate_color_pars[self.substrate_combobox.currentText()]["scale"] = self.color_scale_combobox.currentText()
             self.update_substrate_clims()
         except:
             pass
