@@ -425,7 +425,7 @@ class PhysiCellXMLCreator(QWidget):
             self.config_tab.ics_tab = self.ics_tab
             self.microenv_tab.ics_tab = self.ics_tab
             self.ics_tab.fill_celltype_combobox()
-            self.ics_tab.fill_substrates_comboboxes()
+            self.ics_tab.fill_substrate_combobox()
             self.ics_tab.reset_info()
 
             if self.nanohub_flag:  # rwh - test if works on nanoHUB
