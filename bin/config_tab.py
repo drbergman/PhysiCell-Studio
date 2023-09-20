@@ -585,8 +585,11 @@ class Config(QWidget):
 
 
     def add_day_cb(self):
-        max_time = float(self.max_time.text())
-        print("max_time=",max_time)
+        if not self.max_time.text():
+            max_time = float(0.0)
+        else:
+            max_time = float(self.max_time.text())
+        print("max_time=", max_time)
         max_time += 1440
         self.max_time.setText(f"{max_time}")
 
@@ -644,7 +647,6 @@ class Config(QWidget):
             if self.plot_substrate_limits.isChecked():
                 self.svg_substrate_min.setStyleSheet("background-color: white; color: black")
                 self.svg_substrate_max.setStyleSheet("background-color: white; color: black")
-
         else:
             self.svg_substrate_to_plot_dropdown.setStyleSheet("background-color: lightgray; color: black")
             self.svg_substrate_colormap_dropdown.setStyleSheet("background-color: lightgray; color: black")
@@ -1165,5 +1167,7 @@ class Config(QWidget):
                 self.minute_fraction_spin_box.setDecimals(2)
         except:
             self.minute_fraction_spin_box.setDecimals(2)
+    def count_substrates(self):
+        return len(self.substrate_list)
     #-----------------------------------------------------------------------------------------
     
