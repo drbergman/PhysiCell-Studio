@@ -171,6 +171,7 @@ class ICs(QWidget):
 
         self.setupSubstratePlotParameters()
 
+        self.mouse_on_axes = False
         self.substrate_value_updater = self.point_updater
         self.substrate_updater_pars = {}
         self.substrate_color_pars = {}
@@ -1150,6 +1151,8 @@ class ICs(QWidget):
         self.canvas.mpl_connect("button_press_event", self.mousePressed) # for substrate placement when point not selected
         self.canvas.mpl_connect("motion_notify_event", self.mouseMoved) # for substrate placement when point not selected
         self.canvas.mpl_connect("figure_leave_event", self.mouseLeftFigure)
+        self.canvas.mpl_connect('axes_enter_event', self.on_enter_axes)
+        self.canvas.mpl_connect('axes_leave_event', self.on_leave_axes)
         self.canvas.setStyleSheet("background-color:transparent;")
 
         self.ax0 = self.figure.add_subplot(111, adjustable='box')
@@ -1187,9 +1190,6 @@ class ICs(QWidget):
         self.canvas.update()
         self.canvas.draw()
 
-        # self.canvas.mousePressEvent = self.mousePressed
-        # self.canvas.mouseMoveEvent = self.mouseMoved
-        # self.canvas.mouseReleaseEvent = self.mouseReleased
     #---------------------------------------------------------------------------
     def getPos(self, event):
         x = event.xdata  # or "None" if outside plot domain
@@ -1214,9 +1214,15 @@ class ICs(QWidget):
         self.update_substrate_plot(check_time_delay)
 
     def mouseMoved(self, event):
-        if (self.create_point is True) or (self.mouse_pressed is False):
+        if self.mouse_on_axes is False: # if we're not on the axes, just leave now
             return
         x, y, z = self.getPos(event)
+        self.ax0.set_title(f"(x,y) = ({round(x)}, {round(y)})")
+        self.canvas.update()
+        self.canvas.draw()
+        
+        if (self.create_point is True) or (self.mouse_pressed is False):
+            return
         if (x is None) or (y is None) or (z is None):
             self.current_voxel_subs = None
             return
@@ -2542,3 +2548,19 @@ class ICs(QWidget):
             self.update_substrate_clims()
         except:
             pass
+
+    def on_enter_axes(self, event):
+        self.mouse_on_axes = True
+        x, y, z = self.getPos(event)
+        self.ax0.set_title(f"(x,y) = ({round(x)}, {round(y)})")
+        self.canvas.update()
+        self.canvas.draw()
+
+    def on_leave_axes(self, event):
+        self.mouse_on_axes = False
+        self.ax0.set_title("")
+        self.canvas.update()
+        self.canvas.draw()
+
+
+
