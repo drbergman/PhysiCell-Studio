@@ -2123,10 +2123,9 @@ class ICs(QWidget):
             os.makedirs(dir_name)
             time.sleep(1)
         self.full_substrate_ic_fname = os.path.join(dir_name,"ics.csv") # also hardcode this for now
-        print("save_substrate_cb(): self.full_substrate_ic_fname=",self.full_substrate_ic_fname)
 
-        print("----- Writing .csv file for substrate")
-        print("----- self.full_substrate_ic_fname=",self.full_substrate_ic_fname)
+        print("save_substrate_cb(): self.full_substrate_ic_fname=",self.full_substrate_ic_fname)
+        
         X = np.tile(self.plot_xx,self.ny).reshape((-1,1))
         Y = np.repeat(self.plot_yy,self.nx).reshape((-1,1))
         Z = np.zeros(self.nx*self.ny).reshape((-1,1))
@@ -2134,8 +2133,13 @@ class ICs(QWidget):
         nonzero_substrates = (C!=0).any(axis=0)
         if ~nonzero_substrates.any():
             # then no substrates are being saved; just disable ics and move on
+            print("---- All substrate ics are 0. Not saving and disabling ics")
             self.enable_csv_for_substrate_ics = False
             return
+        
+        print("----- Writing .csv file for substrate")
+        print("----- self.full_substrate_ic_fname=",self.full_substrate_ic_fname)
+
         C = C[:,nonzero_substrates] # remove columns of all zeros corresponding to substrates that were not set
         substrates_to_save = [self.substrate_list[i] for i in range(len(self.substrate_list)) if nonzero_substrates[i]]
         header = f'x,y,z,{",".join(substrates_to_save)}'
