@@ -1366,5 +1366,8 @@ class SubstrateDef(QWidget):
             self.xml_root.find(".//microenvironment_setup//options//initial_condition").attrib['type'] = 'csv'
             self.xml_root.find(".//microenvironment_setup//options//initial_condition").attrib['enabled'] = 'true'
             self.xml_root.find(".//microenvironment_setup//options//initial_condition//filename").text = self.ics_tab.full_substrate_ic_fname
+        elif (self.xml_root.find(".//microenvironment_setup//options//initial_condition") is not None) and (self.xml_root.find(".//microenvironment_setup//options//initial_condition").attrib['type'].lower()=="csv"): # then make sure this is disabled
+            self.xml_root.find(".//microenvironment_setup//options//initial_condition").attrib['enabled'] = 'false'
+            
     def clear_gui(self):
         pass
