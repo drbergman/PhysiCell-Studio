@@ -551,15 +551,15 @@ class Config(QWidget):
         hbox = QHBoxLayout()
 
         cbox_width = 200
-        self.virtual_walls = QCheckBox_custom("virtual walls")
-        self.virtual_walls.setFixedWidth(cbox_width)
+        self.virtual_walls = QCheckBox_custom("virtual walls (nudge cells away from domain boundaries)")
+        self.virtual_walls.setFixedWidth(400)
         self.virtual_walls.setChecked(True)
         hbox.addWidget(self.virtual_walls)
 
-        self.disable_auto_springs = QCheckBox_custom("disable springs")
-        self.disable_auto_springs.setFixedWidth(cbox_width)
-        self.disable_auto_springs.setChecked(True)
-        hbox.addWidget(self.disable_auto_springs)
+        # self.disable_auto_springs = QCheckBox_custom("disable springs")
+        # self.disable_auto_springs.setFixedWidth(cbox_width)
+        # self.disable_auto_springs.setChecked(True)
+        # hbox.addWidget(self.disable_auto_springs)
 
         vbox.addLayout(hbox)
 
@@ -745,10 +745,20 @@ class Config(QWidget):
         else:
             print("\n\n---------virtual_wall_at_domain_edge is None !!!!!!!!!!!!1")
 
-        self.disable_auto_springs.setChecked(False)
-        if self.xml_root.find(".//disable_automated_spring_adhesions") is not None:
-            if self.xml_root.find(".//disable_automated_spring_adhesions").text.lower() == "true":
-                self.disable_auto_springs.setChecked(True)
+        # self.disable_auto_springs.setChecked(False)
+        # if self.xml_root.find(".//disable_automated_spring_adhesions") is not None:
+        #     if self.xml_root.find(".//disable_automated_spring_adhesions").text.lower() == "true":
+        #         self.disable_auto_springs.setChecked(True)
+
+        # No, let's not do this
+        # if self.xml_root.find(".//disable_automated_spring_adhesions") is not None:
+        #     msg = f"NOTE: disable_automated_spring_adhesions in .xml is deprecated."
+        #     print(msg)
+        #     msgBox = QMessageBox()
+        #     msgBox.setTextFormat(Qt.RichText)
+        #     msgBox.setText(msg)
+        #     msgBox.setStandardButtons(QMessageBox.Ok)
+        #     returnValue = msgBox.exec()
         
         self.max_time.setText(self.xml_root.find(".//max_time").text)
         self.diffusion_dt.setText(self.xml_root.find(".//dt_diffusion").text)
@@ -891,15 +901,15 @@ class Config(QWidget):
             subelm = ET.SubElement(uep, "virtual_wall_at_domain_edge")
             subelm.text = bval
 
-        bval = "false"
-        if self.disable_auto_springs.isChecked():
-            bval = "true"
-        if self.xml_root.find(".//disable_automated_spring_adhesions") is not None:
-            self.xml_root.find(".//disable_automated_spring_adhesions").text = bval
-        else:  # missing in original; insert it (happens at write)
-            uep = self.xml_root.find('.//options')
-            subelm = ET.SubElement(uep, "disable_automated_spring_adhesions")
-            subelm.text = bval
+        # bval = "false"
+        # if self.disable_auto_springs.isChecked():
+        #     bval = "true"
+        # if self.xml_root.find(".//disable_automated_spring_adhesions") is not None:
+        #     self.xml_root.find(".//disable_automated_spring_adhesions").text = bval
+        # else:  # missing in original; insert it (happens at write)
+        #     uep = self.xml_root.find('.//options')
+        #     subelm = ET.SubElement(uep, "disable_automated_spring_adhesions")
+        #     subelm.text = bval
 
 
         # rwh: Not sure why I couldn't get this to work, i.e., to *insert* the element (just one time) if it didn't exist.
