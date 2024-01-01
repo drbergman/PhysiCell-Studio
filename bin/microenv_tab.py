@@ -39,7 +39,6 @@ class QCheckBox_custom(QCheckBox):  # it's insane to have to do this!
                 """
         self.setStyleSheet(checkbox_style)
 
-
 class QHLine(QFrame):
     def __init__(self):
         super(QHLine, self).__init__()
@@ -50,12 +49,23 @@ class SubstrateDef(QWidget):
     def __init__(self, config_tab):
         super().__init__()
         # global self.microenv_params
+        self.config_tab = config_tab
+        self.tab_widget = QTabWidget()
+        self.splitter = QSplitter()
+        self.scroll_substrate_tree = QScrollArea()
+        self.splitter.addWidget(self.scroll_substrate_tree)
+        self.splitter.addWidget(self.tab_widget)
+        self.scroll_area = QScrollArea()
+        self.splitter.addWidget(self.scroll_area)
+        self.tab_widget.addTab(self.create_base_microenv_tab(),"Base")
+        self.layout.addWidget(self.splitter)
 
+
+    def create_base_microenv_tab(self):
         self.param_d = {}  # a dict of dicts - rwh/todo, used anymore?
         # self.substrate = {}
         self.current_substrate = None
         self.xml_root = None
-        self.config_tab = config_tab
         self.new_substrate_count = 1
 
         self.is_3D = False
@@ -74,7 +84,7 @@ class SubstrateDef(QWidget):
         # self.cell_defs = CellDefInstances()
         # self.microenv_hbox = QHBoxLayout()
 
-        splitter = QSplitter()
+        # splitter = QSplitter()
         leftwidth = 150
         # splitter.setSizes([split_leftwidth, self.width() - leftwidth])
         # splitter.setSizes([leftwidth, self.width() - leftwidth])
@@ -126,7 +136,7 @@ class SubstrateDef(QWidget):
         # self.microenv_hbox.addWidget(self.name_list)
 
 
-        self.scroll_substrate_tree = QScrollArea()
+        # self.scroll_substrate_tree = QScrollArea()
         # self.scroll_substrate_tree.setFixedWidth(tree_widget_width)
 
         # self.tree_w = QWidget()
@@ -170,7 +180,7 @@ class SubstrateDef(QWidget):
         # self.scroll_substrate_tree.setWidget(self.tree)
         #---------
         # splitter.addWidget(self.tree)
-        splitter.addWidget(self.scroll_substrate_tree)
+        # splitter.addWidget(self.scroll_substrate_tree)
 
         #-------------------------------------------
         # self.tab = QWidget()
@@ -181,8 +191,8 @@ class SubstrateDef(QWidget):
         units_width = 150
 
         # self.scroll = QScrollArea()
-        self.scroll_area = QScrollArea()
-        splitter.addWidget(self.scroll_area)
+        # self.scroll_area = QScrollArea()
+        # splitter.addWidget(self.scroll_area)
         # self.microenv_hbox.addWidget(self.scroll_area)
 
         self.microenv_params = QWidget()
@@ -482,7 +492,7 @@ class SubstrateDef(QWidget):
         # self.layout.addWidget(self.params)
 
         # self.layout.addWidget(self.scroll_area)
-        self.layout.addWidget(splitter)
+        # self.layout.addWidget(splitter)
 
         self.new_substrate_count = self.config_tab.count_substrates()
 
