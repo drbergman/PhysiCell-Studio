@@ -60,35 +60,6 @@ class SubstrateDef(QWidget):
         self.tab_widget.addTab(self.create_base_microenv_tab(),"Base")
         self.layout.addWidget(self.splitter)
 
-
-    def create_base_microenv_tab(self):
-        self.param_d = {}  # a dict of dicts - rwh/todo, used anymore?
-        # self.substrate = {}
-        self.current_substrate = None
-        self.xml_root = None
-        self.new_substrate_count = 1
-
-        self.is_3D = False
-
-        self.default_rate_units = "1/min"
-        self.dirichlet_units = "mmHG"
-
-        self.rules_tab = None   # update in studio.py
-
-        # self.stacked_w = QStackedWidget()
-        # self.stack_w = []
-        # self.stack_w.append(QStackedWidget())
-        # self.stacked_w.addWidget(self.stack_w[0])
-
-        #---------------
-        # self.cell_defs = CellDefInstances()
-        # self.microenv_hbox = QHBoxLayout()
-
-        # splitter = QSplitter()
-        leftwidth = 150
-        # splitter.setSizes([split_leftwidth, self.width() - leftwidth])
-        # splitter.setSizes([leftwidth, self.width() - leftwidth])
-
         tree_widget_width = 240
         tree_widget_height = 400
 
@@ -177,6 +148,37 @@ class SubstrateDef(QWidget):
         tree_w_vbox.addLayout(tree_w_hbox)
         self.tree_w.setLayout(tree_w_vbox)
         self.scroll_substrate_tree.setWidget(self.tree_w)
+
+
+    def create_base_microenv_tab(self):
+        self.param_d = {}  # a dict of dicts - rwh/todo, used anymore?
+        # self.substrate = {}
+        self.current_substrate = None
+        self.xml_root = None
+        self.new_substrate_count = 1
+
+        self.is_3D = False
+
+        self.default_rate_units = "1/min"
+        self.dirichlet_units = "mmHG"
+
+        self.rules_tab = None   # update in studio.py
+
+        # self.stacked_w = QStackedWidget()
+        # self.stack_w = []
+        # self.stack_w.append(QStackedWidget())
+        # self.stacked_w.addWidget(self.stack_w[0])
+
+        #---------------
+        # self.cell_defs = CellDefInstances()
+        # self.microenv_hbox = QHBoxLayout()
+
+        # splitter = QSplitter()
+        leftwidth = 150
+        # splitter.setSizes([split_leftwidth, self.width() - leftwidth])
+        # splitter.setSizes([leftwidth, self.width() - leftwidth])
+
+        
         # self.scroll_substrate_tree.setWidget(self.tree)
         #---------
         # splitter.addWidget(self.tree)
