@@ -55,8 +55,50 @@ def validate_cell_defs(cell_defs_elm, skip_validate):
             sys.exit(-1)
     logging.debug(f'=======================  end validate_cell_defs(): =======================\n\n')
 
+def pkpd_populate_tree_cell_defs(cell_def_tab, uep, pkpd_flag):
+    if pkpd_flag is False:
+        return
+    idx = 1
+    for cell_def in uep:
+        cell_def_name = cell_def.attrib['name']
+        cell_def_tab.param_d[cell_def_name]["pd"] = {}
+        jdx = 1
+        for substrate in cell_def_tab.substrate_list:
+            cell_def_tab.param_d[cell_def_name]["pd"][substrate] = {}
+            if idx == 1 and jdx == 1:
+                cell_def_tab.current_pd_substrate = substrate
+            jdx += 1
+        uep_pd = cell_def_tab.xml_root.find(".//cell_definitions//cell_definition[" + str(idx) + "]//PD")
+        if uep_pd is None:
+            continue
+        for substrate in cell_def_tab.substrate_list:
+            sub_elm = uep_pd.find(f".//substrate[@name='{substrate}']")
+            if sub_elm is None:
+                continue
+            pd_model = "None"
+            pd_model_elm = sub_elm.find(".//model")
+            if pd_model_elm is not None:
+                pd_model = pd_model_elm.text
+            cell_def_tab.param_d[cell_def_name]["pd"][substrate]["pd_model"] = pd_model
 
-def populate_tree_cell_defs(cell_def_tab, skip_validate):
+            metabolism_rate = "0"
+            metabolism_rate_elm = sub_elm.find(".//metabolism_rate")
+            if metabolism_rate_elm is not None:
+                metabolism_rate = metabolism_rate_elm.text
+            cell_def_tab.param_d[cell_def_name]["pd"][substrate]["metabolism_rate"] = metabolism_rate
+            constant_repair_rate = "0"
+            constant_repair_rate_elm = sub_elm.find(".//constant_repair_rate")
+            if constant_repair_rate_elm is not None:
+                constant_repair_rate = constant_repair_rate_elm.text
+            cell_def_tab.param_d[cell_def_name]["pd"][substrate]["constant_repair_rate"] = constant_repair_rate
+            linear_repair_rate = "0"
+            linear_repair_rate_elm = sub_elm.find(".//linear_repair_rate")
+            if linear_repair_rate_elm is not None:
+                linear_repair_rate = linear_repair_rate_elm.text
+            cell_def_tab.param_d[cell_def_name]["pd"][substrate]["linear_repair_rate"] = linear_repair_rate
+        idx += 1
+
+def populate_tree_cell_defs(cell_def_tab, skip_validate, pkpd_flag):
     logging.debug(f'=======================  populate_tree_cell_defs(): ======================= ')
     logging.debug(f'    cell_def_tab.param_d = {cell_def_tab.param_d}')
     # cell_def_tab.master_custom_varname.clear()
@@ -1513,7 +1555,7 @@ def populate_tree_cell_defs(cell_def_tab, skip_validate):
             #     jdx += 1
 
                 # print("--------- populate_tree: cell_def_tab.param_d[cell_def_name]['custom_data'] = ",cell_def_tab.param_d[cell_def_name]['custom_data'])
-
+        pkpd_populate_tree_cell_defs(cell_def_tab, uep, pkpd_flag)
     # sys.exit(1)
 
     cell_def_tab.current_cell_def = cell_def_0th

@@ -73,6 +73,7 @@ class SubstrateDef(QWidget):
         if self.pkpd_flag:
             self.tab_widget.addTab(self.create_pk_tab(),"PK")
             self.pk_setup_complete = True
+            
         self.layout = QVBoxLayout(self)
         self.layout.addWidget(self.splitter)
 
@@ -205,7 +206,9 @@ class SubstrateDef(QWidget):
         hbox.addWidget(label)
 
         self.pk_schedule_format_combobox = QComboBox() # put this here before connecting pk_model_combobox to cb to prevent error
+        self.pk_schedule_format_combobox.setEnabled(False)
         self.pk_schedule_format_combobox.addItem("parameters")
+        self.pk_schedule_format_combobox.setStyleSheet("background-color: lightgray; color: black")
         self.pk_schedule_format_combobox.addItem("csv")
         self.pk_schedule_format_combobox.currentIndexChanged.connect(self.pk_schedule_format_combobox_changed_cb)
         hbox.addWidget(self.pk_schedule_format_combobox)
@@ -216,7 +219,8 @@ class SubstrateDef(QWidget):
 
         self.pk_total_doses = QLineEdit()
         self.pk_total_doses.setFixedWidth(30)
-        self.pk_total_doses.setEnabled(True)
+        self.pk_total_doses.setEnabled(False)
+        self.pk_total_doses.setStyleSheet("background-color: lightgray; color: black")
         self.pk_total_doses.setValidator(QtGui.QIntValidator())
         self.pk_total_doses.textChanged.connect(self.pk_total_doses_changed_cb)
         hbox.addWidget(self.pk_total_doses)
@@ -227,7 +231,8 @@ class SubstrateDef(QWidget):
 
         self.pk_loading_doses = QLineEdit()
         self.pk_loading_doses.setFixedWidth(30)
-        self.pk_loading_doses.setEnabled(True)
+        self.pk_loading_doses.setEnabled(False)
+        self.pk_loading_doses.setStyleSheet("background-color: lightgray; color: black")
         self.pk_loading_doses.setValidator(QtGui.QIntValidator())
         self.pk_loading_doses.textChanged.connect(self.pk_loading_doses_changed_cb)
         hbox.addWidget(self.pk_loading_doses)
@@ -242,7 +247,8 @@ class SubstrateDef(QWidget):
 
         self.pk_first_dose_time = QLineEdit()
         self.pk_first_dose_time.setFixedWidth(30)
-        self.pk_first_dose_time.setEnabled(True)
+        self.pk_first_dose_time.setEnabled(False)
+        self.pk_first_dose_time.setStyleSheet("background-color: lightgray; color: black")
         self.pk_first_dose_time.setValidator(QtGui.QDoubleValidator())
         self.pk_first_dose_time.textChanged.connect(self.pk_first_dose_time_changed_cb)
         hbox.addWidget(self.pk_first_dose_time)
@@ -257,7 +263,8 @@ class SubstrateDef(QWidget):
 
         self.pk_dose_interval = QLineEdit()
         self.pk_dose_interval.setFixedWidth(30)
-        self.pk_dose_interval.setEnabled(True)
+        self.pk_dose_interval.setEnabled(False)
+        self.pk_dose_interval.setStyleSheet("background-color: lightgray; color: black")
         self.pk_dose_interval.setValidator(QtGui.QDoubleValidator())
         self.pk_dose_interval.textChanged.connect(self.pk_dose_interval_changed_cb)
         hbox.addWidget(self.pk_dose_interval)
@@ -272,7 +279,8 @@ class SubstrateDef(QWidget):
 
         self.pk_regular_dose = QLineEdit()
         self.pk_regular_dose.setFixedWidth(60)
-        self.pk_regular_dose.setEnabled(True)
+        self.pk_regular_dose.setEnabled(False)
+        self.pk_regular_dose.setStyleSheet("background-color: lightgray; color: black")
         self.pk_regular_dose.setValidator(QtGui.QDoubleValidator())
         self.pk_regular_dose.textChanged.connect(self.pk_regular_dose_changed_cb)
         hbox.addWidget(self.pk_regular_dose)
@@ -283,7 +291,8 @@ class SubstrateDef(QWidget):
 
         self.pk_loading_dose = QLineEdit()
         self.pk_loading_dose.setFixedWidth(60)
-        self.pk_loading_dose.setEnabled(True)
+        self.pk_loading_dose.setEnabled(False)
+        self.pk_loading_dose.setStyleSheet("background-color: lightgray; color: black")
         self.pk_loading_dose.setValidator(QtGui.QDoubleValidator())
         self.pk_loading_dose.textChanged.connect(self.pk_loading_dose_changed_cb)
         hbox.addWidget(self.pk_loading_dose)
@@ -883,7 +892,9 @@ class SubstrateDef(QWidget):
         self.param_d[self.current_substrate]["k21"] = text
 
     def pk_biot_number_changed_cb(self, text):
+        print(f'  pre-set: {self.param_d}')
         self.param_d[self.current_substrate]["biot_number"] = text
+        print(f'  post-set: {self.param_d}')
 
     def decay_rate_changed(self, text):
         self.param_d[self.current_substrate]["decay_rate"] = text
@@ -1010,16 +1021,16 @@ class SubstrateDef(QWidget):
 
         self.param_d[subname]["pk_model"] = "None"
         self.param_d[subname]["schedule_format"] = "parameters"
-        self.param_d[subname]["total_doses"] = 0
-        self.param_d[subname]["loading_doses"] = 0
-        self.param_d[subname]["first_dose_time"] = 0
-        self.param_d[subname]["dose_interval"] = 1
-        self.param_d[subname]["regular_dose"] = 0
-        self.param_d[subname]["loading_dose"] = 0
-        self.param_d[subname]["elimination_rate"] = 0
-        self.param_d[subname]["k12"] = 0
-        self.param_d[subname]["k21"] = 0
-        self.param_d[subname]["biot_number"] = 1
+        self.param_d[subname]["total_doses"] = "0"
+        self.param_d[subname]["loading_doses"] = "0"
+        self.param_d[subname]["first_dose_time"] = "0"
+        self.param_d[subname]["dose_interval"] = "1"
+        self.param_d[subname]["regular_dose"] = "0"
+        self.param_d[subname]["loading_dose"] = "0"
+        self.param_d[subname]["elimination_rate"] = "0"
+        self.param_d[subname]["k12"] = "0"
+        self.param_d[subname]["k21"] = "0"
+        self.param_d[subname]["biot_number"] = "1"
 
         # NOooo!
         # self.param_d["gradients"] = bval
@@ -1436,16 +1447,16 @@ class SubstrateDef(QWidget):
                         else:
                             pk_model_enabled = pk_path.attrib["enabled"]
                         schedule_format = "parameters"
-                        total_doses = 0
-                        loading_doses = 0
-                        first_dose_time = 0
-                        dose_interval = 1
-                        regular_dose = 0
-                        loading_dose = 0
-                        elimination_rate = 0
-                        k12 = 0
-                        k21 = 0
-                        biot_number = 1
+                        total_doses = "0"
+                        loading_doses = "0"
+                        first_dose_time = "0"
+                        dose_interval = "1"
+                        regular_dose = "0"
+                        loading_dose = "0"
+                        elimination_rate = "0"
+                        k12 = "0"
+                        k21 = "0"
+                        biot_number = "1"
                         if pk_model_enabled == "true":
                             pk_model = pk_path.find(".//model").text
                             if pk_model != "SBML":
@@ -1453,12 +1464,6 @@ class SubstrateDef(QWidget):
                                 if schedule_elm is not None:
                                     schedule_format = schedule_elm.attrib["format"]
                                     if schedule_format == "parameters":
-                                        total_doses = 0
-                                        loading_doses = 0
-                                        first_dose_time = 0
-                                        dose_interval = 1
-                                        regular_dose = 0
-                                        loading_dose = 0
                                         total_doses_elm = schedule_elm.find(".//total_doses")
                                         if total_doses_elm is not None and total_doses_elm.text is not None:
                                             total_doses = total_doses_elm.text

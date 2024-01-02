@@ -333,7 +333,7 @@ class PhysiCellXMLCreator(QWidget):
 
         # self.tab2.tree.setCurrentItem(QTreeWidgetItem,0)  # item
 
-        self.celldef_tab = CellDef(self.pytest_flag)
+        self.celldef_tab = CellDef(self.pytest_flag, self.pkpd_flag)
         self.celldef_tab.xml_root = self.xml_root
         if is_movable_flag:
             self.celldef_tab.is_movable_w.setEnabled(True)
@@ -347,7 +347,7 @@ class PhysiCellXMLCreator(QWidget):
         self.celldef_tab.fill_substrates_comboboxes() # do before populate? Yes, assuming we check for cell_def != None
 
         # Beware: this may set the substrate chosen for Motility/[Advanced]Chemotaxis
-        populate_tree_cell_defs(self.celldef_tab, self.skip_validate_flag)
+        populate_tree_cell_defs(self.celldef_tab, self.skip_validate_flag, self.pkpd_flag)
         # self.celldef_tab.customdata.param_d = self.celldef_tab.param_d
 
         # self.celldef_tab.enable_interaction_callbacks()
