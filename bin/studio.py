@@ -79,7 +79,7 @@ def quit_cb():
 
   
 class PhysiCellXMLCreator(QWidget):
-    def __init__(self, config_file, studio_flag, skip_validate_flag, rules_flag, model3D_flag, tensor_flag, exec_file, nanohub_flag, is_movable_flag, pytest_flag, parent = None):
+    def __init__(self, config_file, studio_flag, skip_validate_flag, rules_flag, model3D_flag, tensor_flag, exec_file, nanohub_flag, is_movable_flag, pytest_flag, pkpd_flag, parent = None):
         super(PhysiCellXMLCreator, self).__init__(parent)
         if model3D_flag:
             try:
@@ -105,6 +105,7 @@ class PhysiCellXMLCreator(QWidget):
         self.nanohub_flag = nanohub_flag 
         self.ecm_flag = False 
         self.pytest_flag = pytest_flag 
+        self.pkpd_flag = pkpd_flag
         print("PhysiCellXMLCreator(): self.nanohub_flag= ",self.nanohub_flag)
 
         self.rules_tab_index = None
@@ -323,7 +324,7 @@ class PhysiCellXMLCreator(QWidget):
         else:
             print("studio.py: ---- FALSE nanohub_flag: NOT updating config_tab folder")
 
-        self.microenv_tab = SubstrateDef(self.config_tab)
+        self.microenv_tab = SubstrateDef(self.config_tab, self.pkpd_flag)
         self.microenv_tab_index = 1
         self.microenv_tab.xml_root = self.xml_root
         substrate_name = self.microenv_tab.first_substrate_name()
@@ -1399,6 +1400,7 @@ def main():
     nanohub_flag = False
     is_movable_flag = False
     pytest_flag = False
+    pkpd_flag = False
     try:
         parser = argparse.ArgumentParser(description='PhysiCell Studio.')
 
@@ -1412,6 +1414,7 @@ def main():
         parser.add_argument("-c ", "--config", type=str, help="config file (.xml)")
         parser.add_argument("-e ", "--exec", type=str, help="executable model")
         parser.add_argument("-p ", "--pconfig", help="use config/PhysiCell_settings.xml", action="store_true")
+        parser.add_argument("--pkpd", help="display PK and PD tabs", action="store_true")
 
         exec_file = 'project'  # for template sample
 
@@ -1482,6 +1485,7 @@ def main():
             else:
                 print("config_file is NOT valid: ", config_file)
                 sys.exit()
+        pkpd_flag = args.pkpd
     except:
         # print("Error parsing command line args.")
         sys.exit(-1)
@@ -1555,7 +1559,7 @@ def main():
             # print("Warning: Rules module not found.\n")
 
     # print("calling PhysiCellXMLCreator with rules_flag= ",rules_flag)
-    ex = PhysiCellXMLCreator(config_file, studio_flag, skip_validate_flag, rules_flag, model3D_flag, tensor_flag, exec_file, nanohub_flag, is_movable_flag, pytest_flag)
+    ex = PhysiCellXMLCreator(config_file, studio_flag, skip_validate_flag, rules_flag, model3D_flag, tensor_flag, exec_file, nanohub_flag, is_movable_flag, pytest_flag, pkpd_flag)
     print("size=",ex.size())  # = PyQt5.QtCore.QSize(1100, 770)
     # ex.setFixedWidth(1101)  # = PyQt5.QtCore.QSize(1100, 770)
     # print("width=",ex.size())

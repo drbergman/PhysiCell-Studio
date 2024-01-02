@@ -46,7 +46,7 @@ class QHLine(QFrame):
         self.setFrameShadow(QFrame.Sunken)
 
 class SubstrateDef(QWidget):
-    def __init__(self, config_tab):
+    def __init__(self, config_tab, pkpd_flag):
         super().__init__()
         self.pk_setup_complete = False
         self.param_d = {}  # a dict of dicts - rwh/todo, used anymore?
@@ -63,13 +63,16 @@ class SubstrateDef(QWidget):
         self.rules_tab = None   # update in studio.py
         # global self.microenv_params
         self.config_tab = config_tab
+        self.pkpd_flag = pkpd_flag
         self.tab_widget = QTabWidget()
         self.splitter = QSplitter()
         self.scroll_substrate_tree = QScrollArea()
         self.splitter.addWidget(self.scroll_substrate_tree)
         self.splitter.addWidget(self.tab_widget)
         self.tab_widget.addTab(self.create_base_microenv_tab(),"Base")
-        self.tab_widget.addTab(self.create_pk_tab(),"PK")
+        if self.pkpd_flag:
+            self.tab_widget.addTab(self.create_pk_tab(),"PK")
+            self.pk_setup_complete = True
         self.layout = QVBoxLayout(self)
         self.layout.addWidget(self.splitter)
 
@@ -173,8 +176,6 @@ class SubstrateDef(QWidget):
 
         self.new_substrate_count = self.config_tab.count_substrates()
 
-        self.pk_setup_complete = True
-
     def create_pk_tab(self):
         self.pk_tab = QWidget()
         self.pk_tab_layout = QVBoxLayout()
@@ -204,7 +205,6 @@ class SubstrateDef(QWidget):
         hbox.addWidget(label)
 
         self.pk_schedule_format_combobox = QComboBox() # put this here before connecting pk_model_combobox to cb to prevent error
-        self.pk_schedule_format_combobox.addItem("sbml")
         self.pk_schedule_format_combobox.addItem("parameters")
         self.pk_schedule_format_combobox.addItem("csv")
         self.pk_schedule_format_combobox.currentIndexChanged.connect(self.pk_schedule_format_combobox_changed_cb)
@@ -1235,18 +1235,19 @@ class SubstrateDef(QWidget):
             self.enable_zmin.setChecked(self.param_d[self.current_substrate]["enable_zmin"])
             self.enable_zmax.setChecked(self.param_d[self.current_substrate]["enable_zmax"])
 
-        self.pk_model_combobox.setCurrentIndex(self.pk_model_combobox.findText(self.param_d[self.current_substrate]["pk_model"]))
-        self.pk_schedule_format_combobox.setCurrentIndex(self.pk_schedule_format_combobox.findText(self.param_d[self.current_substrate]["schedule_format"]))
-        self.pk_total_doses.setText(str(self.param_d[self.current_substrate]["total_doses"]))
-        self.pk_loading_doses.setText(str(self.param_d[self.current_substrate]["loading_doses"]))
-        self.pk_first_dose_time.setText(str(self.param_d[self.current_substrate]["first_dose_time"]))
-        self.pk_dose_interval.setText(str(self.param_d[self.current_substrate]["dose_interval"]))
-        self.pk_regular_dose.setText(str(self.param_d[self.current_substrate]["regular_dose"]))
-        self.pk_loading_dose.setText(str(self.param_d[self.current_substrate]["loading_dose"]))
-        self.pk_elimination_rate.setText(str(self.param_d[self.current_substrate]["elimination_rate"]))
-        self.pk_k12.setText(str(self.param_d[self.current_substrate]["k12"]))
-        self.pk_k21.setText(str(self.param_d[self.current_substrate]["k21"]))
-        self.pk_biot_number.setText(str(self.param_d[self.current_substrate]["biot_number"]))
+        if self.pkpd_flag:
+            self.pk_model_combobox.setCurrentIndex(self.pk_model_combobox.findText(self.param_d[self.current_substrate]["pk_model"]))
+            self.pk_schedule_format_combobox.setCurrentIndex(self.pk_schedule_format_combobox.findText(self.param_d[self.current_substrate]["schedule_format"]))
+            self.pk_total_doses.setText(str(self.param_d[self.current_substrate]["total_doses"]))
+            self.pk_loading_doses.setText(str(self.param_d[self.current_substrate]["loading_doses"]))
+            self.pk_first_dose_time.setText(str(self.param_d[self.current_substrate]["first_dose_time"]))
+            self.pk_dose_interval.setText(str(self.param_d[self.current_substrate]["dose_interval"]))
+            self.pk_regular_dose.setText(str(self.param_d[self.current_substrate]["regular_dose"]))
+            self.pk_loading_dose.setText(str(self.param_d[self.current_substrate]["loading_dose"]))
+            self.pk_elimination_rate.setText(str(self.param_d[self.current_substrate]["elimination_rate"]))
+            self.pk_k12.setText(str(self.param_d[self.current_substrate]["k12"]))
+            self.pk_k21.setText(str(self.param_d[self.current_substrate]["k21"]))
+            self.pk_biot_number.setText(str(self.param_d[self.current_substrate]["biot_number"]))
 
         # global to all substrates
         self.gradients.setChecked(self.param_d["gradients"])
@@ -1428,97 +1429,96 @@ class SubstrateDef(QWidget):
                         self.param_d[substrate_name]["enable_zmin"] = False
                         self.param_d[substrate_name]["enable_zmax"] = False
 
-                    # user_param_path = self.xml_root.find(".//user_parameters")
-                    # pk_model = user_param_path.find(f'.//{substrate_name}_pk_model').text
-                    pk_path = var_path.find(".//PK")
-                    if pk_path is None:
-                        pk_model_enabled = "false"
-                    else:
-                        pk_model_enabled = pk_path.attrib["enabled"]
-                    schedule_format = "parameters"
-                    total_doses = 0
-                    loading_doses = 0
-                    first_dose_time = 0
-                    dose_interval = 1
-                    regular_dose = 0
-                    loading_dose = 0
-                    elimination_rate = 0
-                    k12 = 0
-                    k21 = 0
-                    biot_number = 1
-                    if pk_model_enabled == "true":
-                        pk_model = pk_path.find(".//model").text
-                        if pk_model != "SBML":
-                            schedule_elm = pk_path.find(".//schedule")
-                            if schedule_elm is not None:
-                                schedule_format = schedule_elm.attrib["format"]
-                                if schedule_format == "parameters":
-                                    total_doses = 0
-                                    loading_doses = 0
-                                    first_dose_time = 0
-                                    dose_interval = 1
-                                    regular_dose = 0
-                                    loading_dose = 0
-                                    total_doses_elm = schedule_elm.find(".//total_doses")
-                                    if total_doses_elm is not None and total_doses_elm.text is not None:
-                                        total_doses = total_doses_elm.text
-                                    loading_doses_elm = schedule_elm.find(".//loading_doses")
-                                    if loading_doses_elm is not None and loading_doses_elm.text is not None:
-                                        loading_doses = loading_doses_elm.text
-                                    first_dose_time_elm = schedule_elm.find(".//first_dose_time")
-                                    if first_dose_time_elm is not None and first_dose_time_elm.text is not None:
-                                        first_dose_time = first_dose_time_elm.text
-                                    dose_interval_elm = schedule_elm.find(".//dose_interval")
-                                    if dose_interval_elm is not None and dose_interval_elm.text is not None:
-                                        dose_interval = dose_interval_elm.text
-                                    regular_dose_elm = schedule_elm.find(".//regular_dose")
-                                    if regular_dose_elm is not None and regular_dose_elm.text is not None:
-                                        regular_dose = regular_dose_elm.text
-                                    loading_dose_elm = schedule_elm.find(".//loading_dose")
-                                    if loading_dose_elm is not None and loading_dose_elm.text is not None:
-                                        loading_dose = loading_dose_elm.text
-                            elimination_rate_elm = pk_path.find(".//elimination_rate")
-                            if elimination_rate_elm is not None and elimination_rate_elm.text is not None:
-                                elimination_rate = elimination_rate_elm.text
-                            k12_elm = pk_path.find(".//k12")
-                            if k12_elm is not None and k12_elm.text is not None:
-                                k12 = k12_elm.text
-                            k21_elm = pk_path.find(".//k21")
-                            if k21_elm is not None and k21_elm.text is not None:
-                                k21 = k21_elm.text
-                        biot_number_elm = pk_path.find(".//biot_number")
-                        if biot_number_elm is not None and biot_number_elm.text is not None:
-                            biot_number = biot_number_elm.text
-                                
-                    else:
-                        pk_model = "None"
+                    if self.pkpd_flag:
+                        pk_path = var_path.find(".//PK")
+                        if pk_path is None:
+                            pk_model_enabled = "false"
+                        else:
+                            pk_model_enabled = pk_path.attrib["enabled"]
+                        schedule_format = "parameters"
+                        total_doses = 0
+                        loading_doses = 0
+                        first_dose_time = 0
+                        dose_interval = 1
+                        regular_dose = 0
+                        loading_dose = 0
+                        elimination_rate = 0
+                        k12 = 0
+                        k21 = 0
+                        biot_number = 1
+                        if pk_model_enabled == "true":
+                            pk_model = pk_path.find(".//model").text
+                            if pk_model != "SBML":
+                                schedule_elm = pk_path.find(".//schedule")
+                                if schedule_elm is not None:
+                                    schedule_format = schedule_elm.attrib["format"]
+                                    if schedule_format == "parameters":
+                                        total_doses = 0
+                                        loading_doses = 0
+                                        first_dose_time = 0
+                                        dose_interval = 1
+                                        regular_dose = 0
+                                        loading_dose = 0
+                                        total_doses_elm = schedule_elm.find(".//total_doses")
+                                        if total_doses_elm is not None and total_doses_elm.text is not None:
+                                            total_doses = total_doses_elm.text
+                                        loading_doses_elm = schedule_elm.find(".//loading_doses")
+                                        if loading_doses_elm is not None and loading_doses_elm.text is not None:
+                                            loading_doses = loading_doses_elm.text
+                                        first_dose_time_elm = schedule_elm.find(".//first_dose_time")
+                                        if first_dose_time_elm is not None and first_dose_time_elm.text is not None:
+                                            first_dose_time = first_dose_time_elm.text
+                                        dose_interval_elm = schedule_elm.find(".//dose_interval")
+                                        if dose_interval_elm is not None and dose_interval_elm.text is not None:
+                                            dose_interval = dose_interval_elm.text
+                                        regular_dose_elm = schedule_elm.find(".//regular_dose")
+                                        if regular_dose_elm is not None and regular_dose_elm.text is not None:
+                                            regular_dose = regular_dose_elm.text
+                                        loading_dose_elm = schedule_elm.find(".//loading_dose")
+                                        if loading_dose_elm is not None and loading_dose_elm.text is not None:
+                                            loading_dose = loading_dose_elm.text
+                                elimination_rate_elm = pk_path.find(".//elimination_rate")
+                                if elimination_rate_elm is not None and elimination_rate_elm.text is not None:
+                                    elimination_rate = elimination_rate_elm.text
+                                k12_elm = pk_path.find(".//k12")
+                                if k12_elm is not None and k12_elm.text is not None:
+                                    k12 = k12_elm.text
+                                k21_elm = pk_path.find(".//k21")
+                                if k21_elm is not None and k21_elm.text is not None:
+                                    k21 = k21_elm.text
+                            biot_number_elm = pk_path.find(".//biot_number")
+                            if biot_number_elm is not None and biot_number_elm.text is not None:
+                                biot_number = biot_number_elm.text
+                                    
+                        else:
+                            pk_model = "None"
 
-                    self.param_d[substrate_name]["pk_model"] = pk_model
-                    self.param_d[substrate_name]["schedule_format"] = schedule_format
-                    self.param_d[substrate_name]["total_doses"] = total_doses
-                    self.param_d[substrate_name]["loading_doses"] = loading_doses
-                    self.param_d[substrate_name]["first_dose_time"] = first_dose_time
-                    self.param_d[substrate_name]["dose_interval"] = dose_interval
-                    self.param_d[substrate_name]["regular_dose"] = regular_dose
-                    self.param_d[substrate_name]["loading_dose"] = loading_dose
-                    self.param_d[substrate_name]["elimination_rate"] = elimination_rate
-                    self.param_d[substrate_name]["k12"] = k12
-                    self.param_d[substrate_name]["k21"] = k21
-                    self.param_d[substrate_name]["biot_number"] = biot_number
+                        self.param_d[substrate_name]["pk_model"] = pk_model
+                        self.param_d[substrate_name]["schedule_format"] = schedule_format
+                        self.param_d[substrate_name]["total_doses"] = total_doses
+                        self.param_d[substrate_name]["loading_doses"] = loading_doses
+                        self.param_d[substrate_name]["first_dose_time"] = first_dose_time
+                        self.param_d[substrate_name]["dose_interval"] = dose_interval
+                        self.param_d[substrate_name]["regular_dose"] = regular_dose
+                        self.param_d[substrate_name]["loading_dose"] = loading_dose
+                        self.param_d[substrate_name]["elimination_rate"] = elimination_rate
+                        self.param_d[substrate_name]["k12"] = k12
+                        self.param_d[substrate_name]["k21"] = k21
+                        self.param_d[substrate_name]["biot_number"] = biot_number
 
-                    if idx == 1:
-                        self.pk_model_combobox.setCurrentIndex(self.pk_model_combobox.findText(pk_model))
-                        self.pk_schedule_format_combobox.setCurrentIndex(self.pk_schedule_format_combobox.findText(schedule_format))
-                        self.pk_total_doses.setText(str(total_doses))
-                        self.pk_loading_doses.setText(str(loading_doses))
-                        self.pk_first_dose_time.setText(str(first_dose_time))
-                        self.pk_dose_interval.setText(str(dose_interval))
-                        self.pk_regular_dose.setText(str(regular_dose))
-                        self.pk_loading_dose.setText(str(loading_dose))
-                        self.pk_elimination_rate.setText(str(elimination_rate))
-                        self.pk_k12.setText(str(k12))
-                        self.pk_k21.setText(str(k21))
-                        self.pk_biot_number.setText(str(biot_number))
+                        if idx == 1:
+                            self.pk_model_combobox.setCurrentIndex(self.pk_model_combobox.findText(pk_model))
+                            self.pk_schedule_format_combobox.setCurrentIndex(self.pk_schedule_format_combobox.findText(schedule_format))
+                            self.pk_total_doses.setText(str(total_doses))
+                            self.pk_loading_doses.setText(str(loading_doses))
+                            self.pk_first_dose_time.setText(str(first_dose_time))
+                            self.pk_dose_interval.setText(str(dose_interval))
+                            self.pk_regular_dose.setText(str(regular_dose))
+                            self.pk_loading_dose.setText(str(loading_dose))
+                            self.pk_elimination_rate.setText(str(elimination_rate))
+                            self.pk_k12.setText(str(k12))
+                            self.pk_k21.setText(str(k21))
+                            self.pk_biot_number.setText(str(biot_number))
 
             # </variable>
             # <options>
@@ -1778,51 +1778,52 @@ class SubstrateDef(QWidget):
                 subelm2.text = self.param_d[substrate]["dirichlet_zmax"]
                 subelm2.tail = indent8
 
-                if self.param_d[substrate]["pk_model"] == "None":
-                    subelm = ET.SubElement(elm, "PK",{"enabled":"false"})
-                else:
-                    subelm = ET.SubElement(elm, "PK",{"enabled":"true"})
-                    subelm.text = indent10
-                    subelm.tail = indent8
-                    
-                    subelm2 = ET.SubElement(subelm, "model")
-                    subelm2.text = self.param_d[substrate]["pk_model"]
-                    subelm2.tail = indent10
-
-                    if self.param_d[substrate]["pk_model"] != "SBML":
-                        subelm2 = ET.SubElement(subelm, "schedule",{"format":self.param_d[substrate]["schedule_format"]})
-                        if self.param_d[substrate]["schedule_format"] == "parameters":
-                            subelm3 = ET.SubElement(subelm2, "total_doses")
-                            subelm3.text = self.param_d[substrate]["total_doses"]
-                            subelm3.tail = indent12
-                            subelm3 = ET.SubElement(subelm2, "loading_doses")
-                            subelm3.text = self.param_d[substrate]["loading_doses"]
-                            subelm3.tail = indent12
-                            subelm3 = ET.SubElement(subelm2, "first_dose_time",{"units":"days"})
-                            subelm3.text = self.param_d[substrate]["first_dose_time"]
-                            subelm3.tail = indent12
-                            subelm3 = ET.SubElement(subelm2, "dose_interval",{"units":"days"})
-                            subelm3.text = str(self.param_d[substrate]["dose_interval"]) # no idea why this one needs to be explicitly converted to a string and not the others...
-                            subelm3.tail = indent12
-                            subelm3 = ET.SubElement(subelm2, "regular_dose")
-                            subelm3.text = str(self.param_d[substrate]["regular_dose"]) # no idea why this one needs to be explicitly converted to a string and not the others...
-                            subelm3.tail = indent12
-                            subelm3 = ET.SubElement(subelm2, "loading_dose")
-                            subelm3.text = str(self.param_d[substrate]["loading_dose"]) # no idea why this one needs to be explicitly converted to a string and not the others...
-                            subelm3.tail = indent12
-                        subelm2 = ET.SubElement(subelm, "elimination_rate",{"units":"1/min"})
-                        subelm2.text = self.param_d[substrate]["elimination_rate"]
+                if self.pkpd_flag:
+                    if self.param_d[substrate]["pk_model"] == "None":
+                        subelm = ET.SubElement(elm, "PK",{"enabled":"false"})
+                    else:
+                        subelm = ET.SubElement(elm, "PK",{"enabled":"true"})
+                        subelm.text = indent10
+                        subelm.tail = indent8
+                        
+                        subelm2 = ET.SubElement(subelm, "model")
+                        subelm2.text = self.param_d[substrate]["pk_model"]
                         subelm2.tail = indent10
-                        if self.param_d[substrate]["pk_model"] == "2C":
-                            subelm2 = ET.SubElement(subelm, "k12",{"units":"1/min"})
-                            subelm2.text = self.param_d[substrate]["k12"]
+
+                        if self.param_d[substrate]["pk_model"] != "SBML":
+                            subelm2 = ET.SubElement(subelm, "schedule",{"format":self.param_d[substrate]["schedule_format"]})
+                            if self.param_d[substrate]["schedule_format"] == "parameters":
+                                subelm3 = ET.SubElement(subelm2, "total_doses")
+                                subelm3.text = self.param_d[substrate]["total_doses"]
+                                subelm3.tail = indent12
+                                subelm3 = ET.SubElement(subelm2, "loading_doses")
+                                subelm3.text = self.param_d[substrate]["loading_doses"]
+                                subelm3.tail = indent12
+                                subelm3 = ET.SubElement(subelm2, "first_dose_time",{"units":"days"})
+                                subelm3.text = self.param_d[substrate]["first_dose_time"]
+                                subelm3.tail = indent12
+                                subelm3 = ET.SubElement(subelm2, "dose_interval",{"units":"days"})
+                                subelm3.text = str(self.param_d[substrate]["dose_interval"]) # no idea why this one needs to be explicitly converted to a string and not the others...
+                                subelm3.tail = indent12
+                                subelm3 = ET.SubElement(subelm2, "regular_dose")
+                                subelm3.text = str(self.param_d[substrate]["regular_dose"]) # no idea why this one needs to be explicitly converted to a string and not the others...
+                                subelm3.tail = indent12
+                                subelm3 = ET.SubElement(subelm2, "loading_dose")
+                                subelm3.text = str(self.param_d[substrate]["loading_dose"]) # no idea why this one needs to be explicitly converted to a string and not the others...
+                                subelm3.tail = indent12
+                            subelm2 = ET.SubElement(subelm, "elimination_rate",{"units":"1/min"})
+                            subelm2.text = self.param_d[substrate]["elimination_rate"]
                             subelm2.tail = indent10
-                            subelm2 = ET.SubElement(subelm, "k21",{"units":"1/min"})
-                            subelm2.text = self.param_d[substrate]["k21"]
-                            subelm2.tail = indent10
-                    subelm2 = ET.SubElement(subelm, "biot_number")
-                    subelm2.text = str(self.param_d[substrate]["biot_number"])
-                    subelm2.tail = indent10
+                            if self.param_d[substrate]["pk_model"] == "2C":
+                                subelm2 = ET.SubElement(subelm, "k12",{"units":"1/min"})
+                                subelm2.text = self.param_d[substrate]["k12"]
+                                subelm2.tail = indent10
+                                subelm2 = ET.SubElement(subelm, "k21",{"units":"1/min"})
+                                subelm2.text = self.param_d[substrate]["k21"]
+                                subelm2.tail = indent10
+                        subelm2 = ET.SubElement(subelm, "biot_number")
+                        subelm2.text = str(self.param_d[substrate]["biot_number"])
+                        subelm2.tail = indent10
                         
                 #              {'text':"foo",
                 #               'xmlUrl':"bar",
