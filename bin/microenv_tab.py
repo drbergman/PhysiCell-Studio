@@ -351,7 +351,6 @@ class SubstrateDef(QWidget):
         self.pk_biot_number.setEnabled(False)
         self.pk_biot_number.setStyleSheet("background-color: lightgray; color: black")
         self.pk_biot_number.setValidator(QtGui.QDoubleValidator())
-        self.pk_biot_number.setRange(0,1)
         self.pk_biot_number.textChanged.connect(self.pk_biot_number_changed_cb)
         hbox.addWidget(self.pk_biot_number)
 
@@ -758,6 +757,13 @@ class SubstrateDef(QWidget):
         else:
             self.enable_all_schedule()
             self.enable_rate_parameters()
+        if self.pk_model_combobox.currentText() == "None":
+            self.pk_biot_number.setEnabled(False)
+            self.pk_biot_number.setStyleSheet("background-color: lightgray; color: black")
+        else:
+            self.pk_biot_number.setEnabled(True)
+            self.pk_biot_number.setText(str(self.param_d[self.current_substrate]["biot_number"]))
+            self.pk_biot_number.setStyleSheet("background-color: white; color: black")
 
     def enable_rate_parameters(self):
         self.disable_rate_parameters() # simple way to turn off any unneeded parameters
@@ -875,6 +881,9 @@ class SubstrateDef(QWidget):
 
     def pk_k21_changed_cb(self, text):
         self.param_d[self.current_substrate]["k21"] = text
+
+    def pk_biot_number_changed_cb(self, text):
+        self.param_d[self.current_substrate]["biot_number"] = text
 
     def decay_rate_changed(self, text):
         self.param_d[self.current_substrate]["decay_rate"] = text
@@ -1010,6 +1019,7 @@ class SubstrateDef(QWidget):
         self.param_d[subname]["elimination_rate"] = 0
         self.param_d[subname]["k12"] = 0
         self.param_d[subname]["k21"] = 0
+        self.param_d[subname]["biot_number"] = 1
 
         # NOooo!
         # self.param_d["gradients"] = bval
@@ -1236,6 +1246,7 @@ class SubstrateDef(QWidget):
         self.pk_elimination_rate.setText(str(self.param_d[self.current_substrate]["elimination_rate"]))
         self.pk_k12.setText(str(self.param_d[self.current_substrate]["k12"]))
         self.pk_k21.setText(str(self.param_d[self.current_substrate]["k21"]))
+        self.pk_biot_number.setText(str(self.param_d[self.current_substrate]["biot_number"]))
 
         # global to all substrates
         self.gradients.setChecked(self.param_d["gradients"])
@@ -1434,13 +1445,11 @@ class SubstrateDef(QWidget):
                     elimination_rate = 0
                     k12 = 0
                     k21 = 0
+                    biot_number = 1
                     if pk_model_enabled == "true":
                         pk_model = pk_path.find(".//model").text
                         if pk_model != "SBML":
                             schedule_elm = pk_path.find(".//schedule")
-                            elimination_rate = 0
-                            k12 = 0
-                            k21 = 0
                             if schedule_elm is not None:
                                 schedule_format = schedule_elm.attrib["format"]
                                 if schedule_format == "parameters":
@@ -1477,6 +1486,9 @@ class SubstrateDef(QWidget):
                             k21_elm = pk_path.find(".//k21")
                             if k21_elm is not None and k21_elm.text is not None:
                                 k21 = k21_elm.text
+                        biot_number_elm = pk_path.find(".//biot_number")
+                        if biot_number_elm is not None and biot_number_elm.text is not None:
+                            biot_number = biot_number_elm.text
                                 
                     else:
                         pk_model = "None"
@@ -1492,6 +1504,7 @@ class SubstrateDef(QWidget):
                     self.param_d[substrate_name]["elimination_rate"] = elimination_rate
                     self.param_d[substrate_name]["k12"] = k12
                     self.param_d[substrate_name]["k21"] = k21
+                    self.param_d[substrate_name]["biot_number"] = biot_number
 
                     if idx == 1:
                         self.pk_model_combobox.setCurrentIndex(self.pk_model_combobox.findText(pk_model))
@@ -1505,6 +1518,7 @@ class SubstrateDef(QWidget):
                         self.pk_elimination_rate.setText(str(elimination_rate))
                         self.pk_k12.setText(str(k12))
                         self.pk_k21.setText(str(k21))
+                        self.pk_biot_number.setText(str(biot_number))
 
             # </variable>
             # <options>
@@ -1806,6 +1820,9 @@ class SubstrateDef(QWidget):
                             subelm2 = ET.SubElement(subelm, "k21",{"units":"1/min"})
                             subelm2.text = self.param_d[substrate]["k21"]
                             subelm2.tail = indent10
+                    subelm2 = ET.SubElement(subelm, "biot_number")
+                    subelm2.text = str(self.param_d[substrate]["biot_number"])
+                    subelm2.tail = indent10
                         
                 #              {'text':"foo",
                 #               'xmlUrl':"bar",
