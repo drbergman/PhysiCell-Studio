@@ -351,6 +351,22 @@ class SubstrateDef(QWidget):
         label.setAlignment(QtCore.Qt.AlignLeft)
         hbox.addWidget(units)
 
+        label = QLabel("R (V_C/V_P)")
+        label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(label)
+
+        self.pk_volume_ratio = QLineEdit()
+        self.pk_volume_ratio.setFixedWidth(60)
+        self.pk_volume_ratio.setEnabled(False)
+        self.pk_volume_ratio.setStyleSheet("background-color: lightgray; color: black")
+        self.pk_volume_ratio.setValidator(QtGui.QDoubleValidator())
+        self.pk_volume_ratio.textChanged.connect(self.pk_volume_ratio_changed_cb)
+        hbox.addWidget(self.pk_volume_ratio)
+
+        hbox.addStretch()
+        self.pk_tab_layout.addLayout(hbox)
+        
+        hbox = QHBoxLayout()
         label = QLabel("Biot number")
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
@@ -790,6 +806,10 @@ class SubstrateDef(QWidget):
             self.pk_k21.setText(str(self.param_d[self.current_substrate]["k21"]))
             self.pk_k21.setStyleSheet("background-color: white; color: black")
 
+            self.pk_volume_ratio.setEnabled(True)
+            self.pk_volume_ratio.setText(str(self.param_d[self.current_substrate]["volume_ratio"]))
+            self.pk_volume_ratio.setStyleSheet("background-color: white; color: black")
+
     def enable_all_schedule(self):
         self.pk_schedule_format_combobox.setEnabled(True)
         self.pk_schedule_format_combobox.setStyleSheet("background-color: white; color: black")
@@ -830,6 +850,9 @@ class SubstrateDef(QWidget):
 
         self.pk_k21.setEnabled(False)
         self.pk_k21.setStyleSheet("background-color: lightgray; color: black")
+
+        self.pk_volume_ratio.setEnabled(False)
+        self.pk_volume_ratio.setStyleSheet("background-color: lightgray; color: black")
 
     def disable_all_schedule(self):
         self.pk_schedule_format_combobox.setEnabled(False)
@@ -891,10 +914,11 @@ class SubstrateDef(QWidget):
     def pk_k21_changed_cb(self, text):
         self.param_d[self.current_substrate]["k21"] = text
 
+    def pk_volume_ratio_changed_cb(self, text):
+        self.param_d[self.current_substrate]["volume_ratio"] = text
+
     def pk_biot_number_changed_cb(self, text):
-        print(f'  pre-set: {self.param_d}')
         self.param_d[self.current_substrate]["biot_number"] = text
-        print(f'  post-set: {self.param_d}')
 
     def decay_rate_changed(self, text):
         self.param_d[self.current_substrate]["decay_rate"] = text
@@ -1030,6 +1054,7 @@ class SubstrateDef(QWidget):
         self.param_d[subname]["elimination_rate"] = "0"
         self.param_d[subname]["k12"] = "0"
         self.param_d[subname]["k21"] = "0"
+        self.param_d[subname]["volume_ratio"] = "1"
         self.param_d[subname]["biot_number"] = "1"
 
         # NOooo!
@@ -1258,6 +1283,7 @@ class SubstrateDef(QWidget):
             self.pk_elimination_rate.setText(str(self.param_d[self.current_substrate]["elimination_rate"]))
             self.pk_k12.setText(str(self.param_d[self.current_substrate]["k12"]))
             self.pk_k21.setText(str(self.param_d[self.current_substrate]["k21"]))
+            self.pk_volume_ratio.setText(str(self.param_d[self.current_substrate]["volume_ratio"]))
             self.pk_biot_number.setText(str(self.param_d[self.current_substrate]["biot_number"]))
 
         # global to all substrates
@@ -1456,6 +1482,7 @@ class SubstrateDef(QWidget):
                         elimination_rate = "0"
                         k12 = "0"
                         k21 = "0"
+                        volume_ratio = "1"
                         biot_number = "1"
                         if pk_model_enabled == "true":
                             pk_model = pk_path.find(".//model").text
@@ -1491,6 +1518,9 @@ class SubstrateDef(QWidget):
                                 k21_elm = pk_path.find(".//k21")
                                 if k21_elm is not None and k21_elm.text is not None:
                                     k21 = k21_elm.text
+                                volume_ratio_elm = pk_path.find(".//volume_ratio")
+                                if volume_ratio_elm is not None and volume_ratio_elm.text is not None:
+                                    volume_ratio = volume_ratio_elm.text
                             biot_number_elm = pk_path.find(".//biot_number")
                             if biot_number_elm is not None and biot_number_elm.text is not None:
                                 biot_number = biot_number_elm.text
@@ -1509,6 +1539,7 @@ class SubstrateDef(QWidget):
                         self.param_d[substrate_name]["elimination_rate"] = elimination_rate
                         self.param_d[substrate_name]["k12"] = k12
                         self.param_d[substrate_name]["k21"] = k21
+                        self.param_d[substrate_name]["volume_ratio"] = volume_ratio
                         self.param_d[substrate_name]["biot_number"] = biot_number
 
                         if idx == 1:
@@ -1523,6 +1554,7 @@ class SubstrateDef(QWidget):
                             self.pk_elimination_rate.setText(str(elimination_rate))
                             self.pk_k12.setText(str(k12))
                             self.pk_k21.setText(str(k21))
+                            self.pk_volume_ratio.setText(str(volume_ratio))
                             self.pk_biot_number.setText(str(biot_number))
 
             # </variable>
@@ -1825,6 +1857,9 @@ class SubstrateDef(QWidget):
                                 subelm2.tail = indent10
                                 subelm2 = ET.SubElement(subelm, "k21",{"units":"1/min"})
                                 subelm2.text = self.param_d[substrate]["k21"]
+                                subelm2.tail = indent10
+                                subelm2 = ET.SubElement(subelm, "volume_ratio")
+                                subelm2.text = self.param_d[substrate]["volume_ratio"]
                                 subelm2.tail = indent10
                         subelm2 = ET.SubElement(subelm, "biot_number")
                         subelm2.text = str(self.param_d[substrate]["biot_number"])

@@ -86,16 +86,31 @@ def pkpd_populate_tree_cell_defs(cell_def_tab, uep, pkpd_flag):
             if metabolism_rate_elm is not None:
                 metabolism_rate = metabolism_rate_elm.text
             cell_def_tab.param_d[cell_def_name]["pd"][substrate]["metabolism_rate"] = metabolism_rate
+
             constant_repair_rate = "0"
             constant_repair_rate_elm = sub_elm.find(".//constant_repair_rate")
             if constant_repair_rate_elm is not None:
                 constant_repair_rate = constant_repair_rate_elm.text
             cell_def_tab.param_d[cell_def_name]["pd"][substrate]["constant_repair_rate"] = constant_repair_rate
+            
             linear_repair_rate = "0"
             linear_repair_rate_elm = sub_elm.find(".//linear_repair_rate")
             if linear_repair_rate_elm is not None:
                 linear_repair_rate = linear_repair_rate_elm.text
             cell_def_tab.param_d[cell_def_name]["pd"][substrate]["linear_repair_rate"] = linear_repair_rate
+            
+            precompute = "true"
+            precompute_elm = sub_elm.find(".//precompute")
+            if precompute_elm is not None:
+                precompute = precompute_elm.text
+            cell_def_tab.param_d[cell_def_name]["pd"][substrate]["precompute"] = precompute
+            
+            dt = "0.01" # default to default diffusion_dt
+            dt_elm = sub_elm.find(".//dt")
+            if dt_elm is not None:
+                dt = dt_elm.text
+            cell_def_tab.param_d[cell_def_name]["pd"][substrate]["dt"] = dt
+
         idx += 1
 
 def populate_tree_cell_defs(cell_def_tab, skip_validate, pkpd_flag):

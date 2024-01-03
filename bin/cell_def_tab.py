@@ -43,6 +43,7 @@ import logging
 import inspect
 import string
 import random
+import numpy as np
 # import traceback
 import xml.etree.ElementTree as ET  # https://docs.python.org/2/library/xml.etree.elementtree.html
 from PyQt5.QtCore import Qt, QRect
@@ -121,7 +122,7 @@ class MyQLineEdit(QLineEdit):
 
 
 class CellDef(QWidget):
-    def __init__(self, pytest_flag, pkpd_flag):
+    def __init__(self, pytest_flag, pkpd_flag, config_tab):
         super().__init__()
 
         random.seed(42)   # for reproducibility (cough). Needed for pytest results.
@@ -164,6 +165,7 @@ class CellDef(QWidget):
                 }
                 """
 
+        self.config_tab = config_tab
         self.ics_tab = None
 
         self.current_cell_def = None
@@ -3500,6 +3502,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
             metabolism_rate = str(self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["metabolism_rate"])
         self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["metabolism_rate"] = metabolism_rate
         self.pd_metabolism_rate.setText(metabolism_rate)
+
         self.pd_constant_repair_rate.setEnabled(True)
         self.pd_constant_repair_rate.setStyleSheet("background-color: white; color: black")
         constant_repair_rate = "0"
@@ -3507,6 +3510,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
             constant_repair_rate = str(self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["constant_repair_rate"])
         self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["constant_repair_rate"] = constant_repair_rate
         self.pd_constant_repair_rate.setText(constant_repair_rate)
+        
         self.pd_linear_repair_rate.setEnabled(True)
         self.pd_linear_repair_rate.setStyleSheet("background-color: white; color: black")
         linear_repair_rate = "0"
@@ -3514,6 +3518,25 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
             linear_repair_rate = str(self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["linear_repair_rate"])
         self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["linear_repair_rate"] = linear_repair_rate
         self.pd_linear_repair_rate.setText(linear_repair_rate)
+        
+        self.pd_precompute_checkbox.setEnabled(True)
+        self.pd_precompute_checkbox.setStyleSheet("background-color: white; color: black")
+        precompute = "true"
+        if "precompute" in self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate].keys():
+            precompute = str(self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["precompute"])
+        self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["precompute"] = precompute
+        if precompute == "true":
+            self.pd_precompute_checkbox.setChecked(True)
+        else:
+            self.pd_precompute_checkbox.setChecked(False)
+        
+        self.pd_dt.setEnabled(True)
+        self.pd_dt.setStyleSheet("background-color: white; color: black")
+        dt = str(self.config_tab.diffusion_dt.text())
+        if "dt" in self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate].keys():
+            dt = str(self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["dt"])
+        self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["dt"] = dt
+        self.pd_dt.setText(dt)
 
     def disable_pd_parameters(self):
         self.pd_metabolism_rate.setEnabled(False)
@@ -3522,6 +3545,10 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         self.pd_constant_repair_rate.setStyleSheet("background-color: lightgray; color: black")
         self.pd_linear_repair_rate.setEnabled(False)
         self.pd_linear_repair_rate.setStyleSheet("background-color: lightgray; color: black")
+        self.pd_precompute_checkbox.setEnabled(False)
+        self.pd_precompute_checkbox.setStyleSheet("background-color: lightgray; color: black")
+        self.pd_dt.setEnabled(False)
+        self.pd_dt.setStyleSheet("background-color: lightgray; color: black")
     #--------------------------------------------------------
     def pd_metabolism_rate_changed_cb(self, text):
         self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["metabolism_rate"] = text
@@ -3531,6 +3558,29 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
     #--------------------------------------------------------
     def pd_linear_repair_rate_changed_cb(self, text):
         self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["linear_repair_rate"] = text
+    #--------------------------------------------------------
+    def pd_precompute_checkbox_clicked(self, bval):
+        self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["precompute"] = "true" if bval else "false"
+    #--------------------------------------------------------
+    def pd_dt_changed_cb(self, text):
+        self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["dt"] = text
+    #--------------------------------------------------------
+    def pd_dt_edit_finished_cb(self):
+        text = self.pd_dt.text()
+        if self.pd_precompute_checkbox.isChecked() is False:
+            self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["dt"] = text
+            return
+        dt = float(text)
+        diffusion_dt = float(self.config_tab.diffusion_dt.text())
+        # check if the time step is obviously not a multiple of diffusion_dt
+        if abs(dt / diffusion_dt - round(dt/diffusion_dt)) > 0.0001:
+            dt = (dt // diffusion_dt)
+            dt *= diffusion_dt
+            if dt < diffusion_dt: # the flooring could result in dt = 0, which is not what we're here for
+                dt = diffusion_dt
+            text = str(dt)
+            self.pd_dt.setText(text)
+        self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["dt"] = text
     #--------------------------------------------------------
     def cell_adhesion_affinity_changed(self,text):
         # print("cell_adhesion_affinity_changed:  text=",text)
@@ -4846,7 +4896,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         return intracellular_tab_scroll
 
     def create_pd_tab(self):
-        pd_tab = QWidget()
+        self.pd_tab = QWidget()
         lineedit_stylesheet = """ 
             background-color: rgb(236,236,236);
             QLineEdit {
@@ -4854,15 +4904,15 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
                 background-color: #FFFFFF; 
             }
             """
-        pd_tab.setStyleSheet("background-color: rgb(236,236,236)")
+        self.pd_tab.setStyleSheet("background-color: rgb(236,236,236)")
 
-        pd_tab_layout = QVBoxLayout()
+        self.pd_tab_layout = QVBoxLayout()
         # vlayout = QVBoxLayout()
 
         self.pd_substrate_combobox = QComboBox()
         self.pd_substrate_combobox.setStyleSheet(self.combobox_stylesheet)
         self.pd_substrate_combobox.currentIndexChanged.connect(self.pd_substrate_changed_cb)  # beware: will be triggered on a ".clear" too
-        pd_tab_layout.addWidget(self.pd_substrate_combobox) # w, row, column, rowspan, colspan
+        self.pd_tab_layout.addWidget(self.pd_substrate_combobox) # w, row, column, rowspan, colspan
 
         hbox = QHBoxLayout()
         label = QLabel("model")
@@ -4926,91 +4976,62 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         hbox.addWidget(units) # w, row, column, rowspan, colspan
 
         hbox.addStretch()
-        pd_tab_layout.addLayout(hbox)
+        self.pd_tab_layout.addLayout(hbox)
 
-        #---
-        # label = QLabel("target")
-        # label.setFixedWidth(self.label_width)
-        # label.setAlignment(QtCore.Qt.AlignRight)
-        # # label.setStyleSheet("border: 1px solid black;")
-        # idr += 1
-        # pd_tab_layout.addWidget(label, idr,0, 1,1) # w, row, column, rowspan, colspan
+        hbox = QHBoxLayout()
 
-        # self.secretion_target = QLineEdit_color()
-        # self.secretion_target.textChanged.connect(self.secretion_target_changed)
-        # self.secretion_target.setValidator(QtGui.QDoubleValidator())
-        # pd_tab_layout.addWidget(self.secretion_target, idr,1, 1,1) # w, row, column, rowspan, colspan
+        self.pd_precompute_checkbox = QCheckBox("Precompute Terms")
+        # self.pd_precompute_checkbox.setFixedWidth(130)
+        self.pd_precompute_checkbox.setEnabled(False)
+        self.pd_precompute_checkbox.setChecked(True)
+        self.pd_precompute_checkbox.setStyleSheet("background-color: lightgray")
+        self.pd_precompute_checkbox.clicked.connect(self.pd_precompute_checkbox_clicked)
+        hbox.addWidget(self.pd_precompute_checkbox) # w, row, column, rowspan, colspan
 
-        # # units = QLabel("substrate density")
-        # units = QLabel("sub. density")
-        # # units.setFixedWidth(self.units_width+5)
-        # # units.setFixedWidth(110)
-        # units.setAlignment(QtCore.Qt.AlignLeft)
-        # # units.setStyleSheet("border: 1px solid black;")
-        # pd_tab_layout.addWidget(units, idr,2, 1,1) # w, row, column, rowspan, colspan
+        hbox.insertSpacing(2, 50)
 
-        # #---
-        # label = QLabel("uptake rate")
-        # label.setFixedWidth(self.label_width)
-        # label.setAlignment(QtCore.Qt.AlignRight)
-        # idr += 1
-        # pd_tab_layout.addWidget(label, idr,0, 1,1) # w, row, column, rowspan, colspan
+        label = QLabel("PD dt")
+        label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(label)
 
-        # self.uptake_rate = QLineEdit_color()
-        # self.uptake_rate.textChanged.connect(self.uptake_rate_changed)
-        # self.uptake_rate.setValidator(QtGui.QDoubleValidator())
-        # pd_tab_layout.addWidget(self.uptake_rate, idr,1, 1,1) # w, row, column, rowspan, colspan
+        self.pd_dt = QLineEdit()
+        self.pd_dt.setFixedWidth(100)
+        self.pd_dt.setEnabled(False)
+        self.pd_dt.setValidator(QtGui.QDoubleValidator())
+        self.pd_dt.textChanged.connect(self.pd_dt_changed_cb)
+        self.pd_dt.editingFinished.connect(self.pd_dt_edit_finished_cb)
+        hbox.addWidget(self.pd_dt)
 
-        # units = QLabel(self.default_rate_units)
-        # units.setFixedWidth(self.units_width)
-        # units.setAlignment(QtCore.Qt.AlignLeft)
-        # pd_tab_layout.addWidget(units, idr,2, 1,1) # w, row, column, rowspan, colspan
+        self.config_tab.diffusion_dt.editingFinished.connect(self.pd_dt_edit_finished_cb)
 
-        # #---
-        # label = QLabel("net export rate")
-        # label.setFixedWidth(self.label_width)
-        # label.setAlignment(QtCore.Qt.AlignRight)
-        # idr += 1
-        # pd_tab_layout.addWidget(label, idr,0, 1,1) # w, row, column, rowspan, colspan
 
-        # self.secretion_net_export_rate = QLineEdit_color()
-        # self.secretion_net_export_rate.textChanged.connect(self.secretion_net_export_rate_changed)
-        # self.secretion_net_export_rate.setValidator(QtGui.QDoubleValidator())
-        # pd_tab_layout.addWidget(self.secretion_net_export_rate, idr,1, 1,1) # w, row, column, rowspan, colspan
+        units = QLabel("min")
+        units.setAlignment(QtCore.Qt.AlignLeft)
+        hbox.addWidget(units)
 
-        # units = QLabel("total/min")
-        # units.setFixedWidth(self.units_width)
-        # units.setAlignment(QtCore.Qt.AlignLeft)
-        # pd_tab_layout.addWidget(units, idr,2, 1,1) # w, row, column, rowspan, colspan
-
-        # #---------
-        # idr += 1
-        # pd_tab_layout.addWidget(QHLine(), idr,0, 1,4) # w, row, column, rowspan, colspan
-
-        # self.reset_secretion_button = QPushButton("Reset to PhysiCell defaults")
-        # self.reset_secretion_button.setFixedWidth(200)
-        # self.reset_secretion_button.setStyleSheet("QPushButton {background-color: yellow; color: black;}")
-        # self.reset_secretion_button.clicked.connect(self.reset_secretion_cb)
-        # idr += 1
-        # pd_tab_layout.addWidget(self.reset_secretion_button, idr,0, 1,1) # w, row, column, rowspan, colspan
-
-        #------
-        for idx in range(11):  # rwh: hack solution to align rows
-            blank_line = QLabel("")
-            # idr += 1
-            pd_tab_layout.addWidget(blank_line) # w, row, column, rowspan, colspan
+        hbox.addStretch()
+        self.pd_tab_layout.addLayout(hbox)
 
         #------
         # vlayout.setVerticalSpacing(10)  # rwh - argh
-        pd_tab.setLayout(pd_tab_layout)
+        self.pd_tab_layout.addStretch()
+        self.pd_tab.setLayout(self.pd_tab_layout)
+
+        self.pd_tab.scroll_area = QScrollArea()
+
+        self.pd_tab.scroll_area.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
+        self.pd_tab.scroll_area.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
+        self.pd_tab.scroll_area.setWidgetResizable(True)
+        self.pd_tab.scroll_area.setWidget(self.pd_tab)
 
         self.pd_setup_complete = True
 
-        return pd_tab
+        return self.pd_tab.scroll_area
     #--------------------------------------------------------
     # The following (text-based widgets) were (originally) auto-generated by 
     # a mix of sed and Python scripts. See the gen_qline_cb.py script as an early example.
     # --- cycle transition rates
+
     def cycle_live_trate00_changed(self, text):
         self.param_d[self.current_cell_def]['cycle_live_trate00'] = text
 
@@ -5446,18 +5467,12 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
 
     # --- secretion
     def secretion_rate_changed(self, text):
-        # self.param_d[self.current_cell_def]['secretion_rate'] = text
-
-        # self.param_d[cell_def_name]["secretion"][substrate_name]["secretion_rate"] = val
         self.param_d[self.current_cell_def]["secretion"][self.current_secretion_substrate]['secretion_rate'] = text
     def secretion_target_changed(self, text):
-        # self.param_d[self.current_cell_def]['secretion_target'] = text
         self.param_d[self.current_cell_def]["secretion"][self.current_secretion_substrate]['secretion_target'] = text
     def uptake_rate_changed(self, text):
-        # self.param_d[self.current_cell_def]['uptake_rate'] = text
         self.param_d[self.current_cell_def]["secretion"][self.current_secretion_substrate]['uptake_rate'] = text
     def secretion_net_export_rate_changed(self, text):
-        # self.param_d[self.current_cell_def]['secretion_net_export_rate'] = text
         self.param_d[self.current_cell_def]["secretion"][self.current_secretion_substrate]['net_export_rate'] = text
 
     #--------------------------------------------------------
@@ -7442,6 +7457,16 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         else:
             self.pd_linear_repair_rate.setText("0")
 
+        if "precompute" in self.param_d[cdname]["pd"][self.current_pd_substrate].keys():
+            self.pd_precompute_checkbox.setChecked(str(self.param_d[cdname]["pd"][self.current_pd_substrate]["precompute"])=="true")
+        else:
+            self.pd_precompute_checkbox.setChecked(True)
+
+        if "dt" in self.param_d[cdname]["pd"][self.current_pd_substrate].keys():
+            self.pd_dt.setText(str(self.param_d[cdname]["pd"][self.current_pd_substrate]["dt"]))
+        else:
+            self.pd_dt.setText(str(self.config_tab.diffusion_dt.text()))
+
     #-----------------------------------------------------------------------------------------
     def update_interaction_params(self):
         # print("------ update_interaction_params():")
@@ -8424,14 +8449,25 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
             subelm = ET.SubElement(elm, "model")
             subelm.text = self.param_d[cname]["pd"][substrate]["pd_model"]
             subelm.tail = "\n" + self.indent12
+
             subelm = ET.SubElement(elm, "metabolism_rate")
             subelm.text = self.param_d[cname]["pd"][substrate]["metabolism_rate"]
             subelm.tail = "\n" + self.indent12
+            
             subelm = ET.SubElement(elm, "constant_repair_rate")
             subelm.text = self.param_d[cname]["pd"][substrate]["constant_repair_rate"]
             subelm.tail = "\n" + self.indent12
+            
             subelm = ET.SubElement(elm, "linear_repair_rate")
             subelm.text = self.param_d[cname]["pd"][substrate]["linear_repair_rate"]
+            subelm.tail = "\n" + self.indent12
+            
+            subelm = ET.SubElement(elm, "precompute")
+            subelm.text = self.param_d[cname]["pd"][substrate]["precompute"]
+            subelm.tail = "\n" + self.indent12
+            
+            subelm = ET.SubElement(elm, "dt")
+            subelm.text = self.param_d[cname]["pd"][substrate]["dt"]
             subelm.tail = "\n" + self.indent12
 
     #-------------------------------------------------------------------
