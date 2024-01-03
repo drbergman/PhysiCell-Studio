@@ -382,6 +382,24 @@ class SubstrateDef(QWidget):
         hbox.addStretch()
         self.pk_tab_layout.addLayout(hbox)
 
+        hbox = QHBoxLayout()
+        label = QLabel("SBML Filename in ./config/")
+        label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(label)
+
+        self.pk_sbml_filename = QLineEdit()
+        self.pk_sbml_filename.setFixedWidth(200)
+        self.pk_sbml_filename.setEnabled(False)
+        self.pk_sbml_filename.setStyleSheet("background-color: lightgray; color: black")
+        rx_valid_filename = QtCore.QRegExp("^[a-zA-Z][a-zA-Z0-9_]+.xml$")
+        name_validator = QtGui.QRegExpValidator(rx_valid_filename)
+        self.pk_sbml_filename.setValidator(name_validator)
+        self.pk_sbml_filename.textChanged.connect(self.pk_sbml_filename_changed_cb)
+        hbox.addWidget(self.pk_sbml_filename)
+
+        hbox.addStretch()
+        self.pk_tab_layout.addLayout(hbox)
+
         self.pk_tab_layout.addStretch()
         self.pk_tab.setLayout(self.pk_tab_layout)
 
@@ -789,6 +807,15 @@ class SubstrateDef(QWidget):
             self.pk_biot_number.setEnabled(True)
             self.pk_biot_number.setText(str(self.param_d[self.current_substrate]["biot_number"]))
             self.pk_biot_number.setStyleSheet("background-color: white; color: black")
+        if self.pk_model_combobox.currentText() == "SBML":
+            self.pk_sbml_filename.setEnabled(True)
+            self.pk_sbml_filename.setText(str(self.param_d[self.current_substrate]["sbml_filename"]))
+            self.pk_sbml_filename.setStyleSheet("background-color: white; color: black")
+        else:
+            self.pk_sbml_filename.setEnabled(False)
+            self.pk_sbml_filename.setText(str(self.param_d[self.current_substrate]["sbml_filename"]))
+            self.pk_sbml_filename.setStyleSheet("background-color: lightgray; color: black")
+            
 
     def enable_rate_parameters(self):
         self.disable_rate_parameters() # simple way to turn off any unneeded parameters
@@ -919,6 +946,9 @@ class SubstrateDef(QWidget):
 
     def pk_biot_number_changed_cb(self, text):
         self.param_d[self.current_substrate]["biot_number"] = text
+
+    def pk_sbml_filename_changed_cb(self, text):
+        self.param_d[self.current_substrate]["sbml_filename"] = text
 
     def decay_rate_changed(self, text):
         self.param_d[self.current_substrate]["decay_rate"] = text
@@ -1056,6 +1086,7 @@ class SubstrateDef(QWidget):
         self.param_d[subname]["k21"] = "0"
         self.param_d[subname]["volume_ratio"] = "1"
         self.param_d[subname]["biot_number"] = "1"
+        self.param_d[subname]["sbml_filename"] = "PK_default.xml"
 
         # NOooo!
         # self.param_d["gradients"] = bval
@@ -1285,6 +1316,7 @@ class SubstrateDef(QWidget):
             self.pk_k21.setText(str(self.param_d[self.current_substrate]["k21"]))
             self.pk_volume_ratio.setText(str(self.param_d[self.current_substrate]["volume_ratio"]))
             self.pk_biot_number.setText(str(self.param_d[self.current_substrate]["biot_number"]))
+            self.pk_sbml_filename.setText(str(self.param_d[self.current_substrate]["sbml_filename"]))
 
         # global to all substrates
         self.gradients.setChecked(self.param_d["gradients"])
@@ -1484,6 +1516,7 @@ class SubstrateDef(QWidget):
                         k21 = "0"
                         volume_ratio = "1"
                         biot_number = "1"
+                        sbml_filename = "PK_default.xml"
                         if pk_model_enabled == "true":
                             pk_model = pk_path.find(".//model").text
                             if pk_model != "SBML":
@@ -1521,6 +1554,10 @@ class SubstrateDef(QWidget):
                                 volume_ratio_elm = pk_path.find(".//volume_ratio")
                                 if volume_ratio_elm is not None and volume_ratio_elm.text is not None:
                                     volume_ratio = volume_ratio_elm.text
+                            else:
+                                sbml_filename_elm = pk_path.find(".//sbml_filename")
+                                if sbml_filename_elm is not None and sbml_filename_elm.text is not None:
+                                    sbml_filename = sbml_filename_elm.text
                             biot_number_elm = pk_path.find(".//biot_number")
                             if biot_number_elm is not None and biot_number_elm.text is not None:
                                 biot_number = biot_number_elm.text
@@ -1541,6 +1578,7 @@ class SubstrateDef(QWidget):
                         self.param_d[substrate_name]["k21"] = k21
                         self.param_d[substrate_name]["volume_ratio"] = volume_ratio
                         self.param_d[substrate_name]["biot_number"] = biot_number
+                        self.param_d[substrate_name]["sbml_filename"] = sbml_filename
 
                         if idx == 1:
                             self.pk_model_combobox.setCurrentIndex(self.pk_model_combobox.findText(pk_model))
@@ -1556,6 +1594,7 @@ class SubstrateDef(QWidget):
                             self.pk_k21.setText(str(k21))
                             self.pk_volume_ratio.setText(str(volume_ratio))
                             self.pk_biot_number.setText(str(biot_number))
+                            self.pk_sbml_filename.setText(str(sbml_filename))
 
             # </variable>
             # <options>
@@ -1861,6 +1900,10 @@ class SubstrateDef(QWidget):
                                 subelm2 = ET.SubElement(subelm, "volume_ratio")
                                 subelm2.text = self.param_d[substrate]["volume_ratio"]
                                 subelm2.tail = indent10
+                        else:
+                            subelm2 = ET.SubElement(subelm, "sbml_filename")
+                            subelm2.text = str(self.param_d[substrate]["sbml_filename"])
+                            subelm2.tail = indent10
                         subelm2 = ET.SubElement(subelm, "biot_number")
                         subelm2.text = str(self.param_d[substrate]["biot_number"])
                         subelm2.tail = indent10
