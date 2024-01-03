@@ -128,6 +128,7 @@ class CellDef(QWidget):
         random.seed(42)   # for reproducibility (cough). Needed for pytest results.
         self.pytest_flag = pytest_flag
         self.pkpd_flag = pkpd_flag
+        self.force_precompute = True
 
         # primary key = cell def name
         # secondary keys: cycle_rate_choice, cycle_dropdown, 
@@ -3519,16 +3520,17 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["linear_repair_rate"] = linear_repair_rate
         self.pd_linear_repair_rate.setText(linear_repair_rate)
         
-        self.pd_precompute_checkbox.setEnabled(True)
-        self.pd_precompute_checkbox.setStyleSheet("background-color: white; color: black")
-        precompute = "true"
-        if "precompute" in self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate].keys():
-            precompute = str(self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["precompute"])
-        self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["precompute"] = precompute
-        if precompute == "true":
-            self.pd_precompute_checkbox.setChecked(True)
-        else:
-            self.pd_precompute_checkbox.setChecked(False)
+        if self.force_precompute is False:
+            self.pd_precompute_checkbox.setEnabled(True)
+            self.pd_precompute_checkbox.setStyleSheet("background-color: white; color: black")
+            precompute = "true"
+            if "precompute" in self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate].keys():
+                precompute = str(self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["precompute"])
+            self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["precompute"] = precompute
+            if precompute == "true" or self.force_precompute is True:
+                self.pd_precompute_checkbox.setChecked(True)
+            else:
+                self.pd_precompute_checkbox.setChecked(False)
         
         self.pd_dt.setEnabled(True)
         self.pd_dt.setStyleSheet("background-color: white; color: black")
@@ -7457,10 +7459,13 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         else:
             self.pd_linear_repair_rate.setText("0")
 
-        if "precompute" in self.param_d[cdname]["pd"][self.current_pd_substrate].keys():
-            self.pd_precompute_checkbox.setChecked(str(self.param_d[cdname]["pd"][self.current_pd_substrate]["precompute"])=="true")
+        if self.force_precompute is True:
+                self.pd_precompute_checkbox.setChecked(True)
         else:
-            self.pd_precompute_checkbox.setChecked(True)
+            if "precompute" in self.param_d[cdname]["pd"][self.current_pd_substrate].keys():
+                self.pd_precompute_checkbox.setChecked(str(self.param_d[cdname]["pd"][self.current_pd_substrate]["precompute"])=="true")
+            else:
+                self.pd_precompute_checkbox.setChecked(True)
 
         if "dt" in self.param_d[cdname]["pd"][self.current_pd_substrate].keys():
             self.pd_dt.setText(str(self.param_d[cdname]["pd"][self.current_pd_substrate]["dt"]))
