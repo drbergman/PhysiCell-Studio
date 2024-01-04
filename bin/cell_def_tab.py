@@ -129,6 +129,7 @@ class CellDef(QWidget):
         self.pytest_flag = pytest_flag
         self.pkpd_flag = pkpd_flag
         self.force_precompute = True
+        self.pd_substrates = []
 
         # primary key = cell def name
         # secondary keys: cycle_rate_choice, cycle_dropdown, 
@@ -3500,9 +3501,12 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
                         break
                 if delete_damage_var is True:
                     self.delete_custom_data_row(custom_data_key)
+                    self.pd_substrates.remove(self.current_pd_substrate)
         else:
             self.enable_pd_parameters()
-            self.add_custom_data(custom_data_key,"0.0",False,"damage",f'Accumulated damage due to {self.current_pd_substrate}')
+            is_added = self.add_custom_data(custom_data_key,"0.0",False,"damage",f'Accumulated damage due to {self.current_pd_substrate}')
+            if is_added:
+                self.pd_substrates.append(self.current_pd_substrate)
     #--------------------------------------------------------
     def enable_pd_parameters(self):
         self.pd_metabolism_rate.setEnabled(True)
@@ -5617,6 +5621,13 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
             print(" master_custom_var_d.keys()= ",self.master_custom_var_d.keys())
             # print(" master_custom_var_d= ",self.master_custom_var_d)
 
+        if self.pkpd_flag:
+            # check it is not a damage variable
+            for substrate in self.pd_substrates:
+                if varname == substrate + "_damage":
+                    self.custom_table_error(row,1,f"(PKPD) You are deleting a PD substrate! Set to \"None\" all PD models for {substrate} instead.")
+                    return
+
         if varname in self.master_custom_var_d.keys():
             self.delete_key_from_master_custom_var_d(varname, row=row, debug_me=debug_me)
 
@@ -7705,7 +7716,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
 
     def add_custom_data(self, key, value, conserved_flag, units, desc):
         if key in self.master_custom_var_d.keys():
-            return
+            return False
         irow = len(self.master_custom_var_d.keys()) -  ("" in self.master_custom_var_d.keys()) # plan to put it here
         for i in range(self.max_custom_data_rows): # but if a smaller index is found, put it there
             if self.custom_data_table.cellWidget(i,self.custom_icol_name).text() == "":
@@ -7731,6 +7742,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         self.master_custom_var_d[key][2] = desc
 
         self.custom_data_edit_active = True
+        return True
     #-----------------------------------------------------------------------------------------
     # called from pmb.py: load_mode() -> show_sample_model() -> reset_xml_root()
     def clear_custom_data_params(self):
