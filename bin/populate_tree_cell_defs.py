@@ -59,16 +59,20 @@ def pkpd_populate_tree_cell_defs(cell_def_tab, uep, pkpd_flag):
     if pkpd_flag is False:
         return
     idx = 1
+    pd_substrates = []
     for cell_def in uep:
         cell_def_name = cell_def.attrib['name']
         cell_def_tab.param_d[cell_def_name]["pd"] = {}
         jdx = 1
         for substrate in cell_def_tab.substrate_list:
             cell_def_tab.param_d[cell_def_name]["pd"][substrate] = {}
+            if substrate in pd_substrates:
+                cell_def_tab.param_d[cell_def_name]['custom_data'][f'{substrate}_damage'] = ["0.0",False]
             if idx == 1 and jdx == 1:
                 cell_def_tab.current_pd_substrate = substrate
             jdx += 1
         uep_pd = cell_def_tab.xml_root.find(".//cell_definitions//cell_definition[" + str(idx) + "]//PD")
+        idx += 1
         if uep_pd is None:
             continue
         for substrate in cell_def_tab.substrate_list:
@@ -80,6 +84,12 @@ def pkpd_populate_tree_cell_defs(cell_def_tab, uep, pkpd_flag):
             if pd_model_elm is not None:
                 pd_model = pd_model_elm.text
             cell_def_tab.param_d[cell_def_name]["pd"][substrate]["pd_model"] = pd_model
+            if pd_model != "None":
+                cell_def_tab.add_custom_data(f'{substrate}_damage',"0.0",False,"damage",f'Accumulated damage due to {substrate}')
+                if substrate not in pd_substrates:
+                    pd_substrates.append(substrate)
+            if substrate in pd_substrates:
+                cell_def_tab.param_d[cell_def_name]['custom_data'][f'{substrate}_damage'] = ["0.0",False]
 
             metabolism_rate = "0"
             metabolism_rate_elm = sub_elm.find(".//metabolism_rate")
@@ -110,8 +120,6 @@ def pkpd_populate_tree_cell_defs(cell_def_tab, uep, pkpd_flag):
             if dt_elm is not None:
                 dt = dt_elm.text
             cell_def_tab.param_d[cell_def_name]["pd"][substrate]["dt"] = dt
-
-        idx += 1
 
 def populate_tree_cell_defs(cell_def_tab, skip_validate, pkpd_flag):
     logging.debug(f'=======================  populate_tree_cell_defs(): ======================= ')

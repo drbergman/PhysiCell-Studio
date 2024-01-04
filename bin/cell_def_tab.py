@@ -420,7 +420,6 @@ class CellDef(QWidget):
         self.cell_types_tabs_layout = QGridLayout()
         self.cell_types_tabs_layout.addWidget(self.tab_widget, 0,0,1,1) # w, row, column, rowspan, colspan
         # self.cell_types_tabs_layout.addWidget(self.tab_params_widget, 1,0,1,1) # w, row, column, rowspan, colspan
-
     #----------------------------------------------------------------------
     def check_valid_cell_defs(self):
         if self.auto_number_IDs_checkbox.isChecked():
@@ -3490,10 +3489,20 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
             self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["pd_model"] = self.pd_model_combobox.currentText()
         if self.pd_setup_complete is False:
             return
+        custom_data_key = f'{self.current_pd_substrate}_damage'
         if self.pd_model_combobox.currentText() == "None":
             self.disable_pd_parameters()
+            if custom_data_key in self.master_custom_var_d.keys():
+                delete_damage_var = True
+                for cd_name in self.celltypes_list:
+                    if ("pd_model" in self.param_d[cd_name]["pd"][self.current_pd_substrate].keys()) and (self.param_d[cd_name]["pd"][self.current_pd_substrate]["pd_model"] != "None"):
+                        delete_damage_var = False
+                        break
+                if delete_damage_var is True:
+                    self.delete_custom_data_row(custom_data_key)
         else:
             self.enable_pd_parameters()
+            self.add_custom_data(custom_data_key,"0.0",False,"damage",f'Accumulated damage due to {self.current_pd_substrate}')
     #--------------------------------------------------------
     def enable_pd_parameters(self):
         self.pd_metabolism_rate.setEnabled(True)
@@ -3520,10 +3529,10 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["linear_repair_rate"] = linear_repair_rate
         self.pd_linear_repair_rate.setText(linear_repair_rate)
         
+        precompute = "true"
         if self.force_precompute is False:
             self.pd_precompute_checkbox.setEnabled(True)
             self.pd_precompute_checkbox.setStyleSheet("background-color: white; color: black")
-            precompute = "true"
             if "precompute" in self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate].keys():
                 precompute = str(self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["precompute"])
             self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["precompute"] = precompute
@@ -3531,7 +3540,9 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
                 self.pd_precompute_checkbox.setChecked(True)
             else:
                 self.pd_precompute_checkbox.setChecked(False)
-        
+        else:
+            self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["precompute"] = precompute
+
         self.pd_dt.setEnabled(True)
         self.pd_dt.setStyleSheet("background-color: white; color: black")
         dt = str(self.config_tab.diffusion_dt.text())
@@ -5565,6 +5576,33 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
 
 
     #--------------------------------------------------------
+    def delete_custom_data_row(self, key):
+        if key not in self.master_custom_var_d.keys():
+            print(f' {key} was not found in the custom data table.')
+            return
+        row = self.master_custom_var_d[key][0]
+        self.delete_key_from_master_custom_var_d(key, row=row)
+        for irow in range(row, self.max_custom_data_rows):
+            self.custom_data_table.cellWidget(irow,self.custom_icol_name).wrow -= 1  # sufficient to only decr the "name" column
+        self.custom_data_table.removeRow(row)
+        self.add_row_custom_table(self.max_custom_data_rows - 1)
+        self.enable_all_custom_data()
+        
+    #--------------------------------------------------------
+    def delete_key_from_master_custom_var_d(self, key, row = None, debug_me = False):
+        if row is None:
+            row = self.master_custom_var_d[key][0]
+        self.master_custom_var_d.pop(key)
+        for k in self.master_custom_var_d.keys():
+            if self.master_custom_var_d[k][0] > row:   # remember: [row, units, description]
+                self.master_custom_var_d[k][0] -= 1
+        # remove (pop) this custom var name from ALL cell types
+        for cdef in self.param_d.keys():
+            if debug_me:
+                print(f"   popping {key} from {cdef}")
+            self.param_d[cdef]['custom_data'].pop(key)
+
+    #--------------------------------------------------------
     # Delete an entire row from the Custom Data subtab. Somewhat tricky...
     def delete_custom_data_cb(self):
         debug_me = False
@@ -5580,15 +5618,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
             # print(" master_custom_var_d= ",self.master_custom_var_d)
 
         if varname in self.master_custom_var_d.keys():
-            self.master_custom_var_d.pop(varname)
-            for key in self.master_custom_var_d.keys():
-                if self.master_custom_var_d[key][0] > row:   # remember: [row, units, description]
-                    self.master_custom_var_d[key][0] -= 1
-            # remove (pop) this custom var name from ALL cell types
-            for cdef in self.param_d.keys():
-                if debug_me:
-                    print(f"   popping {varname} from {cdef}")
-                self.param_d[cdef]['custom_data'].pop(varname)
+            self.delete_key_from_master_custom_var_d(varname, row=row, debug_me=debug_me)
 
         # Since each widget in each row had an associated row #, we need to decrement all those following
         # the row that was just deleted.
@@ -7062,7 +7092,8 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         #     self.param_d[cdname]["secretion"][sub_name]["secretion_target"] = sval
         #     self.param_d[cdname]["secretion"][sub_name]["uptake_rate"] = sval
         #     self.param_d[cdname]["secretion"][sub_name]["net_export_rate"] = sval
-
+        if self.pkpd_flag is True:
+            self.pd_model_combobox.setCurrentIndex(self.pd_model_combobox.findText("None"))
 
     def new_custom_data_params(self, cdname):
         logging.debug(f'------- new_custom_data_params() -----')
@@ -7625,7 +7656,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
             return
 
         self.clear_custom_data_tab()  # clean out before re-populating
-
+        
         num_vals = len(self.param_d[cdname]['custom_data'].keys())
         # print("  -------- custom_data # keys =", num_vals)
         # return
@@ -7660,7 +7691,6 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
                 #------------- conserved
                 self.custom_data_table.cellWidget(irow,self.custom_icol_conserved).setChecked(self.param_d[cdname]['custom_data'][key][1]) 
 
-
                 # NOTE: the following two (units, desc) are the same across all cell types
                 #------------- units
                 # print(f"    update_custom_data_params(): master_custom_var_d= {self.master_custom_var_d}")
@@ -7673,6 +7703,34 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
 
         self.custom_data_edit_active = True
 
+    def add_custom_data(self, key, value, conserved_flag, units, desc):
+        if key in self.master_custom_var_d.keys():
+            return
+        irow = len(self.master_custom_var_d.keys()) -  ("" in self.master_custom_var_d.keys()) # plan to put it here
+        for i in range(self.max_custom_data_rows): # but if a smaller index is found, put it there
+            if self.custom_data_table.cellWidget(i,self.custom_icol_name).text() == "":
+                irow = i
+                break
+        self.custom_data_edit_active = False
+
+        self.master_custom_var_d[key] = [irow, units, desc] # dict: [unique custom var name]=[row#, units, desc]
+
+        self.custom_data_table.cellWidget(irow,self.custom_icol_name).setText(key)   # rwh: tricky; custom var name
+        self.custom_data_table.cellWidget(irow,self.custom_icol_name).prev = None
+
+        self.custom_data_table.cellWidget(irow,self.custom_icol_value).setText(value) # [value, conserved flag]
+        self.custom_data_table.cellWidget(irow,self.custom_icol_conserved).setChecked(conserved_flag)
+        for cd_name in self.celltypes_list:
+            self.param_d[cd_name]['custom_data'][key] = [value, conserved_flag]
+
+
+        self.custom_data_table.cellWidget(irow,self.custom_icol_units).setText(units)
+        self.master_custom_var_d[key][1] = units
+
+        self.custom_data_table.cellWidget(irow,self.custom_icol_desc).setText(desc)
+        self.master_custom_var_d[key][2] = desc
+
+        self.custom_data_edit_active = True
     #-----------------------------------------------------------------------------------------
     # called from pmb.py: load_mode() -> show_sample_model() -> reset_xml_root()
     def clear_custom_data_params(self):

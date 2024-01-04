@@ -344,6 +344,7 @@ class PhysiCellXMLCreator(QWidget):
         # self.celldef_tab.populate_tree()
         self.celldef_tab.config_path = self.current_xml_file
 
+
         self.celldef_tab.fill_substrates_comboboxes() # do before populate? Yes, assuming we check for cell_def != None
 
         # Beware: this may set the substrate chosen for Motility/[Advanced]Chemotaxis
@@ -531,8 +532,7 @@ class PhysiCellXMLCreator(QWidget):
             #     self.legend_tab.reload_legend()
 
             self.vis_tab.reset_model()
-            
-
+        
         vlayout.addWidget(self.tabWidget)
         # self.addTab(self.sbml_tab,"SBML")
 
