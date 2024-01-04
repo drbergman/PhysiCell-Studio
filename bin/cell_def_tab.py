@@ -43,6 +43,7 @@ import logging
 import inspect
 import string
 import random
+import numpy as np
 # import traceback
 import xml.etree.ElementTree as ET  # https://docs.python.org/2/library/xml.etree.elementtree.html
 from PyQt5.QtCore import Qt, QRect
@@ -121,11 +122,14 @@ class MyQLineEdit(QLineEdit):
 
 
 class CellDef(QWidget):
-    def __init__(self, pytest_flag):
+    def __init__(self, pytest_flag, pkpd_flag, config_tab):
         super().__init__()
 
         random.seed(42)   # for reproducibility (cough). Needed for pytest results.
         self.pytest_flag = pytest_flag
+        self.pkpd_flag = pkpd_flag
+        self.force_precompute = True
+        self.pd_substrates = []
 
         # primary key = cell def name
         # secondary keys: cycle_rate_choice, cycle_dropdown, 
@@ -163,6 +167,7 @@ class CellDef(QWidget):
                 }
                 """
 
+        self.config_tab = config_tab
         self.ics_tab = None
 
         self.current_cell_def = None
@@ -403,6 +408,9 @@ class CellDef(QWidget):
         self.tab_widget.addTab(self.create_secretion_tab(),"Secretion")
         self.tab_widget.addTab(self.create_interaction_tab(),"Interactions")
         self.tab_widget.addTab(self.create_intracellular_tab(),"Intracellular")
+        if self.pkpd_flag:
+            self.pd_setup_complete = False
+            self.tab_widget.addTab(self.create_pd_tab(),"PD")
         self.tab_widget.addTab(self.create_custom_data_tab(),"Custom Data")
 
         #---rwh
@@ -413,7 +421,6 @@ class CellDef(QWidget):
         self.cell_types_tabs_layout = QGridLayout()
         self.cell_types_tabs_layout.addWidget(self.tab_widget, 0,0,1,1) # w, row, column, rowspan, colspan
         # self.cell_types_tabs_layout.addWidget(self.tab_params_widget, 1,0,1,1) # w, row, column, rowspan, colspan
-
     #----------------------------------------------------------------------
     def check_valid_cell_defs(self):
         if self.auto_number_IDs_checkbox.isChecked():
@@ -3477,8 +3484,120 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         self.new_interaction_params(self.current_cell_def, True)
         self.tree_item_clicked_cb(self.tree.currentItem(), 0)
 
+    #--------------------------------------------------------
+    def pd_model_combobox_changed_cb(self, idx):
+        if self.current_cell_def is not None and self.current_pd_substrate is not None:
+            self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["pd_model"] = self.pd_model_combobox.currentText()
+        if self.pd_setup_complete is False:
+            return
+        custom_data_key = f'{self.current_pd_substrate}_damage'
+        if self.pd_model_combobox.currentText() == "None":
+            self.disable_pd_parameters()
+            if custom_data_key in self.master_custom_var_d.keys():
+                delete_damage_var = True
+                for cd_name in self.celltypes_list:
+                    if ("pd_model" in self.param_d[cd_name]["pd"][self.current_pd_substrate].keys()) and (self.param_d[cd_name]["pd"][self.current_pd_substrate]["pd_model"] != "None"):
+                        delete_damage_var = False
+                        break
+                if delete_damage_var is True:
+                    self.delete_custom_data_row(custom_data_key)
+                    self.pd_substrates.remove(self.current_pd_substrate)
+        else:
+            self.enable_pd_parameters()
+            is_added = self.add_custom_data(custom_data_key,"0.0",False,"damage",f'Accumulated damage due to {self.current_pd_substrate}')
+            if is_added:
+                self.pd_substrates.append(self.current_pd_substrate)
+    #--------------------------------------------------------
+    def enable_pd_parameters(self):
+        self.pd_metabolism_rate.setEnabled(True)
+        self.pd_metabolism_rate.setStyleSheet("background-color: white; color: black")
+        metabolism_rate = "0"
+        if "metabolism_rate" in self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate].keys():
+            metabolism_rate = str(self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["metabolism_rate"])
+        self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["metabolism_rate"] = metabolism_rate
+        self.pd_metabolism_rate.setText(metabolism_rate)
 
+        self.pd_constant_repair_rate.setEnabled(True)
+        self.pd_constant_repair_rate.setStyleSheet("background-color: white; color: black")
+        constant_repair_rate = "0"
+        if "constant_repair_rate" in self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate].keys():
+            constant_repair_rate = str(self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["constant_repair_rate"])
+        self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["constant_repair_rate"] = constant_repair_rate
+        self.pd_constant_repair_rate.setText(constant_repair_rate)
+        
+        self.pd_linear_repair_rate.setEnabled(True)
+        self.pd_linear_repair_rate.setStyleSheet("background-color: white; color: black")
+        linear_repair_rate = "0"
+        if "linear_repair_rate" in self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate].keys():
+            linear_repair_rate = str(self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["linear_repair_rate"])
+        self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["linear_repair_rate"] = linear_repair_rate
+        self.pd_linear_repair_rate.setText(linear_repair_rate)
+        
+        precompute = "true"
+        if self.force_precompute is False:
+            self.pd_precompute_checkbox.setEnabled(True)
+            self.pd_precompute_checkbox.setStyleSheet("background-color: white; color: black")
+            if "precompute" in self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate].keys():
+                precompute = str(self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["precompute"])
+            self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["precompute"] = precompute
+            if precompute == "true" or self.force_precompute is True:
+                self.pd_precompute_checkbox.setChecked(True)
+            else:
+                self.pd_precompute_checkbox.setChecked(False)
+        else:
+            self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["precompute"] = precompute
 
+        self.pd_dt.setEnabled(True)
+        self.pd_dt.setStyleSheet("background-color: white; color: black")
+        dt = str(self.config_tab.diffusion_dt.text())
+        if "dt" in self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate].keys():
+            dt = str(self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["dt"])
+        self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["dt"] = dt
+        self.pd_dt.setText(dt)
+
+    def disable_pd_parameters(self):
+        self.pd_metabolism_rate.setEnabled(False)
+        self.pd_metabolism_rate.setStyleSheet("background-color: lightgray; color: black")
+        self.pd_constant_repair_rate.setEnabled(False)
+        self.pd_constant_repair_rate.setStyleSheet("background-color: lightgray; color: black")
+        self.pd_linear_repair_rate.setEnabled(False)
+        self.pd_linear_repair_rate.setStyleSheet("background-color: lightgray; color: black")
+        self.pd_precompute_checkbox.setEnabled(False)
+        self.pd_precompute_checkbox.setStyleSheet("background-color: lightgray; color: black")
+        self.pd_dt.setEnabled(False)
+        self.pd_dt.setStyleSheet("background-color: lightgray; color: black")
+    #--------------------------------------------------------
+    def pd_metabolism_rate_changed_cb(self, text):
+        self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["metabolism_rate"] = text
+    #--------------------------------------------------------
+    def pd_constant_repair_rate_changed_cb(self, text):
+        self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["constant_repair_rate"] = text
+    #--------------------------------------------------------
+    def pd_linear_repair_rate_changed_cb(self, text):
+        self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["linear_repair_rate"] = text
+    #--------------------------------------------------------
+    def pd_precompute_checkbox_clicked(self, bval):
+        self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["precompute"] = "true" if bval else "false"
+    #--------------------------------------------------------
+    def pd_dt_changed_cb(self, text):
+        self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["dt"] = text
+    #--------------------------------------------------------
+    def pd_dt_edit_finished_cb(self):
+        text = self.pd_dt.text()
+        if self.pd_precompute_checkbox.isChecked() is False:
+            self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["dt"] = text
+            return
+        dt = float(text)
+        diffusion_dt = float(self.config_tab.diffusion_dt.text())
+        # check if the time step is obviously not a multiple of diffusion_dt
+        if abs(dt / diffusion_dt - round(dt/diffusion_dt)) > 0.0001:
+            dt = (dt // diffusion_dt)
+            dt *= diffusion_dt
+            if dt < diffusion_dt: # the flooring could result in dt = 0, which is not what we're here for
+                dt = diffusion_dt
+            text = str(dt)
+            self.pd_dt.setText(text)
+        self.param_d[self.current_cell_def]["pd"][self.current_pd_substrate]["dt"] = text
     #--------------------------------------------------------
     def cell_adhesion_affinity_changed(self,text):
         # print("cell_adhesion_affinity_changed:  text=",text)
@@ -4793,10 +4912,143 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         intracellular_tab.setLayout(glayout)
         return intracellular_tab_scroll
 
+    def create_pd_tab(self):
+        self.pd_tab = QWidget()
+        lineedit_stylesheet = """ 
+            background-color: rgb(236,236,236);
+            QLineEdit {
+                color: #000000;
+                background-color: #FFFFFF; 
+            }
+            """
+        self.pd_tab.setStyleSheet("background-color: rgb(236,236,236)")
+
+        self.pd_tab_layout = QVBoxLayout()
+        # vlayout = QVBoxLayout()
+
+        self.pd_substrate_combobox = QComboBox()
+        self.pd_substrate_combobox.setStyleSheet(self.combobox_stylesheet)
+        self.pd_substrate_combobox.currentIndexChanged.connect(self.pd_substrate_changed_cb)  # beware: will be triggered on a ".clear" too
+        self.pd_tab_layout.addWidget(self.pd_substrate_combobox) # w, row, column, rowspan, colspan
+
+        hbox = QHBoxLayout()
+        label = QLabel("model")
+        # label.setFixedWidth(self.label_width)
+        label.setAlignment(QtCore.Qt.AlignRight)
+        # label.setStyleSheet("border: 1px solid black;")
+        # idr += 1
+        hbox.addWidget(label) # w, row, column, rowspan, colspan
+
+        self.pd_model_combobox = QComboBox()
+        self.pd_model_combobox.setStyleSheet(self.combobox_stylesheet)
+        self.pd_model_combobox.currentIndexChanged.connect(self.pd_model_combobox_changed_cb)
+        self.pd_model_combobox.addItem("None")
+        self.pd_model_combobox.addItem("AUC")
+        self.pd_model_combobox.addItem("AUC_amount")
+        hbox.addWidget(self.pd_model_combobox) # w, row, column, rowspan, colspan
+
+        label = QLabel("Metabolism Rate")
+        label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(label) # w, row, column, rowspan, colspan
+
+        self.pd_metabolism_rate = QLineEdit()
+        self.pd_metabolism_rate.setFixedWidth(60)
+        self.pd_metabolism_rate.setEnabled(False)
+        self.pd_metabolism_rate.setValidator(QtGui.QDoubleValidator())
+        self.pd_metabolism_rate.textChanged.connect(self.pd_metabolism_rate_changed_cb)
+        hbox.addWidget(self.pd_metabolism_rate)
+
+        units = QLabel("1/min")
+        units.setAlignment(QtCore.Qt.AlignLeft)
+        hbox.addWidget(units) # w, row, column, rowspan, colspan
+
+        label = QLabel("Linear Repair Rate")
+        label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(label) # w, row, column, rowspan, colspan
+
+        self.pd_linear_repair_rate = QLineEdit()
+        self.pd_linear_repair_rate.setFixedWidth(60)
+        self.pd_linear_repair_rate.setEnabled(False)
+        self.pd_linear_repair_rate.setValidator(QtGui.QDoubleValidator())
+        self.pd_linear_repair_rate.textChanged.connect(self.pd_linear_repair_rate_changed_cb)
+        hbox.addWidget(self.pd_linear_repair_rate)
+
+        units = QLabel("1/min")
+        units.setAlignment(QtCore.Qt.AlignLeft)
+        hbox.addWidget(units) # w, row, column, rowspan, colspan
+
+        label = QLabel("Constant Repair Rate")
+        label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(label) # w, row, column, rowspan, colspan
+
+        self.pd_constant_repair_rate = QLineEdit()
+        self.pd_constant_repair_rate.setFixedWidth(60)
+        self.pd_constant_repair_rate.setEnabled(False)
+        self.pd_constant_repair_rate.setValidator(QtGui.QDoubleValidator())
+        self.pd_constant_repair_rate.textChanged.connect(self.pd_constant_repair_rate_changed_cb)
+        hbox.addWidget(self.pd_constant_repair_rate)
+
+        units = QLabel("damage/min")
+        units.setAlignment(QtCore.Qt.AlignLeft)
+        hbox.addWidget(units) # w, row, column, rowspan, colspan
+
+        hbox.addStretch()
+        self.pd_tab_layout.addLayout(hbox)
+
+        hbox = QHBoxLayout()
+
+        self.pd_precompute_checkbox = QCheckBox("Precompute Terms")
+        # self.pd_precompute_checkbox.setFixedWidth(130)
+        self.pd_precompute_checkbox.setEnabled(False)
+        self.pd_precompute_checkbox.setChecked(True)
+        self.pd_precompute_checkbox.setStyleSheet("background-color: lightgray")
+        self.pd_precompute_checkbox.clicked.connect(self.pd_precompute_checkbox_clicked)
+        hbox.addWidget(self.pd_precompute_checkbox) # w, row, column, rowspan, colspan
+
+        hbox.insertSpacing(2, 50)
+
+        label = QLabel("PD dt")
+        label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(label)
+
+        self.pd_dt = QLineEdit()
+        self.pd_dt.setFixedWidth(100)
+        self.pd_dt.setEnabled(False)
+        self.pd_dt.setValidator(QtGui.QDoubleValidator())
+        self.pd_dt.textChanged.connect(self.pd_dt_changed_cb)
+        self.pd_dt.editingFinished.connect(self.pd_dt_edit_finished_cb)
+        hbox.addWidget(self.pd_dt)
+
+        self.config_tab.diffusion_dt.editingFinished.connect(self.pd_dt_edit_finished_cb)
+
+
+        units = QLabel("min")
+        units.setAlignment(QtCore.Qt.AlignLeft)
+        hbox.addWidget(units)
+
+        hbox.addStretch()
+        self.pd_tab_layout.addLayout(hbox)
+
+        #------
+        # vlayout.setVerticalSpacing(10)  # rwh - argh
+        self.pd_tab_layout.addStretch()
+        self.pd_tab.setLayout(self.pd_tab_layout)
+
+        self.pd_tab.scroll_area = QScrollArea()
+
+        self.pd_tab.scroll_area.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
+        self.pd_tab.scroll_area.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
+        self.pd_tab.scroll_area.setWidgetResizable(True)
+        self.pd_tab.scroll_area.setWidget(self.pd_tab)
+
+        self.pd_setup_complete = True
+
+        return self.pd_tab.scroll_area
     #--------------------------------------------------------
     # The following (text-based widgets) were (originally) auto-generated by 
     # a mix of sed and Python scripts. See the gen_qline_cb.py script as an early example.
     # --- cycle transition rates
+
     def cycle_live_trate00_changed(self, text):
         self.param_d[self.current_cell_def]['cycle_live_trate00'] = text
 
@@ -5232,18 +5484,12 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
 
     # --- secretion
     def secretion_rate_changed(self, text):
-        # self.param_d[self.current_cell_def]['secretion_rate'] = text
-
-        # self.param_d[cell_def_name]["secretion"][substrate_name]["secretion_rate"] = val
         self.param_d[self.current_cell_def]["secretion"][self.current_secretion_substrate]['secretion_rate'] = text
     def secretion_target_changed(self, text):
-        # self.param_d[self.current_cell_def]['secretion_target'] = text
         self.param_d[self.current_cell_def]["secretion"][self.current_secretion_substrate]['secretion_target'] = text
     def uptake_rate_changed(self, text):
-        # self.param_d[self.current_cell_def]['uptake_rate'] = text
         self.param_d[self.current_cell_def]["secretion"][self.current_secretion_substrate]['uptake_rate'] = text
     def secretion_net_export_rate_changed(self, text):
-        # self.param_d[self.current_cell_def]['secretion_net_export_rate'] = text
         self.param_d[self.current_cell_def]["secretion"][self.current_secretion_substrate]['net_export_rate'] = text
 
     #--------------------------------------------------------
@@ -5334,6 +5580,33 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
 
 
     #--------------------------------------------------------
+    def delete_custom_data_row(self, key):
+        if key not in self.master_custom_var_d.keys():
+            print(f' {key} was not found in the custom data table.')
+            return
+        row = self.master_custom_var_d[key][0]
+        self.delete_key_from_master_custom_var_d(key, row=row)
+        for irow in range(row, self.max_custom_data_rows):
+            self.custom_data_table.cellWidget(irow,self.custom_icol_name).wrow -= 1  # sufficient to only decr the "name" column
+        self.custom_data_table.removeRow(row)
+        self.add_row_custom_table(self.max_custom_data_rows - 1)
+        self.enable_all_custom_data()
+        
+    #--------------------------------------------------------
+    def delete_key_from_master_custom_var_d(self, key, row = None, debug_me = False):
+        if row is None:
+            row = self.master_custom_var_d[key][0]
+        self.master_custom_var_d.pop(key)
+        for k in self.master_custom_var_d.keys():
+            if self.master_custom_var_d[k][0] > row:   # remember: [row, units, description]
+                self.master_custom_var_d[k][0] -= 1
+        # remove (pop) this custom var name from ALL cell types
+        for cdef in self.param_d.keys():
+            if debug_me:
+                print(f"   popping {key} from {cdef}")
+            self.param_d[cdef]['custom_data'].pop(key)
+
+    #--------------------------------------------------------
     # Delete an entire row from the Custom Data subtab. Somewhat tricky...
     def delete_custom_data_cb(self):
         debug_me = False
@@ -5348,16 +5621,15 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
             print(" master_custom_var_d.keys()= ",self.master_custom_var_d.keys())
             # print(" master_custom_var_d= ",self.master_custom_var_d)
 
+        if self.pkpd_flag:
+            # check it is not a damage variable
+            for substrate in self.pd_substrates:
+                if varname == substrate + "_damage":
+                    self.custom_table_error(row,1,f"(PKPD) You are deleting a PD substrate! Set to \"None\" all PD models for {substrate} instead.")
+                    return
+
         if varname in self.master_custom_var_d.keys():
-            self.master_custom_var_d.pop(varname)
-            for key in self.master_custom_var_d.keys():
-                if self.master_custom_var_d[key][0] > row:   # remember: [row, units, description]
-                    self.master_custom_var_d[key][0] -= 1
-            # remove (pop) this custom var name from ALL cell types
-            for cdef in self.param_d.keys():
-                if debug_me:
-                    print(f"   popping {varname} from {cdef}")
-                self.param_d[cdef]['custom_data'].pop(varname)
+            self.delete_key_from_master_custom_var_d(varname, row=row, debug_me=debug_me)
 
         # Since each widget in each row had an associated row #, we need to decrement all those following
         # the row that was just deleted.
@@ -6103,6 +6375,33 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         # self.uptake_rate.setText(secretion_substrate_path.find(".//uptake_rate").text)
         # self.secretion_net_export_rate.setText(secretion_substrate_path.find(".//net_export_rate").text)
 
+    def pd_substrate_changed_cb(self, idx):
+        # print('------ secretion_substrate_changed_cb(): idx = ',idx)
+        self.current_pd_substrate = self.pd_substrate_combobox.currentText()
+        # print("    self.current_pd_substrate = ",self.current_pd_substrate)
+        if idx == -1:
+            return
+
+        self.update_pd_params()
+
+        # uep = self.xml_root.find('.//microenvironment_setup')  # find unique entry point
+        # secretion_substrate_path = self.xml_root.find(".//cell_definitions//cell_definition[" + str(self.idx_current_cell_def) + "]//phenotype//secretion//substrate[" + str(idx+1) + "]")
+        # if (secretion_substrate_path):
+        #     print(secretion_substrate_path)
+
+        # <substrate name="virus">
+        #     <secretion_rate units="1/min">0</secretion_rate>
+        #     <secretion_target units="substrate density">1</secretion_target>
+        #     <uptake_rate units="1/min">10</uptake_rate>
+        #     <net_export_rate units="total substrate/min">0</net_export_rate> 
+        # </substrate> 
+        # uep = self.xml_root.find(".//cell_definitions//cell_definition")
+        # print(" secretion_rate=", secretion_substrate_path.find('.//secretion_rate').text ) 
+        # self.secretion_rate.setText(secretion_substrate_path.find(".//secretion_rate").text)
+        # self.secretion_target.setText(secretion_substrate_path.find(".//secretion_target").text)
+        # self.uptake_rate.setText(secretion_substrate_path.find(".//uptake_rate").text)
+        # self.secretion_net_export_rate.setText(secretion_substrate_path.find(".//net_export_rate").text)
+
 
     #-------------------------------------------------------------------------------------
         # self.cycle_dropdown.addItem("live cells")   # 0 -> 0
@@ -6250,6 +6549,22 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         # print("cell_def_tab.py: ------- fill_substrates_comboboxes:  self.substrate_list = ",self.substrate_list)
         self.physiboss_update_list_signals()
         self.physiboss_update_list_behaviours()
+        self.pkpd_fill_substrates_comboboxes()
+
+    def pkpd_fill_substrates_comboboxes(self):
+        if self.pkpd_flag is False:
+            return
+        self.pd_substrate_combobox.clear()
+        uep = self.xml_root.find('.//microenvironment_setup')  # find unique entry point
+        if uep:
+            idx = 0
+            for var in uep.findall('variable'):
+                # vp.append(var)
+                logging.debug(f' --> {var.attrib["name"]}')
+                name = var.attrib['name']
+                self.pd_substrate_combobox.addItem(name)
+        
+
 
     #-----------------------------------------------------------------------------------------
     # Fill them using the given model (the .xml)
@@ -6306,7 +6621,6 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         if self.rules_tab:
             self.rules_tab.add_new_celltype(name)
 
-
     #-----------------------------------------------------------------------------------------
     # def delete_substrate(self, item_idx):
     def delete_substrate(self, item_idx, new_substrate):
@@ -6325,6 +6639,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         self.motility_substrate_dropdown.removeItem(item_idx)
         self.motility2_substrate_dropdown.removeItem(item_idx)
         self.secretion_substrate_dropdown.removeItem(item_idx)
+        self.pd_substrate_combobox.removeItem(item_idx)
         # self.motility_substrate_dropdown.clear()
         # self.secretion_substrate_dropdown.clear()
 
@@ -6379,6 +6694,12 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         self.physiboss_update_list_signals()
         self.physiboss_update_list_behaviours()
 
+        self.pkpd_add_new_substrate_comboboxes(substrate_name)
+
+    def pkpd_add_new_substrate_comboboxes(self, substrate_name):
+        if self.pkpd_flag is False:
+            return
+        self.pd_substrate_combobox.addItem(substrate_name)
     #-----------------------------------------------------------------------------------------
     # When a user renames a substrate in the Microenv tab, we need to update all 
     # cell_defs data structures that reference it.
@@ -6400,6 +6721,8 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
                 self.motility2_substrate_dropdown.setItemText(idx, new_name)
             if old_name == self.secretion_substrate_dropdown.itemText(idx):
                 self.secretion_substrate_dropdown.setItemText(idx, new_name)
+            if old_name == self.pd_substrate_combobox.itemText(idx):
+                self.pd_substrate_combobox.setItemText(idx, new_name)
 
         # 2) update in the param_d dict
         for cdname in self.param_d.keys():  # for all cell defs, rename motility/chemotaxis and secretion substrate
@@ -6416,8 +6739,13 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
             self.param_d[cdname]["secretion"][new_name] = self.param_d[cdname]["secretion"].pop(old_name)
             self.param_d[cdname]["chemotactic_sensitivity"][new_name] = self.param_d[cdname]["chemotactic_sensitivity"].pop(old_name)
 
+            self.param_d[cdname]["pd"][new_name] = self.param_d[cdname]["pd"].pop(old_name)
+
         if old_name == self.current_secretion_substrate:
             self.current_secretion_substrate = new_name
+
+        if old_name == self.current_pd_substrate:
+            self.current_pd_substrate = new_name
 
         if self.rules_tab:
             # print("     calling self.rules_tab.substrate_rename")
@@ -6775,7 +7103,8 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         #     self.param_d[cdname]["secretion"][sub_name]["secretion_target"] = sval
         #     self.param_d[cdname]["secretion"][sub_name]["uptake_rate"] = sval
         #     self.param_d[cdname]["secretion"][sub_name]["net_export_rate"] = sval
-
+        if self.pkpd_flag is True:
+            self.pd_model_combobox.setCurrentIndex(self.pd_model_combobox.findText("None"))
 
     def new_custom_data_params(self, cdname):
         logging.debug(f'------- new_custom_data_params() -----')
@@ -7145,6 +7474,46 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
 
         # rwh: also update the qdropdown to select the substrate
 
+    def update_pd_params(self):
+        cdname = self.current_cell_def
+        if cdname == None:
+            return
+        logging.debug(f'update_pd_params(): cdname = {cdname}')
+        logging.debug(f'update_pd_params(): self.current_pd_substrate = {self.current_pd_substrate}')
+        logging.debug(f'{self.param_d[cdname]["pd"]}')
+        if "pd_model" in self.param_d[cdname]["pd"][self.current_pd_substrate].keys():
+            self.pd_model_combobox.setCurrentIndex(self.pd_model_combobox.findText(self.param_d[cdname]["pd"][self.current_pd_substrate]["pd_model"]))
+        else:
+            self.pd_model_combobox.setCurrentIndex(self.pd_model_combobox.findText("None"))
+
+        if "metabolism_rate" in self.param_d[cdname]["pd"][self.current_pd_substrate].keys():
+            self.pd_metabolism_rate.setText(str(self.param_d[cdname]["pd"][self.current_pd_substrate]["metabolism_rate"]))
+        else:
+            self.pd_metabolism_rate.setText("0")
+
+        if "constant_repair_rate" in self.param_d[cdname]["pd"][self.current_pd_substrate].keys():
+            self.pd_constant_repair_rate.setText(str(self.param_d[cdname]["pd"][self.current_pd_substrate]["constant_repair_rate"]))
+        else:
+            self.pd_constant_repair_rate.setText("0")
+
+        if "linear_repair_rate" in self.param_d[cdname]["pd"][self.current_pd_substrate].keys():
+            self.pd_linear_repair_rate.setText(str(self.param_d[cdname]["pd"][self.current_pd_substrate]["linear_repair_rate"]))
+        else:
+            self.pd_linear_repair_rate.setText("0")
+
+        if self.force_precompute is True:
+                self.pd_precompute_checkbox.setChecked(True)
+        else:
+            if "precompute" in self.param_d[cdname]["pd"][self.current_pd_substrate].keys():
+                self.pd_precompute_checkbox.setChecked(str(self.param_d[cdname]["pd"][self.current_pd_substrate]["precompute"])=="true")
+            else:
+                self.pd_precompute_checkbox.setChecked(True)
+
+        if "dt" in self.param_d[cdname]["pd"][self.current_pd_substrate].keys():
+            self.pd_dt.setText(str(self.param_d[cdname]["pd"][self.current_pd_substrate]["dt"]))
+        else:
+            self.pd_dt.setText(str(self.config_tab.diffusion_dt.text()))
+
     #-----------------------------------------------------------------------------------------
     def update_interaction_params(self):
         # print("------ update_interaction_params():")
@@ -7298,7 +7667,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
             return
 
         self.clear_custom_data_tab()  # clean out before re-populating
-
+        
         num_vals = len(self.param_d[cdname]['custom_data'].keys())
         # print("  -------- custom_data # keys =", num_vals)
         # return
@@ -7333,7 +7702,6 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
                 #------------- conserved
                 self.custom_data_table.cellWidget(irow,self.custom_icol_conserved).setChecked(self.param_d[cdname]['custom_data'][key][1]) 
 
-
                 # NOTE: the following two (units, desc) are the same across all cell types
                 #------------- units
                 # print(f"    update_custom_data_params(): master_custom_var_d= {self.master_custom_var_d}")
@@ -7346,6 +7714,35 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
 
         self.custom_data_edit_active = True
 
+    def add_custom_data(self, key, value, conserved_flag, units, desc):
+        if key in self.master_custom_var_d.keys():
+            return False
+        irow = len(self.master_custom_var_d.keys()) -  ("" in self.master_custom_var_d.keys()) # plan to put it here
+        for i in range(self.max_custom_data_rows): # but if a smaller index is found, put it there
+            if self.custom_data_table.cellWidget(i,self.custom_icol_name).text() == "":
+                irow = i
+                break
+        self.custom_data_edit_active = False
+
+        self.master_custom_var_d[key] = [irow, units, desc] # dict: [unique custom var name]=[row#, units, desc]
+
+        self.custom_data_table.cellWidget(irow,self.custom_icol_name).setText(key)   # rwh: tricky; custom var name
+        self.custom_data_table.cellWidget(irow,self.custom_icol_name).prev = None
+
+        self.custom_data_table.cellWidget(irow,self.custom_icol_value).setText(value) # [value, conserved flag]
+        self.custom_data_table.cellWidget(irow,self.custom_icol_conserved).setChecked(conserved_flag)
+        for cd_name in self.celltypes_list:
+            self.param_d[cd_name]['custom_data'][key] = [value, conserved_flag]
+
+
+        self.custom_data_table.cellWidget(irow,self.custom_icol_units).setText(units)
+        self.master_custom_var_d[key][1] = units
+
+        self.custom_data_table.cellWidget(irow,self.custom_icol_desc).setText(desc)
+        self.master_custom_var_d[key][2] = desc
+
+        self.custom_data_edit_active = True
+        return True
     #-----------------------------------------------------------------------------------------
     # called from pmb.py: load_mode() -> show_sample_model() -> reset_xml_root()
     def clear_custom_data_params(self):
@@ -7394,6 +7791,8 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         self.update_intracellular_params()
         # self.update_molecular_params()
         self.update_custom_data_params()
+        if self.pkpd_flag:
+            self.update_pd_params()
 
 
     #-------------------------------------------------------------------
@@ -8108,6 +8507,44 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
             subelm.text = self.param_d[cdef]["secretion"][substrate]["net_export_rate"]
             subelm.tail = self.indent12
 
+    def fill_xml_pd(self, cell_def):
+        if self.pkpd_flag is False:
+            return
+        cname = cell_def.attrib["name"]
+        elm_created = False
+        for substrate in self.param_d[cname]["pd"].keys():
+            if "pd_model" not in self.param_d[cname]["pd"][substrate].keys() or self.param_d[cname]["pd"][substrate]["pd_model"] == "None":
+                continue # ignore empty pd
+            if elm_created is False:
+                pd_elm = ET.SubElement(cell_def, "PD")
+                pd_elm.text = self.indent10  # affects indent of child
+                pd_elm.tail = "\n" + self.indent10
+                elm_created = True
+            elm = ET.SubElement(pd_elm, "substrate",{"name":substrate})
+            subelm = ET.SubElement(elm, "model")
+            subelm.text = self.param_d[cname]["pd"][substrate]["pd_model"]
+            subelm.tail = "\n" + self.indent12
+
+            subelm = ET.SubElement(elm, "metabolism_rate")
+            subelm.text = self.param_d[cname]["pd"][substrate]["metabolism_rate"]
+            subelm.tail = "\n" + self.indent12
+            
+            subelm = ET.SubElement(elm, "constant_repair_rate")
+            subelm.text = self.param_d[cname]["pd"][substrate]["constant_repair_rate"]
+            subelm.tail = "\n" + self.indent12
+            
+            subelm = ET.SubElement(elm, "linear_repair_rate")
+            subelm.text = self.param_d[cname]["pd"][substrate]["linear_repair_rate"]
+            subelm.tail = "\n" + self.indent12
+            
+            subelm = ET.SubElement(elm, "precompute")
+            subelm.text = self.param_d[cname]["pd"][substrate]["precompute"]
+            subelm.tail = "\n" + self.indent12
+            
+            subelm = ET.SubElement(elm, "dt")
+            subelm.text = self.param_d[cname]["pd"][substrate]["dt"]
+            subelm.tail = "\n" + self.indent12
+
     #-------------------------------------------------------------------
     # Read values from the GUI widgets and generate/write a new XML
     def fill_xml_interactions(self,pheno,cdef):
@@ -8547,6 +8984,8 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
                     self.fill_xml_secretion(pheno,cdef)
                     self.fill_xml_interactions(pheno,cdef)
                     self.fill_xml_intracellular(pheno,cdef)
+
+                    self.fill_xml_pd(elm)
 
                     # ------- custom data ------- 
                     custom_data = ET.SubElement(elm, 'custom_data')
