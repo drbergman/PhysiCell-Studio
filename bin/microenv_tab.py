@@ -1073,20 +1073,21 @@ class SubstrateDef(QWidget):
         self.param_d[subname]["enable_zmin"] = bval
         self.param_d[subname]["enable_zmax"] = bval
 
-        self.param_d[subname]["pk_model"] = "None"
-        self.param_d[subname]["schedule_format"] = "parameters"
-        self.param_d[subname]["total_doses"] = "0"
-        self.param_d[subname]["loading_doses"] = "0"
-        self.param_d[subname]["first_dose_time"] = "0"
-        self.param_d[subname]["dose_interval"] = "1"
-        self.param_d[subname]["regular_dose"] = "0"
-        self.param_d[subname]["loading_dose"] = "0"
-        self.param_d[subname]["elimination_rate"] = "0"
-        self.param_d[subname]["k12"] = "0"
-        self.param_d[subname]["k21"] = "0"
-        self.param_d[subname]["volume_ratio"] = "1"
-        self.param_d[subname]["biot_number"] = "1"
-        self.param_d[subname]["sbml_filename"] = "PK_default.xml"
+        if self.pkpd_flag:
+            self.param_d[subname]["pk_model"] = "None"
+            self.param_d[subname]["schedule_format"] = "parameters"
+            self.param_d[subname]["total_doses"] = "0"
+            self.param_d[subname]["loading_doses"] = "0"
+            self.param_d[subname]["first_dose_time"] = "0"
+            self.param_d[subname]["dose_interval"] = "1"
+            self.param_d[subname]["regular_dose"] = "0"
+            self.param_d[subname]["loading_dose"] = "0"
+            self.param_d[subname]["elimination_rate"] = "0"
+            self.param_d[subname]["k12"] = "0"
+            self.param_d[subname]["k21"] = "0"
+            self.param_d[subname]["volume_ratio"] = "1"
+            self.param_d[subname]["biot_number"] = "1"
+            self.param_d[subname]["sbml_filename"] = "PK_default.xml"
 
         # NOooo!
         # self.param_d["gradients"] = bval
@@ -1098,8 +1099,10 @@ class SubstrateDef(QWidget):
 
         self.new_substrate_count += 1
 
-        self.celldef_tab.add_new_substrate(subname)
+        substrate_to_copy = None
+        self.celldef_tab.add_new_substrate(subname, substrate_to_copy)
         self.config_tab.add_new_substrate(subname)
+
         # self.celldef_tab.add_new_substrate_comboboxes(subname)
         # self.param_d[cell_def_name]["secretion"][substrate_name] = {}
 
@@ -1146,7 +1149,8 @@ class SubstrateDef(QWidget):
 
         # self.celldef_tab.add_new_substrate_comboboxes(subname)
 
-        self.celldef_tab.add_new_substrate(subname)
+        substrate_to_copy = self.current_substrate
+        self.celldef_tab.add_new_substrate(subname, substrate_to_copy)
         self.config_tab.add_new_substrate(subname)
 
         self.current_substrate = subname
