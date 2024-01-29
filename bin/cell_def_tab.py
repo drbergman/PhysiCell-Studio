@@ -515,6 +515,9 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         self.new_intracellular_params(cdname)
         self.new_custom_data_params(cdname)
 
+        if reset_mapping and self.pkpd_flag:
+            self.new_pd_data_params(cdname)
+
         # print("\n\n",self.param_d)
         # self.custom_data_tab.param_d = self.param_d
         # self.custom_data_tab.new_custom_data_params(cdname)
@@ -672,6 +675,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         cdname_original = self.current_cell_def
         self.param_d[cdname_copy] = copy.deepcopy(self.param_d[cdname_original])
 
+
         self.param_d[cdname_copy]["ID"] = str(self.new_cell_def_count)  # rwh Note: we won't do this if we auto-generate the ID #s at "save"
 
         for cdname in self.param_d.keys():    # for each cell def, set how it interacts with new cell based on how it interacted with original cell
@@ -693,7 +697,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         self.current_cell_def = cdname_copy
         # self.cell_type_name.setText(cdname)
 
-        self.add_new_celltype(cdname_copy)  # add to all qcomboboxes that have celltypes (e.g., in interactions)
+        self.add_new_celltype(cdname_copy, reset_mapping=False)  # add to all qcomboboxes that have celltypes (e.g., in interactions)
         # print('3) copy_cell_def(): param_d.keys=',self.param_d.keys())
 
         #-----  Update this new cell def's widgets' values
@@ -7063,7 +7067,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         self.param_d[cdname]["intracellular"] = None
 
 
-    def add_new_substrate(self, sub_name):  # called for both "New" and "Copy" of substrate/signal
+    def add_new_substrate(self, sub_name, sub_to_copy):  # called for both "New" and "Copy" of substrate/signal
         self.add_new_substrate_comboboxes(sub_name)
 
         sval = self.default_sval
@@ -7089,8 +7093,14 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         if self.rules_tab:
             self.rules_tab.add_new_substrate(sub_name)
 
+        self.pkpd_add_new_substrate(sub_name, sub_to_copy)
 
-    def add_new_celltype(self, cdname):
+    def pkpd_add_new_substrate(self, sub_name, sub_to_copy):
+        for cdname in self.param_d.keys():
+            D = {} if sub_to_copy is None else self.param_d[cdname]["pd"][sub_to_copy]
+            self.param_d[cdname]["pd"][sub_name] = D
+
+    def add_new_celltype(self, cdname, reset_mapping=True):
         self.add_new_celltype_comboboxes(cdname)
         self.physiboss_update_list_signals()
         self.physiboss_update_list_behaviours()
@@ -7103,7 +7113,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         #     self.param_d[cdname]["secretion"][sub_name]["secretion_target"] = sval
         #     self.param_d[cdname]["secretion"][sub_name]["uptake_rate"] = sval
         #     self.param_d[cdname]["secretion"][sub_name]["net_export_rate"] = sval
-        if self.pkpd_flag is True:
+        if reset_mapping is True and self.pkpd_flag is True:
             self.pd_model_combobox.setCurrentIndex(self.pd_model_combobox.findText("None"))
 
     def new_custom_data_params(self, cdname):
@@ -7121,6 +7131,13 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
             self.param_d[cdname]['custom_data'][key] = [self.custom_var_value_str_default, self.custom_var_conserved_default]   # [value, conserved flag]
             idx += 1
 
+    #-----------------------------------------------------------------------------------------
+    def new_pd_data_params(self, cdname):
+        if "pd" not in self.param_d[cdname].keys():
+            return
+        for substrate in self.param_d[cdname]["pd"].keys():
+            self.param_d[cdname]["pd"][substrate] = {} # set to empty dictionary, enable_pd_parameters() will take care of the rest
+            
     #-----------------------------------------------------------------------------------------
     def update_cycle_params(self):
         # pass

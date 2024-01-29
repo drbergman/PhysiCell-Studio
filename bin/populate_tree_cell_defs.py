@@ -60,6 +60,12 @@ def pkpd_populate_tree_cell_defs(cell_def_tab, uep, pkpd_flag):
         return
     idx = 1
     for cell_def in uep:
+        if cell_def.tag != "cell_definition":
+            logging.debug(f'--------pkpd_populate_tree_cell_defs: found unexpected child <cell_definitions>; skip over {cell_def}')
+            continue
+        if cell_def.tag == "cell_rules":
+            logging.debug(f'--------pkpd_populate_tree_cell_defs: found cell_rules child; break out on {cell_def}')
+            continue
         cell_def_name = cell_def.attrib['name']
         cell_def_tab.param_d[cell_def_name]["pd"] = {}
         jdx = 1
