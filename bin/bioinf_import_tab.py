@@ -12,11 +12,13 @@ import anndata
 import copy
 import numpy as np
 import time
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 
 from pathlib import Path
 import xml.etree.ElementTree as ET  # https://docs.python.org/2/library/xml.etree.elementtree.html
 from PyQt5 import QtCore, QtGui
-from PyQt5.QtWidgets import QFrame,QApplication,QWidget,QTabWidget,QLineEdit,QHBoxLayout,QVBoxLayout,QRadioButton,QPushButton, QLabel,QCheckBox,QComboBox,QScrollArea,QGridLayout, QFileDialog, QButtonGroup, QToolButton   # , QMessageBox
+from PyQt5.QtWidgets import QFrame,QApplication,QWidget,QTabWidget,QLineEdit,QHBoxLayout,QVBoxLayout,QRadioButton,QPushButton, QLabel,QCheckBox,QComboBox,QScrollArea,QGridLayout, QFileDialog, QButtonGroup, QToolButton, QSplitter  # , QMessageBox
 from PyQt5.QtGui import QIcon
 
 class BioinfImportWindow(QWidget):
@@ -25,7 +27,138 @@ class BioinfImportWindow(QWidget):
         # self.layout = QVBoxLayout()
         self.setWindowTitle("Bioinformatics Import Walkthrough")
 
-        # self.setLayout(self.layout)
+class BioinfImportPlotWindow(QWidget):
+    def __init__(self, main_window, config_tab):
+        super().__init__()
+        self.main_window = main_window
+        self.config_tab = config_tab
+        vbox = QVBoxLayout()
+       
+        hbox = self.create_par_area()
+        vbox.addLayout(hbox)
+
+        self.create_figure()
+        vbox.addWidget(self.canvas)
+
+        hbox = QHBoxLayout()
+        self.write_button = QPushButton("OK")
+        self.write_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
+        self.write_button.clicked.connect(self.write_cell_pos)
+        hbox.addWidget(self.write_button)
+        
+        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button.setStyleSheet("QPushButton {background-color: red; color: black;}")
+        self.cancel_button.clicked.connect(self.cancel_cb)
+        hbox.addWidget(self.cancel_button)
+
+        vbox.addLayout(hbox)
+
+        self.setLayout(vbox)
+        self.hide()
+        self.show()
+
+    def create_par_area(self):
+        par_label_width = 50
+        par_text_width = 75
+        self.par_label = []
+        self.par_text = []
+        hbox = QHBoxLayout()
+        for i in range(4):
+            self.par_label.append(QLabel())
+            self.par_label[i].setFixedWidth(par_label_width)
+            self.par_text.append(QLineEdit())
+            self.par_text[i].setFixedWidth(par_text_width)
+            self.par_text[i].setStyleSheet(self.main_window.qlineedit_style_sheet)
+            hbox.addWidget(self.par_label[i])
+            hbox.addWidget(self.par_text[i])
+
+        coord_validator = QtGui.QDoubleValidator()
+        self.par_text[0].setValidator(coord_validator)
+        self.par_text[1].setValidator(coord_validator)
+        pos_par_validator = QtGui.QDoubleValidator()
+        pos_par_validator.setBottom(0)
+        for i in range(2,len(self.par_text)):
+            self.par_text[i].setValidator(pos_par_validator)
+
+        if self.main_window.cell_pos_button_group.checkedId()==0:
+            for pt in self.par_text:
+                pt.setEnabled(False)
+            for pl in self.par_label:
+                pl.setText("")
+
+        elif self.main_window.cell_pos_button_group.checkedId()==1:
+            self.par_label[0].setText("x0")
+            self.par_label[1].setText("y0")
+            self.par_label[2].setText("width")
+            self.par_label[3].setText("height")
+            for idx, pt in enumerate(self.par_text):
+                pt.setEnabled(idx <= 3)
+                try:
+                    pt.textChanged.disconnect()
+                except:
+                    pass
+                pt.textChanged.connect(self.rectangle_plotter)
+            for i in range(4,len(self.par_label)):
+                self.par_label[i].setText("")
+
+        elif self.main_window.cell_pos_button_group.checkedId()==2:
+            self.par_label[0].setText("x0")
+            self.par_label[1].setText("y0")
+            self.par_label[2].setText("r")
+            for idx, pt in enumerate(self.par_text):
+                pt.setEnabled(idx <= 2)
+                try:
+                    pt.textChanged.disconnect()
+                except:
+                    pass
+                pt.textChanged.connect(self.disc_plotter)
+            for i in range(3,len(self.par_label)):
+                self.par_label[i].setText("")
+
+        return hbox
+    
+    def rectangle_plotter(self):
+        pars = []
+        for idx, pt in enumerate(self.par_text):
+            if idx > 3:
+                break
+            if pt.hasAcceptableInput() is False:
+                return # do not update unless all are ready
+            pars.append(float(pt.text()))
+        x0, y0, width, height = pars
+        # x = [x0-0.5*width,x0+0.5*width,x0+0.5*width,x0-0.5*width,x0-0.5*width]
+        # y = [y0-0.5*height,y0-0.5*height,y0+0.5*height,y0+0.5*height,y0+0.5*height]
+        xy = np.array([[x0-0.5*width,x0+0.5*width,x0+0.5*width,x0-0.5*width],[y0-0.5*height,y0-0.5*height,y0+0.5*height,y0+0.5*height]]).T
+        print(f"xy = {xy}")
+        self.preview_region.set_xy(xy)
+
+        self.canvas.update()
+        self.canvas.draw()
+
+    def create_figure(self):
+        self.figure = plt.figure()
+        self.canvas = FigureCanvasQTAgg(self.figure)
+        self.canvas.setStyleSheet("background-color:transparent;")
+
+        self.ax0 = self.figure.add_subplot(111, adjustable='box')
+
+        self.ax0.set_xlim(self.config_tab.xmin.text(), self.config_tab.xmax.text())
+        self.ax0.set_ylim(self.config_tab.ymin.text(), self.config_tab.ymax.text())
+        self.ax0.set_aspect(1.0)
+
+        self.preview_region = self.ax0.fill([],[],transform=self.ax0.transData)[0]
+
+        self.canvas.update()
+        self.canvas.draw()
+
+    def write_cell_pos(self):
+        self.hide() # this will work for now, but maybe a better way to handle closing the window?
+        pass
+
+    def cancel_cb(self):
+        self.hide() # this will work for now, but maybe a better way to handle closing the window?
+        pass
+
 
 class QCheckBox_custom(QCheckBox):  # it's insane to have to do this!
     def __init__(self,name):
@@ -58,32 +191,16 @@ class BioinfImport(QWidget):
         self.ics_tab = ics_tab
         self.default_time_units = "min"
 
-        self.qlineedit_style = {}
-        self.qlineedit_style[False] = "QLineEdit {background-color: rgb(200,200,200); color: black;}"
-        self.qlineedit_style[True] = "QLineEdit {background-color: white; color: black;}"
-        # self.combobox_stylesheet = """ 
-        #     QComboBox{
-        #         color: #000000;
-        #         background-color: #FFFFFF; 
-        #     }
-        #     """
-
-        # self.scroll = QScrollArea()  # might contain centralWidget
-
-        # self.bioinf_import_params = QWidget()
-
-        # self.bioinf_import_tab_layout = QGridLayout()
-        # # self.config_tab_layout.addWidget(self.tab_widget, 0,0,1,1) # w, row, column, rowspan, colspan
-
-        # vbox = QVBoxLayout()
-        # vbox.addLayout(self.bioinf_import_tab_layout)
-        # self.bioinf_import_params.setLayout(vbox)
-
-        # self.scroll.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
-        # self.scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
-        # self.scroll.setWidgetResizable(True)
-
-        # self.scroll.setWidget(self.bioinf_import_params) # self.config_params = QWidget()
+        self.qlineedit_style_sheet = """
+            QLineEdit:disabled {
+                background-color: rgb(200,200,200);
+                color: black;
+            }
+            QLineEdit:enabled {
+                background-color: white;
+                color: black;
+            }
+            """
 
         vbox = QVBoxLayout()
         hbox = QHBoxLayout()
@@ -96,10 +213,6 @@ class BioinfImport(QWidget):
         hbox.addWidget(label)
 
         self.column_line_edit = QLineEdit()
-        # self.column_line_edit.setStyleSheet(self.stylesheet)
-        # fixed_width_value = 80
-        # self.num_cells.setFixedWidth(fixed_width_value)
-        # self.num_cells.setValidator(QtGui.QIntValidator(1,100000))
         self.column_line_edit.setEnabled(True)
         self.column_line_edit.setText('leiden')
         hbox.addWidget(self.column_line_edit)
@@ -254,14 +367,14 @@ class BioinfImport(QWidget):
             type_count.setEnabled(False)
             type_count.setText(str(self.cell_counts[cell_type]))
             type_count.setFixedWidth(counts_width)
-            type_count.setStyleSheet(self.qlineedit_style[False])
+            type_count.setStyleSheet(self.qlineedit_style_sheet)
             hbox.addWidget(type_count)
 
             self.type_prop[cell_type] = QLineEdit()
             self.type_prop[cell_type].setEnabled(False)
             self.type_prop[cell_type].setText(str(self.cell_counts[cell_type]))
             self.type_prop[cell_type].setFixedWidth(props_width)
-            self.type_prop[cell_type].setStyleSheet(self.qlineedit_style[False])
+            self.type_prop[cell_type].setStyleSheet(self.qlineedit_style_sheet)
             self.type_prop[cell_type].setValidator(num_validator)
             self.type_prop[cell_type].setObjectName(str(idx))
             self.type_prop[cell_type].textChanged.connect(self.prop_box_changed_cb)
@@ -271,7 +384,7 @@ class BioinfImport(QWidget):
             self.type_manual[cell_type].setEnabled(False)
             self.type_manual[cell_type].setText(str(self.cell_counts[cell_type]))
             self.type_manual[cell_type].setFixedWidth(manual_width)
-            self.type_manual[cell_type].setStyleSheet(self.qlineedit_style[False])
+            self.type_manual[cell_type].setStyleSheet(self.qlineedit_style_sheet)
             self.type_manual[cell_type].setValidator(num_validator)
             self.type_manual[cell_type].setObjectName(str(idx))
             hbox.addWidget(self.type_manual[cell_type])
@@ -287,14 +400,14 @@ class BioinfImport(QWidget):
         type_count.setEnabled(False)
         type_count.setText(str(len(self.cell_types_final)))
         type_count.setFixedWidth(counts_width)
-        type_count.setStyleSheet(self.qlineedit_style[False])
+        type_count.setStyleSheet(self.qlineedit_style_sheet)
         hbox.addWidget(type_count)
 
         self.total_prop = QLineEdit()
         self.total_prop.setEnabled(False)
         self.total_prop.setText(str(len(self.cell_types_final)))
         self.total_prop.setFixedWidth(props_width)
-        self.total_prop.setStyleSheet(self.qlineedit_style[False])
+        self.total_prop.setStyleSheet(self.qlineedit_style_sheet)
         self.total_prop.setValidator(num_validator)
         self.total_prop.textChanged.connect(self.prop_box_changed_cb)
         self.total_prop.setObjectName("total_prop")
@@ -304,7 +417,7 @@ class BioinfImport(QWidget):
         self.total_manual.setEnabled(False)
         self.total_manual.setText(str(len(self.cell_types_final)))
         self.total_manual.setFixedWidth(manual_width)
-        self.total_manual.setStyleSheet(self.qlineedit_style[False])
+        self.total_manual.setStyleSheet(self.qlineedit_style_sheet)
         self.total_manual.setValidator(num_validator)
         hbox.addWidget(self.total_manual)
 
@@ -352,19 +465,18 @@ class BioinfImport(QWidget):
         self.prop_box_callback_paused = False
 
     def counts_button_cb(self):
-        print(f"self.counts_button_group.id = {self.counts_button_group.checkedId()}")
         enable_props = self.counts_button_group.checkedId()==1
         for k in self.type_prop.keys():
             self.type_prop[k].setEnabled(enable_props)
-            self.type_prop[k].setStyleSheet(self.qlineedit_style[enable_props])
+            # self.type_prop[k].setStyleSheet(self.qlineedit_style[enable_props])
         self.total_prop.setEnabled(enable_props)
-        self.total_prop.setStyleSheet(self.qlineedit_style[enable_props])
+        # self.total_prop.setStyleSheet(self.qlineedit_style[enable_props])
         enable_manual = self.counts_button_group.checkedId()==2
         for k in self.type_manual.keys():
             self.type_manual[k].setEnabled(enable_manual)
-            self.type_manual[k].setStyleSheet(self.qlineedit_style[enable_manual])
+            # self.type_manual[k].setStyleSheet(self.qlineedit_style[enable_manual])
         self.total_manual.setEnabled(enable_manual)
-        self.total_manual.setStyleSheet(self.qlineedit_style[enable_manual])
+        # self.total_manual.setStyleSheet(self.qlineedit_style[enable_manual])
 
     def continue_to_cell_pos_cb(self):
         if self.counts_button_group.checkedId()==0: # use counts found in data file
@@ -378,8 +490,76 @@ class BioinfImport(QWidget):
                 # print(f"idx = {idx}, cell_type = {cell_type}")
                 self.cell_counts[idx] = int(self.type_manual[cell_type].text())
 
+        self.cell_types_to_place = self.cell_types_list_final
+        self.create_cell_type_scroll_area()
+        self.create_pos_scroll_area()
+
+        splitter = QSplitter()
+        splitter.addWidget(self.cell_type_scroll_area)
+        splitter.addWidget(self.pos_scroll_area)
+
+        # vert_splitter = QSplitter()
+        # vert_splitter.setOrientation(QtCore.Qt.Vertical)
+        # vert_splitter.addWidget(splitter)
+        # vert_splitter.addWidget(self.ics_plot_area)
+
+        vbox = QVBoxLayout()
+        vbox.addWidget(splitter)
+
+        qpushbutton_style_sheet = """
+            QPushButton:enabled {
+                background-color : lightgreen;
+            }
+            QPushButton:disabled {
+                background-color : grey;
+            }
+            """
+            
+        self.show_plot_button = QPushButton("Show plot window")
+        self.show_plot_button.setStyleSheet(qpushbutton_style_sheet)
+        self.show_plot_button.setEnabled(False)
+        self.show_plot_button.clicked.connect(self.show_plot_button_cb)
+        vbox.addWidget(self.show_plot_button)
+
+        self.window = BioinfImportWindow()
+        self.window.setLayout(vbox)
+
+        # hack to bring to foreground
+        self.window.hide()
+        self.window.show()
+
+        
+        print(f"self.cell_counts = {self.cell_counts}")
+            
+        # self.save_ics()
+    def show_plot_button_cb(self):
+        self.create_ics_plot_area()
+
+    def create_cell_type_scroll_area(self):
+        vbox = QVBoxLayout()
+        label = QLabel("Select from remaining cell types to jointly place:")
+        vbox.addWidget(label)
+
+        self.cell_type_button_group = QButtonGroup()
+        self.cell_type_button_group.setExclusive(False)
+        self.cell_type_button_group.buttonClicked.connect(self.cell_type_button_group_cb)
+        self.checkbox_dict = create_checkboxes_for_cell_types(vbox, self.cell_types_to_place)
+        for cbd in self.checkbox_dict.values():
+            self.cell_type_button_group.addButton(cbd)
+
+        cell_type_scroll_area_widget = QWidget()
+        cell_type_scroll_area_widget.setLayout(vbox)
+
+        self.cell_type_scroll_area = QScrollArea()
+        self.cell_type_scroll_area.setWidget(cell_type_scroll_area_widget)
+
+    def cell_type_button_group_cb(self):
+        self.show_plot_button.setEnabled(self.cell_type_button_group.checkedButton() is not None)
+
+    def create_pos_scroll_area(self):
         self.cell_pos_button_group = QButtonGroup()
         self.cell_pos_button_group.setExclusive(True)
+        # self.cell_pos_button_group.buttonClicked.connect(self.cell_pos_button_group_cb)
         
         button_width = 150
         button_height = 150
@@ -389,21 +569,18 @@ class BioinfImport(QWidget):
 
         tool_button_style_sheet = """
             QPushButton {
-                background-color : lightblue
+                background-color : lightblue;
+                color : black;
             }
             QPushButton::unchecked {
-                background-color : lightblue
+                background-color : lightblue;
             }
             QPushButton::checked {
-                background-color : black
+                background-color : black;
             }
             """
 
-        self.qpushbutton_style = {}
-        self.qpushbutton_style[False] = tool_button_style_sheet
-        self.qpushbutton_style[True] = "QPushButton {background-color: black; color: black;}"
-
-        label = QLabel("Select an option for how to start placing cells:")
+        label = QLabel("Select an option for how to place selected cell types:")
         label.setAlignment(QtCore.Qt.AlignLeft)
 
         master_vbox.addWidget(label)
@@ -416,6 +593,7 @@ class BioinfImport(QWidget):
         size = QtCore.QSize(icon_width, icon_height) 
         full_rectangle_button.setIconSize(size)
         full_rectangle_button.setCheckable(True)
+        full_rectangle_button.setChecked(True)
         full_rectangle_button.setStyleSheet(tool_button_style_sheet) 
         self.cell_pos_button_group.addButton(full_rectangle_button,0)
         vbox.addWidget(full_rectangle_button)
@@ -461,20 +639,16 @@ class BioinfImport(QWidget):
 
         hbox.addLayout(vbox)
 
-
         master_vbox.addLayout(hbox)
 
-        self.window = BioinfImportWindow()
-        self.window.setLayout(master_vbox)
+        pos_scroll_area_widget = QWidget()
+        pos_scroll_area_widget.setLayout(master_vbox)
 
-        # hack to bring to foreground
-        self.window.hide()
-        self.window.show()
+        self.pos_scroll_area = QScrollArea()
+        self.pos_scroll_area.setWidget(pos_scroll_area_widget)
 
-        
-        print(f"self.cell_counts = {self.cell_counts}")
-            
-        # self.save_ics()
+    def create_ics_plot_area(self):
+        self.ics_plot_area = BioinfImportPlotWindow(self, self.config_tab)
 
     def save_ics(self):
         # if len(self.csv_array) == 0:
@@ -636,12 +810,14 @@ class BioinfImport(QWidget):
         vbox = QVBoxLayout()
         label = QLabel(f"Select cell types to {s}:")
         vbox.addWidget(label)
-        self.checkbox_dict = {}
-        for ctn in self.remaining_cell_types_list_original:
-            self.checkbox_dict[ctn] = QCheckBox_custom(ctn)
-            self.checkbox_dict[ctn].setChecked(False)
-            self.checkbox_dict[ctn].setEnabled(True)
-            vbox.addWidget(self.checkbox_dict[ctn])
+        self.checkbox_dict = create_checkboxes_for_cell_types(vbox, self.remaining_cell_types_list_original)
+        # vbox.addWidget(label)
+        # self.checkbox_dict = {}
+        # for ctn in self.remaining_cell_types_list_original:
+        #     self.checkbox_dict[ctn] = QCheckBox_custom(ctn)
+        #     self.checkbox_dict[ctn].setChecked(False)
+        #     self.checkbox_dict[ctn].setEnabled(True)
+        #     vbox.addWidget(self.checkbox_dict[ctn])
 
         hbox = QHBoxLayout()
         continue_button = QPushButton("Continue")
@@ -713,3 +889,12 @@ class BioinfImport(QWidget):
         label_text += "</ul></html>"
         return QLabel(label_text)
     
+def create_checkboxes_for_cell_types(vbox, cell_types):
+    checkbox_dict = {}
+    for cell_type in cell_types:
+        checkbox_dict[cell_type] = QCheckBox_custom(cell_type)
+        checkbox_dict[cell_type].setChecked(False)
+        checkbox_dict[cell_type].setEnabled(True)
+        vbox.addWidget(checkbox_dict[cell_type])
+
+    return checkbox_dict
