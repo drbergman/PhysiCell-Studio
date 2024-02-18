@@ -29,6 +29,8 @@ from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import QFrame,QApplication,QWidget,QTabWidget,QFormLayout,QLineEdit, QHBoxLayout,QVBoxLayout,QRadioButton,QLabel,QCheckBox,QComboBox,QScrollArea,  QMainWindow,QGridLayout, QPushButton, QFileDialog, QMessageBox, QStackedWidget, QSplitter
 from PyQt5.QtGui import QPixmap
 
+from bioinf_import_tab import BioinfImport
+
 import numpy as np
 import matplotlib
 matplotlib.use('Qt5Agg')
@@ -164,10 +166,10 @@ class ICs(QWidget):
         # self.output_dir = "."   # for nanoHUB
 
         #-------------------------------------------
-        label_width = 110
-        value_width = 60
-        label_height = 20
-        units_width = 70
+        # label_width = 110
+        # value_width = 60
+        # label_height = 20
+        # units_width = 70
 
         self.combobox_stylesheet = """ 
             QComboBox{
@@ -187,6 +189,24 @@ class ICs(QWidget):
             }
             """
 
+
+        self.tab_widget = QTabWidget()
+        self.tab_widget.addTab(self.create_base_ics_tab(),"Base")
+        if self.bioinf_import_flag:
+            self.tab_widget.addTab(BioinfImport(self.config_tab, self),"Bioinformatics Import")
+
+        self.layout = QVBoxLayout(self)
+        self.layout.addWidget(self.tab_widget)
+        # if self.show_plot_range:
+        #     self.layout.addWidget(self.controls2)
+        # self.layout.addWidget(self.my_xmin)
+        # self.layout.addWidget(self.scroll_plot)
+        # self.layout.addWidget(splitter)
+        # self.layout.addStretch()
+
+        # self.create_figure()
+        
+    def create_base_ics_tab(self):
 
         self.scroll_plot = QScrollArea()  # might contain centralWidget
         # self.create_figure()
@@ -576,20 +596,10 @@ class ICs(QWidget):
         self.create_figure()
         self.scroll_plot.setWidget(self.canvas) # self.config_params = QWidget()
         splitter.addWidget(self.scroll_plot)
-        self.layout = QVBoxLayout(self)
+        
         self.show_plot_range = False
-        # if self.show_plot_range:
-        #     self.layout.addWidget(self.controls2)
-        # self.layout.addWidget(self.my_xmin)
-        # self.layout.addWidget(self.scroll_plot)
-        self.layout.addWidget(splitter)
-        # self.layout.addStretch()
 
-        # self.create_figure()
-        self.tab_widget.addTab(self.create_base_ics_tab(),"Base")
-        if self.bioinf_import_flag:
-            self.tab_widget.addTab(self.create_bioinf_import_tab(),"Bioinformatics Import")
-
+        return splitter
 
     def update_colors_list(self):
         if len(self.celldef_tab.celltypes_list) >= len(self.color_by_celltype):
