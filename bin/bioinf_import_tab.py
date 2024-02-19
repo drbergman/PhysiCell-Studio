@@ -197,27 +197,63 @@ class BioinfImportPlotWindow(QWidget):
         self.canvas.draw()
 
     def write_cell_pos(self):
+        self.constrain_preview_to_axes = False
+        print(f"self.main_window.checkbox_dict.keys() = {self.main_window.checkbox_dict.keys()}")
         for ctn in self.main_window.checkbox_dict.keys():
             if self.main_window.checkbox_dict[ctn].isChecked():
-                self.write_cell_pos(ctn)
+                print(f"writing for {ctn}")
+                self.write_cell_pos_single(ctn)
 
-    def write_cell_pos(self, ctn):
-        with open(self.full_fname, 'w') as f:
-            N = 
-            for i in range(N):
-                while True:
-                    x = self.plot_xmin + self.plot_dx * np.random.uniform()
-                    y = self.plot_xmin + self.plot_dx * np.random.uniform()
-                    if self.preview_patch.contains_point((x,y)):
-                        f.write(f"{x},{y},0,{ctn}\n")
-                        break
+    def write_cell_pos_single(self, ctn):
+        with open(self.main_window.full_fname, 'a') as f:
+            print(f"ctn = {ctn}")
+            print(f"self.main_window.cell_counts.keys() = {self.main_window.cell_counts.keys()}")
+            N = self.main_window.cell_counts[ctn]
+            if type(self.preview_patch) is Rectangle:
+                # first make sure the rectangle is all in bounds
+                if self.constrain_preview_to_axes is False:
+                    corners = self.preview_patch.get_corners()
+                    corners = np.array([[min(max(x,self.plot_xmin),self.plot_xmax),min(max(y,self.plot_ymin),self.plot_ymax)] for x,y in corners[[0,2]]])
+                    self.preview_patch.set_bounds(corners[0,0],corners[0,1],corners[1,0]-corners[0,0],corners[1,1]-corners[0,1])
+                    self.constrain_preview_to_axes = True
+                x0, y0 = self.preview_patch.get_xy()
+                width = self.preview_patch.get_width()
+                height = self.preview_patch.get_height()
+                for i in range(N):
+                    x = x0 + width * np.random.uniform()
+                    y = y0 + height * np.random.uniform()
+                    f.write(f"{x},{y},0,{ctn}\n")
+            elif type(self.preview_patch) is Circle:
+                x0, y0 = self.preview_patch.get_center()
+                r = self.preview_patch.get_radius()
+                while N > 0:
+                    th = 2*np.pi * np.random.uniform(size=N)
+                    d = r*np.sqrt(np.random.uniform(size=N))
+                    x = x0 + d * np.cos(th)
+                    y = y0 + d * np.sin(th)
+                    xy = [(a,b) for a,b in zip(x,y) if a>=self.plot_xmin and a<=self.plot_xmax and b>=self.plot_ymin and b<=self.plot_ymax]
+                    N -= len(xy)
+                    for c in xy:
+                        f.write(f"{c[0]},{c[1]},0,{ctn}\n")
+            else:
+                print("unknown patch")
+
+
+            # for i in range(N):
+            #     while True:
+            #         x = self.plot_xmin + self.plot_dx * np.random.uniform()
+            #         y = self.plot_xmin + self.plot_dx * np.random.uniform()
+            #         if self.preview_patch.contains_point((x,y)):
+            #             f.write(f"{x},{y},0,{ctn}\n")
+            #             break
+        self.main_window.checkbox_dict[ctn].setEnabled(False)
+        self.main_window.checkbox_dict[ctn].setChecked(False)
 
 
 
     def cancel_cb(self):
         self.hide() # this will work for now, but maybe a better way to handle closing the window?
         pass
-
 
 class QCheckBox_custom(QCheckBox):  # it's insane to have to do this!
     def __init__(self,name):
@@ -240,6 +276,10 @@ class QCheckBox_custom(QCheckBox):  # it's insane to have to do this!
                     height : 15px;
                     border-radius : 3px;
                 }
+                QCheckBox:disabled
+                {
+                    background-color:lightgray;
+                }
                 """
         self.setStyleSheet(checkbox_style)
 
@@ -250,6 +290,7 @@ class BioinfImport(QWidget):
         self.ics_tab = ics_tab
         self.default_time_units = "min"
 
+        self.full_fname = "./config/cells.csv"
         self.qlineedit_style_sheet = """
             QLineEdit:disabled {
                 background-color: rgb(200,200,200);
