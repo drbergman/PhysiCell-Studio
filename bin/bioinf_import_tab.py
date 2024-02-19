@@ -8,7 +8,12 @@ Rf. Credits.md
 import sys
 import logging
 import os
-import anndata
+try:
+    import anndata
+    HAVE_ANNDATA = True
+except:
+    HAVE_ANNDATA = False
+
 import copy
 import numpy as np
 import time
@@ -481,6 +486,17 @@ class QCheckBox_custom(QCheckBox):  # it's insane to have to do this!
 class BioinfImport(QWidget):
     def __init__(self, config_tab, celldef_tab, ics_tab):
         super().__init__()
+        if HAVE_ANNDATA is False:
+            vbox = QVBoxLayout()
+            label = QLabel("You do not have anndata installed. You need to install that in your environment:\npip install anndata\n\t---or---\nconda install anndata -c conda-forge")
+            label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+            vbox.addWidget(label)
+            base_widget = QWidget()
+            base_widget.setLayout(vbox)
+            self.layout = QVBoxLayout(self)  # leave this!
+            self.layout.addWidget(base_widget)
+            return
+
         self.config_tab = config_tab
         self.celldef_tab = celldef_tab
         self.ics_tab = ics_tab
