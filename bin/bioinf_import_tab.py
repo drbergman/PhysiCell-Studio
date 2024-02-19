@@ -13,7 +13,7 @@ import copy
 import numpy as np
 import time
 import matplotlib.pyplot as plt
-from matplotlib.patches import Circle, Patch, Rectangle
+from matplotlib.patches import Circle, Patch, Rectangle, Annulus
 from matplotlib.collections import PatchCollection
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 
@@ -57,14 +57,15 @@ class BioinfImportPlotWindow(QWidget):
         self.create_figure()
         vbox.addWidget(self.canvas)
 
-        self.sync_par_area()
 
         hbox = QHBoxLayout()
-        self.plot_cells_button = QPushButton("Plot")
+        self.plot_cells_button = QPushButton("Plot", enabled=True)
         self.plot_cells_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
         self.plot_cells_button.clicked.connect(self.plot_cell_pos)
         hbox.addWidget(self.plot_cells_button)
         
+        self.sync_par_area()
+
         self.cancel_button = QPushButton("Hide")
         self.cancel_button.setStyleSheet("QPushButton {background-color: white; color: black;}")
         self.cancel_button.clicked.connect(self.cancel_cb)
@@ -150,6 +151,22 @@ class BioinfImportPlotWindow(QWidget):
             for i in range(3,len(self.par_label)):
                 self.par_label[i].setText("")
             self.disc_plotter()
+
+        elif self.main_window.cell_pos_button_group.checkedId()==3:
+            self.par_label[0].setText("x0")
+            self.par_label[1].setText("y0")
+            self.par_label[2].setText("r0")
+            self.par_label[3].setText("r1")
+            for idx, pt in enumerate(self.par_text):
+                pt.setEnabled(idx <= 3)
+                try:
+                    pt.textChanged.disconnect()
+                except:
+                    pass
+                pt.textChanged.connect(self.annulus_plotter)
+            for i in range(3,len(self.par_label)):
+                self.par_label[i].setText("")
+            self.annulus_plotter()
     
     def everywhere_plotter(self):
         if self.preview_patch is None:
@@ -157,6 +174,7 @@ class BioinfImportPlotWindow(QWidget):
         else:
             self.preview_patch.set_bounds(self.plot_xmin,self.plot_ymin,self.plot_dx,self.plot_dy)
 
+        self.plot_cells_button.setEnabled(True)
         self.canvas.update()
         self.canvas.draw()
 
@@ -166,8 +184,10 @@ class BioinfImportPlotWindow(QWidget):
             if idx > 3:
                 break
             if pt.hasAcceptableInput() is False:
+                self.plot_cells_button.setEnabled(False)
                 return # do not update unless all are ready
             pars.append(float(pt.text()))
+        self.plot_cells_button.setEnabled(True)
         x0, y0, width, height = pars
         if self.preview_patch is None:
             self.preview_patch = self.ax0.add_patch(Rectangle((x0,y0),width,height,alpha=0.2))
@@ -183,8 +203,10 @@ class BioinfImportPlotWindow(QWidget):
             if idx > 2:
                 break
             if pt.hasAcceptableInput() is False:
+                self.plot_cells_button.setEnabled(False)
                 return # do not update unless all are ready
             pars.append(float(pt.text()))
+        self.plot_cells_button.setEnabled(True)
         x0, y0, r = pars
         if self.preview_patch is None:
             self.preview_patch = self.ax0.add_patch(Circle((x0,y0),r,alpha=0.2))
@@ -193,6 +215,34 @@ class BioinfImportPlotWindow(QWidget):
         
         self.canvas.update()
         self.canvas.draw()
+
+    def annulus_plotter(self):
+        pars = []
+        for idx, pt in enumerate(self.par_text):
+            if idx > 3:
+                break
+            if pt.hasAcceptableInput() is False:
+                self.plot_cells_button.setEnabled(False)
+                return # do not update unless all are ready
+            pars.append(float(pt.text()))
+        x0, y0, r0, r1 = pars
+        if r1 < r0 and self.preview_patch: # probably a way to impose this using validators, but that would require dynamically updating the validators...
+            self.preview_patch.remove()
+            self.canvas.update()
+            self.canvas.draw()
+            self.preview_patch = None
+            self.plot_cells_button.setEnabled(False)
+            return
+        self.plot_cells_button.setEnabled(True)
+            
+        if self.preview_patch is None:
+            self.preview_patch = self.ax0.add_patch(Annulus((x0,y0),r1,r1-r0,alpha=0.2))
+        else:
+            self.preview_patch.set(center=(x0,y0),radii=r1,width=r1-r0)
+        
+        self.canvas.update()
+        self.canvas.draw()
+        pass
 
     def create_figure(self):
         self.figure = plt.figure()
@@ -241,36 +291,68 @@ class BioinfImportPlotWindow(QWidget):
             x = x0 + width * np.random.uniform(size=(N,1))
             y = y0 + height * np.random.uniform(size=(N,1))
             z = np.zeros((N,1))
-            new_pos = np.concatenate((x,y,z),axis=1)
-            self.csv_array[0] = np.append(self.csv_array[0],new_pos,axis=0)
+            self.new_pos = np.concatenate((x,y,z),axis=1)
+            self.csv_array[0] = np.append(self.csv_array[0],self.new_pos,axis=0)
             self.csv_array[1] += N*[ctn]
         elif type(self.preview_patch) is Circle:
             x0, y0 = self.preview_patch.get_center()
             r = self.preview_patch.get_radius()
             i_start = 0
-            new_pos = np.empty((N,3))
+            self.new_pos = np.empty((N,3))
             while i_start < N:
-                th = 2*np.pi * np.random.uniform(size=N-i_start)
                 d = r*np.sqrt(np.random.uniform(size=N-i_start))
-                x = x0 + d * np.cos(th)
-                y = y0 + d * np.sin(th)
-                xy = np.array([[a,b] for a,b in zip(x,y) if a>=self.plot_xmin and a<=self.plot_xmax and b>=self.plot_ymin and b<=self.plot_ymax])
-                if len(xy)==0:
-                    continue
-                z = np.zeros((len(xy),1))
-                new_pos[range(i_start,i_start+xy.shape[0])] = np.append(xy,z,axis=1)
-                i_start = i_start + xy.shape[0]
-            self.csv_array[0] = np.append(self.csv_array[0],new_pos,axis=0)
+                i_start += self.annulus_sample(x0,y0,d,i_start)
+                # th = 2*np.pi * np.random.uniform(size=N-i_start)
+                # x = x0 + d * np.cos(th)
+                # y = y0 + d * np.sin(th)
+                # xy = np.array([[a,b] for a,b in zip(x,y) if a>=self.plot_xmin and a<=self.plot_xmax and b>=self.plot_ymin and b<=self.plot_ymax])
+                # if len(xy)==0:
+                #     continue
+                # z = np.zeros((len(xy),1))
+                # self.new_pos[range(i_start,i_start+xy.shape[0])] = np.append(xy,z,axis=1)
+                # i_start = i_start + xy.shape[0]
+            self.csv_array[0] = np.append(self.csv_array[0],self.new_pos,axis=0)
+            self.csv_array[1] += N*[ctn]
+        elif type(self.preview_patch) is Annulus:
+            x0, y0 = self.preview_patch.get_center()
+            r1 = self.preview_patch.get_radii()[0] # annulus is technically an ellipse, get_radii returns (semi-major,semi-minor) axis lengths, since I'm using circles, these will be the same
+            width = self.preview_patch.get_width()
+            r0 = r1 - width
+            i_start = 0
+            self.new_pos = np.empty((N,3))
+            while i_start < N:
+                d = np.sqrt(r0*r0 + (r1*r1-r0*r0)*np.random.uniform(size=N-i_start))
+                i_start += self.annulus_sample(x0,y0,d,i_start)
+                # th = 2*np.pi * np.random.uniform(size=N-i_start)
+                # x = x0 + d * np.cos(th)
+                # y = y0 + d * np.sin(th)
+                # xy = np.array([[a,b] for a,b in zip(x,y) if a>=self.plot_xmin and a<=self.plot_xmax and b>=self.plot_ymin and b<=self.plot_ymax])
+                # if len(xy)==0:
+                #     continue
+                # z = np.zeros((len(xy),1))
+                # self.new_pos[range(i_start,i_start+xy.shape[0])] = np.append(xy,z,axis=1)
+                # i_start = i_start + xy.shape[0]
+            self.csv_array[0] = np.append(self.csv_array[0],self.new_pos,axis=0)
             self.csv_array[1] += N*[ctn]
 
         else:
             print("unknown patch")
 
-        self.circles(new_pos, s=8., color=self.color_by_celltype[ctn], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
+        self.circles(self.new_pos, s=8., color=self.color_by_celltype[ctn], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
 
         self.main_window.checkbox_dict[ctn].setEnabled(False)
         self.main_window.checkbox_dict[ctn].setChecked(False)
 
+    def annulus_sample(self,x0,y0,d,i_start):
+        th = 2*np.pi * np.random.uniform(size=len(d))
+        x = x0 + d * np.cos(th)
+        y = y0 + d * np.sin(th)
+        xy = np.array([[a,b] for a,b in zip(x,y) if a>=self.plot_xmin and a<=self.plot_xmax and b>=self.plot_ymin and b<=self.plot_ymax])
+        if len(xy)==0:
+            return
+        z = np.zeros((len(xy),1))
+        self.new_pos[range(i_start,i_start+xy.shape[0])] = np.append(xy,z,axis=1)
+        return xy.shape[0]
 
     def circles(self, pos, s, c='b', vmin=None, vmax=None, **kwargs):
         """
@@ -849,6 +931,23 @@ class BioinfImport(QWidget):
         vbox.addWidget(disc_button)
 
         label = QLabel("Disc")
+        label.setFixedWidth(button_width)
+        label.setAlignment(QtCore.Qt.AlignCenter)
+        vbox.addWidget(label)
+
+        hbox.addLayout(vbox)
+
+        vbox = QVBoxLayout()
+        annulus_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/annulus.svg"))
+        annulus_button.setFixedSize(button_width,button_height)
+        size = QtCore.QSize(icon_width, icon_height) 
+        annulus_button.setIconSize(size)
+        annulus_button.setCheckable(True)
+        annulus_button.setStyleSheet(tool_button_style_sheet) 
+        self.cell_pos_button_group.addButton(annulus_button,3)
+        vbox.addWidget(annulus_button)
+
+        label = QLabel("Annulus")
         label.setFixedWidth(button_width)
         label.setAlignment(QtCore.Qt.AlignCenter)
         vbox.addWidget(label)
