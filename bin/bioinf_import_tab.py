@@ -489,8 +489,8 @@ class BioinfImport(QWidget):
         if HAVE_ANNDATA is False:
             vbox = QVBoxLayout()
             s = "This tab allows the import of an anndata object to generate cell initial conditions."
-            s += "\nFor the ..."
-            s += "\nYou do not have anndata installed. You need to install that in your environment:\n\t1. pip install anndata\n---or---\n\t2. conda install anndata -c conda-forge"
+            s += "\nThis tab will read the adata.obs column selected for cell types and walk you through how to place them."
+            s += "\nHowever, you do not have anndata installed. You need to install that in your environment:\n\t1. pip install anndata\n---or---\n\t2. conda install anndata -c conda-forge"
             s += "\n\nAfter installing, restart studio."
             label = QLabel(s)
             label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
