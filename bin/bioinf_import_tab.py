@@ -354,7 +354,7 @@ class BioinfImportPlotWindow(QWidget):
         y = y0 + d * np.sin(th)
         xy = np.array([[a,b] for a,b in zip(x,y) if a>=self.plot_xmin and a<=self.plot_xmax and b>=self.plot_ymin and b<=self.plot_ymax])
         if len(xy)==0:
-            return
+            return 0
         z = np.zeros((len(xy),1))
         self.new_pos[range(i_start,i_start+xy.shape[0])] = np.append(xy,z,axis=1)
         return xy.shape[0]
