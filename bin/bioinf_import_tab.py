@@ -53,10 +53,10 @@ class BioinfImportPlotWindow(QWidget):
         self.sync_par_area()
 
         hbox = QHBoxLayout()
-        self.write_button = QPushButton("OK")
-        self.write_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
-        self.write_button.clicked.connect(self.write_cell_pos)
-        hbox.addWidget(self.write_button)
+        self.plot_cells_button = QPushButton("Plot")
+        self.plot_cells_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
+        self.plot_cells_button.clicked.connect(self.plot_cell_pos)
+        hbox.addWidget(self.plot_cells_button)
         
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.setStyleSheet("QPushButton {background-color: red; color: black;}")
@@ -64,6 +64,11 @@ class BioinfImportPlotWindow(QWidget):
         hbox.addWidget(self.cancel_button)
 
         vbox.addLayout(hbox)
+
+        self.finish_button = QPushButton("Finish")
+        self.plot_cells_button.setStyleSheet(self.main_window.qpushbutton_style_sheet)
+        self.plot_cells_button.clicked.connect(self.finish_cell_pos)
+        vbox.addWidget(self.finish_button)
 
         self.setLayout(vbox)
         self.hide()
@@ -196,56 +201,58 @@ class BioinfImportPlotWindow(QWidget):
         self.canvas.update()
         self.canvas.draw()
 
-    def write_cell_pos(self):
+    def plot_cell_pos(self):
         self.constrain_preview_to_axes = False
         print(f"self.main_window.checkbox_dict.keys() = {self.main_window.checkbox_dict.keys()}")
         for ctn in self.main_window.checkbox_dict.keys():
             if self.main_window.checkbox_dict[ctn].isChecked():
                 print(f"writing for {ctn}")
-                self.write_cell_pos_single(ctn)
+                self.plot_cell_pos_single(ctn)
+        for b in self.main_window.checkbox_dict.values():
+            if b.isEnabled() is True:
+                return
+        # If control passes here, then all the buttons are disabled and the plotting is done
+        self.
 
-    def write_cell_pos_single(self, ctn):
-        with open(self.main_window.full_fname, 'a') as f:
-            print(f"ctn = {ctn}")
-            print(f"self.main_window.cell_counts.keys() = {self.main_window.cell_counts.keys()}")
-            N = self.main_window.cell_counts[ctn]
-            if type(self.preview_patch) is Rectangle:
-                # first make sure the rectangle is all in bounds
-                if self.constrain_preview_to_axes is False:
-                    corners = self.preview_patch.get_corners()
-                    corners = np.array([[min(max(x,self.plot_xmin),self.plot_xmax),min(max(y,self.plot_ymin),self.plot_ymax)] for x,y in corners[[0,2]]])
-                    self.preview_patch.set_bounds(corners[0,0],corners[0,1],corners[1,0]-corners[0,0],corners[1,1]-corners[0,1])
-                    self.constrain_preview_to_axes = True
-                x0, y0 = self.preview_patch.get_xy()
-                width = self.preview_patch.get_width()
-                height = self.preview_patch.get_height()
-                for i in range(N):
-                    x = x0 + width * np.random.uniform()
-                    y = y0 + height * np.random.uniform()
-                    f.write(f"{x},{y},0,{ctn}\n")
-            elif type(self.preview_patch) is Circle:
-                x0, y0 = self.preview_patch.get_center()
-                r = self.preview_patch.get_radius()
-                while N > 0:
-                    th = 2*np.pi * np.random.uniform(size=N)
-                    d = r*np.sqrt(np.random.uniform(size=N))
-                    x = x0 + d * np.cos(th)
-                    y = y0 + d * np.sin(th)
-                    xy = [(a,b) for a,b in zip(x,y) if a>=self.plot_xmin and a<=self.plot_xmax and b>=self.plot_ymin and b<=self.plot_ymax]
-                    N -= len(xy)
-                    for c in xy:
-                        f.write(f"{c[0]},{c[1]},0,{ctn}\n")
-            else:
-                print("unknown patch")
+    def plot_cell_pos_single(self, ctn):
+        print(f"ctn = {ctn}")
+        print(f"self.main_window.cell_counts.keys() = {self.main_window.cell_counts.keys()}")
+        N = self.main_window.cell_counts[ctn]
+        if type(self.preview_patch) is Rectangle:
+            # first make sure the rectangle is all in bounds
+            if self.constrain_preview_to_axes is False:
+                corners = self.preview_patch.get_corners()
+                corners = np.array([[min(max(x,self.plot_xmin),self.plot_xmax),min(max(y,self.plot_ymin),self.plot_ymax)] for x,y in corners[[0,2]]])
+                self.preview_patch.set_bounds(corners[0,0],corners[0,1],corners[1,0]-corners[0,0],corners[1,1]-corners[0,1])
+                self.constrain_preview_to_axes = True
+            x0, y0 = self.preview_patch.get_xy()
+            width = self.preview_patch.get_width()
+            height = self.preview_patch.get_height()
+            x = x0 + width * np.random.uniform(size=(N,1))
+            y = y0 + height * np.random.uniform(size=(N,1))
+            z = np.zeros((N,1))
+            self.csv_array[0] = np.append(self.csv_array[0],np.append(x,y,z,axis=1),axis=0)
+            self.csv_array[1] += N*[ctn]
+        elif type(self.preview_patch) is Circle:
+            x0, y0 = self.preview_patch.get_center()
+            r = self.preview_patch.get_radius()
+            i_start = 0
+            new_pos = np.empty((N,3))
+            while i_start < N:
+                th = 2*np.pi * np.random.uniform(size=N)
+                d = r*np.sqrt(np.random.uniform(size=N))
+                x = x0 + d * np.cos(th)
+                y = y0 + d * np.sin(th)
+                xy = np.array([[a,b] for a,b in zip(x,y) if a>=self.plot_xmin and a<=self.plot_xmax and b>=self.plot_ymin and b<=self.plot_ymax])
+                z = np.zeros((N,1))
+                new_pos[range(i_start,i_start+xy.shape[0])] = np.append(xy,z,axis=1)
+                i_start = i_start + xy.shape[0]
+            self.csv_array[0] = np.append(self.csv_array[0],new_pos,axis=0)
+            self.csv_array[1] += N*[ctn]
 
+        else:
+            print("unknown patch")
 
-            # for i in range(N):
-            #     while True:
-            #         x = self.plot_xmin + self.plot_dx * np.random.uniform()
-            #         y = self.plot_xmin + self.plot_dx * np.random.uniform()
-            #         if self.preview_patch.contains_point((x,y)):
-            #             f.write(f"{x},{y},0,{ctn}\n")
-            #             break
         self.main_window.checkbox_dict[ctn].setEnabled(False)
         self.main_window.checkbox_dict[ctn].setChecked(False)
 
@@ -254,6 +261,10 @@ class BioinfImportPlotWindow(QWidget):
     def cancel_cb(self):
         self.hide() # this will work for now, but maybe a better way to handle closing the window?
         pass
+
+    def finish_button(self):
+        with open("./config/cells.csv","a") as f:
+            pass
 
 class QCheckBox_custom(QCheckBox):  # it's insane to have to do this!
     def __init__(self,name):
@@ -607,7 +618,7 @@ class BioinfImport(QWidget):
         vbox = QVBoxLayout()
         vbox.addWidget(splitter)
 
-        qpushbutton_style_sheet = """
+        self.qpushbutton_style_sheet = """
             QPushButton:enabled {
                 background-color : lightgreen;
             }
@@ -617,7 +628,7 @@ class BioinfImport(QWidget):
             """
             
         self.show_plot_button = QPushButton("Show plot window")
-        self.show_plot_button.setStyleSheet(qpushbutton_style_sheet)
+        self.show_plot_button.setStyleSheet(self.qpushbutton_style_sheet)
         self.show_plot_button.setEnabled(False)
         self.show_plot_button.clicked.connect(self.show_plot_button_cb)
         vbox.addWidget(self.show_plot_button)
