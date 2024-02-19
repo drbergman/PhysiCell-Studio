@@ -13,6 +13,7 @@ import copy
 import numpy as np
 import time
 import matplotlib.pyplot as plt
+from matplotlib.patches import Circle, Patch, Rectangle
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 
 from pathlib import Path
@@ -32,6 +33,15 @@ class BioinfImportPlotWindow(QWidget):
         super().__init__()
         self.main_window = main_window
         self.config_tab = config_tab
+        self.preview_patch = None
+
+        self.plot_xmin = float(self.config_tab.xmin.text())
+        self.plot_xmax = float(self.config_tab.xmax.text())
+        self.plot_dx = self.plot_xmax - self.plot_xmin
+        self.plot_ymin = float(self.config_tab.ymin.text())
+        self.plot_ymax = float(self.config_tab.ymax.text())
+        self.plot_dy = self.plot_ymax - self.plot_ymin
+
         vbox = QVBoxLayout()
        
         hbox = self.create_par_area()
@@ -39,6 +49,8 @@ class BioinfImportPlotWindow(QWidget):
 
         self.create_figure()
         vbox.addWidget(self.canvas)
+
+        self.sync_par_area()
 
         hbox = QHBoxLayout()
         self.write_button = QPushButton("OK")
@@ -80,15 +92,25 @@ class BioinfImportPlotWindow(QWidget):
         for i in range(2,len(self.par_text)):
             self.par_text[i].setValidator(pos_par_validator)
 
+        return hbox
+    
+    def sync_par_area(self):
+        if self.preview_patch is not None:
+            self.preview_patch.remove()
+            self.canvas.update()
+            self.canvas.draw()
+            self.preview_patch = None
+
         if self.main_window.cell_pos_button_group.checkedId()==0:
             for pt in self.par_text:
                 pt.setEnabled(False)
             for pl in self.par_label:
                 pl.setText("")
+            self.everywhere_plotter()
 
         elif self.main_window.cell_pos_button_group.checkedId()==1:
-            self.par_label[0].setText("x0")
-            self.par_label[1].setText("y0")
+            self.par_label[0].setText("x0 (left)")
+            self.par_label[1].setText("y0 (bottom)")
             self.par_label[2].setText("width")
             self.par_label[3].setText("height")
             for idx, pt in enumerate(self.par_text):
@@ -100,6 +122,7 @@ class BioinfImportPlotWindow(QWidget):
                 pt.textChanged.connect(self.rectangle_plotter)
             for i in range(4,len(self.par_label)):
                 self.par_label[i].setText("")
+            self.rectangle_plotter()
 
         elif self.main_window.cell_pos_button_group.checkedId()==2:
             self.par_label[0].setText("x0")
@@ -114,9 +137,17 @@ class BioinfImportPlotWindow(QWidget):
                 pt.textChanged.connect(self.disc_plotter)
             for i in range(3,len(self.par_label)):
                 self.par_label[i].setText("")
-
-        return hbox
+            self.disc_plotter()
     
+    def everywhere_plotter(self):
+        if self.preview_patch is None:
+            self.preview_patch = self.ax0.add_patch(Rectangle((self.plot_xmin,self.plot_ymin),self.plot_dx,self.plot_dy,alpha=0.2))
+        else:
+            self.preview_patch.set_bounds(self.plot_xmin,self.plot_ymin,self.plot_dx,self.plot_dy)
+
+        self.canvas.update()
+        self.canvas.draw()
+
     def rectangle_plotter(self):
         pars = []
         for idx, pt in enumerate(self.par_text):
@@ -126,12 +157,28 @@ class BioinfImportPlotWindow(QWidget):
                 return # do not update unless all are ready
             pars.append(float(pt.text()))
         x0, y0, width, height = pars
-        # x = [x0-0.5*width,x0+0.5*width,x0+0.5*width,x0-0.5*width,x0-0.5*width]
-        # y = [y0-0.5*height,y0-0.5*height,y0+0.5*height,y0+0.5*height,y0+0.5*height]
-        xy = np.array([[x0-0.5*width,x0+0.5*width,x0+0.5*width,x0-0.5*width],[y0-0.5*height,y0-0.5*height,y0+0.5*height,y0+0.5*height]]).T
-        print(f"xy = {xy}")
-        self.preview_region.set_xy(xy)
+        if self.preview_patch is None:
+            self.preview_patch = self.ax0.add_patch(Rectangle((x0,y0),width,height,alpha=0.2))
+        else:
+            self.preview_patch.set_bounds(x0,y0,width,height)
 
+        self.canvas.update()
+        self.canvas.draw()
+
+    def disc_plotter(self):
+        pars = []
+        for idx, pt in enumerate(self.par_text):
+            if idx > 2:
+                break
+            if pt.hasAcceptableInput() is False:
+                return # do not update unless all are ready
+            pars.append(float(pt.text()))
+        x0, y0, r = pars
+        if self.preview_patch is None:
+            self.preview_patch = self.ax0.add_patch(Circle((x0,y0),r,alpha=0.2))
+        else:
+            self.preview_patch.set(center=(x0,y0),radius=r)
+        
         self.canvas.update()
         self.canvas.draw()
 
@@ -142,18 +189,30 @@ class BioinfImportPlotWindow(QWidget):
 
         self.ax0 = self.figure.add_subplot(111, adjustable='box')
 
-        self.ax0.set_xlim(self.config_tab.xmin.text(), self.config_tab.xmax.text())
-        self.ax0.set_ylim(self.config_tab.ymin.text(), self.config_tab.ymax.text())
+        self.ax0.set_xlim(self.plot_xmin, self.plot_xmax)
+        self.ax0.set_ylim(self.plot_ymin, self.plot_ymax)
         self.ax0.set_aspect(1.0)
-
-        self.preview_region = self.ax0.fill([],[],transform=self.ax0.transData)[0]
 
         self.canvas.update()
         self.canvas.draw()
 
     def write_cell_pos(self):
-        self.hide() # this will work for now, but maybe a better way to handle closing the window?
-        pass
+        for ctn in self.main_window.checkbox_dict.keys():
+            if self.main_window.checkbox_dict[ctn].isChecked():
+                self.write_cell_pos(ctn)
+
+    def write_cell_pos(self, ctn):
+        with open(self.full_fname, 'w') as f:
+            N = 
+            for i in range(N):
+                while True:
+                    x = self.plot_xmin + self.plot_dx * np.random.uniform()
+                    y = self.plot_xmin + self.plot_dx * np.random.uniform()
+                    if self.preview_patch.contains_point((x,y)):
+                        f.write(f"{x},{y},0,{ctn}\n")
+                        break
+
+
 
     def cancel_cb(self):
         self.hide() # this will work for now, but maybe a better way to handle closing the window?
@@ -484,13 +543,14 @@ class BioinfImport(QWidget):
         elif self.counts_button_group.checkedId()==1: # use counts found in data file
             for idx, cell_type in enumerate(self.cell_types_list_final):
                 # print(f"idx = {idx}, cell_type = {cell_type}")
-                self.cell_counts[idx] = int(self.type_prop[cell_type].text())
+                self.cell_counts[cell_type] = int(self.type_prop[cell_type].text())
         elif self.counts_button_group.checkedId()==2:
             for idx, cell_type in enumerate(self.cell_types_list_final):
                 # print(f"idx = {idx}, cell_type = {cell_type}")
-                self.cell_counts[idx] = int(self.type_manual[cell_type].text())
+                self.cell_counts[cell_type] = int(self.type_manual[cell_type].text())
 
         self.cell_types_to_place = self.cell_types_list_final
+        self.ics_plot_area = None
         self.create_cell_type_scroll_area()
         self.create_pos_scroll_area()
 
@@ -527,11 +587,11 @@ class BioinfImport(QWidget):
         # hack to bring to foreground
         self.window.hide()
         self.window.show()
-
         
         print(f"self.cell_counts = {self.cell_counts}")
             
         # self.save_ics()
+
     def show_plot_button_cb(self):
         self.create_ics_plot_area()
 
@@ -556,10 +616,15 @@ class BioinfImport(QWidget):
     def cell_type_button_group_cb(self):
         self.show_plot_button.setEnabled(self.cell_type_button_group.checkedButton() is not None)
 
+    def cell_pos_button_group_cb(self):
+        if self.ics_plot_area:
+            print("syncing...")
+            self.ics_plot_area.sync_par_area()
+        
     def create_pos_scroll_area(self):
         self.cell_pos_button_group = QButtonGroup()
         self.cell_pos_button_group.setExclusive(True)
-        # self.cell_pos_button_group.buttonClicked.connect(self.cell_pos_button_group_cb)
+        self.cell_pos_button_group.idToggled.connect(self.cell_pos_button_group_cb)
         
         button_width = 150
         button_height = 150
