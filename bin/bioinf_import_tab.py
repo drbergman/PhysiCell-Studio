@@ -488,7 +488,11 @@ class BioinfImport(QWidget):
         super().__init__()
         if HAVE_ANNDATA is False:
             vbox = QVBoxLayout()
-            label = QLabel("You do not have anndata installed. You need to install that in your environment:\npip install anndata\n\t---or---\nconda install anndata -c conda-forge")
+            s = "This tab allows the import of an anndata object to generate cell initial conditions."
+            s += "\nFor the ..."
+            s += "\nYou do not have anndata installed. You need to install that in your environment:\n\t1. pip install anndata\n---or---\n\t2. conda install anndata -c conda-forge"
+            s += "\n\nAfter installing, restart studio."
+            label = QLabel(s)
             label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
             vbox.addWidget(label)
             base_widget = QWidget()
@@ -537,7 +541,7 @@ class BioinfImport(QWidget):
         self.layout.addWidget(base_widget)
 
     def import_cb(self):
-        file_path = "/Users/danielbergman/seq-to-ic-test/data/pbmc3k_clustered.h5ad"
+        file_path = "./data/pbmc3k_clustered.h5ad"
         self.adata = anndata.read_h5ad(file_path)
 
         print("------------anndata object loaded-------------")
