@@ -541,7 +541,9 @@ class BioinfImport(QWidget):
         self.layout.addWidget(base_widget)
 
     def import_cb(self):
-        file_path = "./data/pbmc3k_clustered.h5ad"
+        full_file_path = QFileDialog.getOpenFileName(self,'',".")
+        file_path = full_file_path[0]
+        # file_path = "./data/pbmc3k_clustered.h5ad"
         self.adata = anndata.read_h5ad(file_path)
 
         print("------------anndata object loaded-------------")
