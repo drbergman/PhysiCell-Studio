@@ -191,9 +191,9 @@ class ICs(QWidget):
 
 
         self.tab_widget = QTabWidget()
-        self.tab_widget.addTab(self.create_base_ics_tab(),"Base")
+        self.base_tab_id = self.tab_widget.addTab(self.create_base_ics_tab(),"Base")
         if self.bioinf_import_flag:
-            self.tab_widget.addTab(BioinfImport(self.config_tab, self),"Bioinformatics Import")
+            self.tab_widget.addTab(BioinfImport(self.config_tab, self.celldef_tab, self),"Bioinformatics Import")
 
         self.layout = QVBoxLayout(self)
         self.layout.addWidget(self.tab_widget)
@@ -1832,6 +1832,10 @@ class ICs(QWidget):
         # filePath = QFileDialog.getOpenFileName(self,'',".",'*.xml')
         filePath = QFileDialog.getOpenFileName(self,'',".")
         full_path_rules_name = filePath[0]
+
+        self.import_from_file(full_path_rules_name)
+
+    def import_from_file(self, full_path_rules_name):
         # logging.debug(f'\nimport_cb():  full_path_rules_name ={full_path_rules_name}')
         print(f'\nimport_cb():  full_path_rules_name ={full_path_rules_name}')
         basename = os.path.basename(full_path_rules_name)
@@ -1840,7 +1844,7 @@ class ICs(QWidget):
         print(f'import_cb():  dirname ={dirname}')
         # if (len(full_path_rules_name) > 0) and Path(full_path_rules_name):
         if (len(full_path_rules_name) > 0) and Path(full_path_rules_name).is_file():
-            print("import_cb():  filePath is valid")
+            print("import_from_file(full_path_rules_name):  filePath is valid")
             # logging.debug(f'     filePath is valid')
             print("len(full_path_rules_name) = ", len(full_path_rules_name) )
 

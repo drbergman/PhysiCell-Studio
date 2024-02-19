@@ -14,6 +14,7 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Patch, Rectangle
+from matplotlib.collections import PatchCollection
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 
 from pathlib import Path
@@ -34,6 +35,12 @@ class BioinfImportPlotWindow(QWidget):
         self.main_window = main_window
         self.config_tab = config_tab
         self.preview_patch = None
+        self.csv_array = [np.empty((0,3)),[]]
+
+        self.alpha_value = 1.0
+        value = ['gray','red','yellow','green','blue','magenta','orange','lime','cyan','hotpink','peachpuff','darkseagreen','lightskyblue']
+        value = value[0:len(self.main_window.cell_types_list_final)]
+        self.color_by_celltype = dict(zip(self.main_window.cell_types_list_final, value))
 
         self.plot_xmin = float(self.config_tab.xmin.text())
         self.plot_xmax = float(self.config_tab.xmax.text())
@@ -58,16 +65,16 @@ class BioinfImportPlotWindow(QWidget):
         self.plot_cells_button.clicked.connect(self.plot_cell_pos)
         hbox.addWidget(self.plot_cells_button)
         
-        self.cancel_button = QPushButton("Cancel")
-        self.cancel_button.setStyleSheet("QPushButton {background-color: red; color: black;}")
+        self.cancel_button = QPushButton("Hide")
+        self.cancel_button.setStyleSheet("QPushButton {background-color: white; color: black;}")
         self.cancel_button.clicked.connect(self.cancel_cb)
         hbox.addWidget(self.cancel_button)
 
         vbox.addLayout(hbox)
 
-        self.finish_button = QPushButton("Finish")
-        self.plot_cells_button.setStyleSheet(self.main_window.qpushbutton_style_sheet)
-        self.plot_cells_button.clicked.connect(self.finish_cell_pos)
+        self.finish_button = QPushButton("Finish",enabled=False)
+        self.finish_button.setStyleSheet(self.main_window.qpushbutton_style_sheet)
+        self.finish_button.clicked.connect(self.finish_button_cb)
         vbox.addWidget(self.finish_button)
 
         self.setLayout(vbox)
@@ -203,20 +210,23 @@ class BioinfImportPlotWindow(QWidget):
 
     def plot_cell_pos(self):
         self.constrain_preview_to_axes = False
-        print(f"self.main_window.checkbox_dict.keys() = {self.main_window.checkbox_dict.keys()}")
+        # print(f"self.main_window.checkbox_dict.keys() = {self.main_window.checkbox_dict.keys()}")
         for ctn in self.main_window.checkbox_dict.keys():
             if self.main_window.checkbox_dict[ctn].isChecked():
                 print(f"writing for {ctn}")
                 self.plot_cell_pos_single(ctn)
+        self.canvas.update()
+        self.canvas.draw()
+
         for b in self.main_window.checkbox_dict.values():
             if b.isEnabled() is True:
                 return
         # If control passes here, then all the buttons are disabled and the plotting is done
-        self.
+        self.finish_button.setEnabled(True)
 
     def plot_cell_pos_single(self, ctn):
-        print(f"ctn = {ctn}")
-        print(f"self.main_window.cell_counts.keys() = {self.main_window.cell_counts.keys()}")
+        # print(f"ctn = {ctn}")
+        # print(f"self.main_window.cell_counts.keys() = {self.main_window.cell_counts.keys()}")
         N = self.main_window.cell_counts[ctn]
         if type(self.preview_patch) is Rectangle:
             # first make sure the rectangle is all in bounds
@@ -231,7 +241,8 @@ class BioinfImportPlotWindow(QWidget):
             x = x0 + width * np.random.uniform(size=(N,1))
             y = y0 + height * np.random.uniform(size=(N,1))
             z = np.zeros((N,1))
-            self.csv_array[0] = np.append(self.csv_array[0],np.append(x,y,z,axis=1),axis=0)
+            new_pos = np.concatenate((x,y,z),axis=1)
+            self.csv_array[0] = np.append(self.csv_array[0],new_pos,axis=0)
             self.csv_array[1] += N*[ctn]
         elif type(self.preview_patch) is Circle:
             x0, y0 = self.preview_patch.get_center()
@@ -239,12 +250,14 @@ class BioinfImportPlotWindow(QWidget):
             i_start = 0
             new_pos = np.empty((N,3))
             while i_start < N:
-                th = 2*np.pi * np.random.uniform(size=N)
-                d = r*np.sqrt(np.random.uniform(size=N))
+                th = 2*np.pi * np.random.uniform(size=N-i_start)
+                d = r*np.sqrt(np.random.uniform(size=N-i_start))
                 x = x0 + d * np.cos(th)
                 y = y0 + d * np.sin(th)
                 xy = np.array([[a,b] for a,b in zip(x,y) if a>=self.plot_xmin and a<=self.plot_xmax and b>=self.plot_ymin and b<=self.plot_ymax])
-                z = np.zeros((N,1))
+                if len(xy)==0:
+                    continue
+                z = np.zeros((len(xy),1))
                 new_pos[range(i_start,i_start+xy.shape[0])] = np.append(xy,z,axis=1)
                 i_start = i_start + xy.shape[0]
             self.csv_array[0] = np.append(self.csv_array[0],new_pos,axis=0)
@@ -253,18 +266,107 @@ class BioinfImportPlotWindow(QWidget):
         else:
             print("unknown patch")
 
+        self.circles(new_pos, s=8., color=self.color_by_celltype[ctn], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
+
         self.main_window.checkbox_dict[ctn].setEnabled(False)
         self.main_window.checkbox_dict[ctn].setChecked(False)
 
 
+    def circles(self, pos, s, c='b', vmin=None, vmax=None, **kwargs):
+        """
+        See https://gist.github.com/syrte/592a062c562cd2a98a83 
+
+        Make a scatter plot of circles. 
+        Similar to plt.scatter, but the size of circles are in data scale.
+        Parameters
+        ----------
+        x, y : scalar or array_like, shape (n, )
+            Input data
+        s : scalar or array_like, shape (n, ) 
+            Radius of circles.
+        c : color or sequence of color, optional, default : 'b'
+            `c` can be a single color format string, or a sequence of color
+            specifications of length `N`, or a sequence of `N` numbers to be
+            mapped to colors using the `cmap` and `norm` specified via kwargs.
+            Note that `c` should not be a single numeric RGB or RGBA sequence 
+            because that is indistinguishable from an array of values
+            to be colormapped. (If you insist, use `color` instead.)  
+            `c` can be a 2-D array in which the rows are RGB or RGBA, however. 
+        vmin, vmax : scalar, optional, default: None
+            `vmin` and `vmax` are used in conjunction with `norm` to normalize
+            luminance data.  If either are `None`, the min and max of the
+            color array is used.
+        kwargs : `~matplotlib.collections.Collection` properties
+            Eg. alpha, edgecolor(ec), facecolor(fc), linewidth(lw), linestyle(ls), 
+            norm, cmap, transform, etc.
+        Returns
+        -------
+        paths : `~matplotlib.collections.PathCollection`
+        Examples
+        --------
+        a = np.arange(11)
+        circles(a, a, s=a*0.2, c=a, alpha=0.5, ec='none')
+        plt.colorbar()
+        License
+        --------
+        This code is under [The BSD 3-Clause License]
+        (http://opensource.org/licenses/BSD-3-Clause)
+        """
+        x, y, _ = pos.T
+        if np.isscalar(c):
+            kwargs.setdefault('color', c)
+            c = None
+
+        if 'fc' in kwargs:
+            kwargs.setdefault('facecolor', kwargs.pop('fc'))
+        if 'ec' in kwargs:
+            kwargs.setdefault('edgecolor', kwargs.pop('ec'))
+        if 'ls' in kwargs:
+            kwargs.setdefault('linestyle', kwargs.pop('ls'))
+        if 'lw' in kwargs:
+            kwargs.setdefault('linewidth', kwargs.pop('lw'))
+        # You can set `facecolor` with an array for each patch,
+        # while you can only set `facecolors` with a value for all.
+
+        zipped = np.broadcast(x, y, s)
+        patches = [Circle((x_, y_), s_)
+                for x_, y_, s_ in zipped]
+        collection = PatchCollection(patches, **kwargs)
+        if c is not None:
+            c = np.broadcast_to(c, zipped.shape).ravel()
+            collection.set_array(c)
+            collection.set_clim(vmin, vmax)
+
+        # ax = plt.gca()
+        # ax.add_collection(collection)
+        # ax.autoscale_view()
+        self.ax0.add_collection(collection)
+        self.ax0.autoscale_view()
+        # plt.draw_if_interactive()
+        if c is not None:
+            # plt.sci(collection)
+            self.ax0.sci(collection)
+        # return collection
 
     def cancel_cb(self):
         self.hide() # this will work for now, but maybe a better way to handle closing the window?
         pass
 
-    def finish_button(self):
-        with open("./config/cells.csv","a") as f:
-            pass
+    def finish_button_cb(self):
+        for cell_type in self.main_window.cell_types_list_final:
+            if cell_type in self.main_window.celldef_tab.celltypes_list:
+                print(f"BioinfImportPlotWindow: {cell_type} found in current list of cell types. Not appending this...")
+            else:
+                self.main_window.celldef_tab.new_cell_def_named(cell_type)
+        with open(self.main_window.full_fname, 'w') as f:
+            f.write('x,y,z,type\n')
+            for pos, ctn in zip(self.csv_array[0],self.csv_array[1]):
+                f.write(f'{pos[0]},{pos[1]},{pos[2]},{ctn}\n')
+        self.main_window.ics_tab.import_from_file(self.main_window.full_fname)
+        self.main_window.ics_tab.tab_widget.setCurrentIndex(self.main_window.ics_tab.base_tab_id)
+        self.close()
+        self.main_window.window.close()
+        print("BioinfImportWindow: Colors will likely change in the ICs tab due to previous cell types being present.")
 
 class QCheckBox_custom(QCheckBox):  # it's insane to have to do this!
     def __init__(self,name):
@@ -295,9 +397,10 @@ class QCheckBox_custom(QCheckBox):  # it's insane to have to do this!
         self.setStyleSheet(checkbox_style)
 
 class BioinfImport(QWidget):
-    def __init__(self, config_tab, ics_tab):
+    def __init__(self, config_tab, celldef_tab, ics_tab):
         super().__init__()
         self.config_tab = config_tab
+        self.celldef_tab = celldef_tab
         self.ics_tab = ics_tab
         self.default_time_units = "min"
 
@@ -474,15 +577,13 @@ class BioinfImport(QWidget):
             label.setFixedWidth(names_width)
             hbox.addWidget(label)
 
-            type_count = QLineEdit()
-            type_count.setEnabled(False)
+            type_count = QLineEdit(enabled=False)
             type_count.setText(str(self.cell_counts[cell_type]))
             type_count.setFixedWidth(counts_width)
             type_count.setStyleSheet(self.qlineedit_style_sheet)
             hbox.addWidget(type_count)
 
-            self.type_prop[cell_type] = QLineEdit()
-            self.type_prop[cell_type].setEnabled(False)
+            self.type_prop[cell_type] = QLineEdit(enabled=False)
             self.type_prop[cell_type].setText(str(self.cell_counts[cell_type]))
             self.type_prop[cell_type].setFixedWidth(props_width)
             self.type_prop[cell_type].setStyleSheet(self.qlineedit_style_sheet)
@@ -491,8 +592,7 @@ class BioinfImport(QWidget):
             self.type_prop[cell_type].textChanged.connect(self.prop_box_changed_cb)
             hbox.addWidget(self.type_prop[cell_type])
 
-            self.type_manual[cell_type] = QLineEdit()
-            self.type_manual[cell_type].setEnabled(False)
+            self.type_manual[cell_type] =QLineEdit(enabled=False)
             self.type_manual[cell_type].setText(str(self.cell_counts[cell_type]))
             self.type_manual[cell_type].setFixedWidth(manual_width)
             self.type_manual[cell_type].setStyleSheet(self.qlineedit_style_sheet)
@@ -507,15 +607,13 @@ class BioinfImport(QWidget):
         label.setFixedWidth(names_width)
         hbox.addWidget(label)
 
-        type_count = QLineEdit()
-        type_count.setEnabled(False)
+        type_count = QLineEdit(enabled=False)
         type_count.setText(str(len(self.cell_types_final)))
         type_count.setFixedWidth(counts_width)
         type_count.setStyleSheet(self.qlineedit_style_sheet)
         hbox.addWidget(type_count)
 
-        self.total_prop = QLineEdit()
-        self.total_prop.setEnabled(False)
+        self.total_prop = QLineEdit(enabled=False)
         self.total_prop.setText(str(len(self.cell_types_final)))
         self.total_prop.setFixedWidth(props_width)
         self.total_prop.setStyleSheet(self.qlineedit_style_sheet)
@@ -524,8 +622,7 @@ class BioinfImport(QWidget):
         self.total_prop.setObjectName("total_prop")
         hbox.addWidget(self.total_prop)
 
-        self.total_manual = QLineEdit()
-        self.total_manual.setEnabled(False)
+        self.total_manual = QLineEdit(enabled=False)
         self.total_manual.setText(str(len(self.cell_types_final)))
         self.total_manual.setFixedWidth(manual_width)
         self.total_manual.setStyleSheet(self.qlineedit_style_sheet)
@@ -627,9 +724,8 @@ class BioinfImport(QWidget):
             }
             """
             
-        self.show_plot_button = QPushButton("Show plot window")
+        self.show_plot_button = QPushButton("Show plot window",enabled=False)
         self.show_plot_button.setStyleSheet(self.qpushbutton_style_sheet)
-        self.show_plot_button.setEnabled(False)
         self.show_plot_button.clicked.connect(self.show_plot_button_cb)
         vbox.addWidget(self.show_plot_button)
 
@@ -645,7 +741,10 @@ class BioinfImport(QWidget):
         # self.save_ics()
 
     def show_plot_button_cb(self):
-        self.create_ics_plot_area()
+        if self.ics_plot_area is None:
+            self.create_ics_plot_area()
+        self.ics_plot_area.hide()
+        self.ics_plot_area.show()
 
     def create_cell_type_scroll_area(self):
         vbox = QVBoxLayout()
@@ -670,7 +769,7 @@ class BioinfImport(QWidget):
 
     def cell_pos_button_group_cb(self):
         if self.ics_plot_area:
-            print("syncing...")
+            # print("syncing...")
             self.ics_plot_area.sync_par_area()
         
     def create_pos_scroll_area(self):
