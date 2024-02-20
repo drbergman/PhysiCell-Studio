@@ -62,10 +62,9 @@ class BioinfImportPlotWindow(QWidget):
         self.create_figure()
         vbox.addWidget(self.canvas)
 
-
         hbox = QHBoxLayout()
         self.plot_cells_button = QPushButton("Plot", enabled=True)
-        self.plot_cells_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
+        self.plot_cells_button.setStyleSheet(self.main_window.qpushbutton_style_sheet)
         self.plot_cells_button.clicked.connect(self.plot_cell_pos)
         hbox.addWidget(self.plot_cells_button)
         
@@ -78,10 +77,18 @@ class BioinfImportPlotWindow(QWidget):
 
         vbox.addLayout(hbox)
 
-        self.finish_button = QPushButton("Finish",enabled=False)
-        self.finish_button.setStyleSheet(self.main_window.qpushbutton_style_sheet)
-        self.finish_button.clicked.connect(self.finish_button_cb)
-        vbox.addWidget(self.finish_button)
+        self.finish_write_button = QPushButton("Overwrite",enabled=False)
+        self.finish_write_button.setStyleSheet(self.main_window.qpushbutton_style_sheet)
+        self.finish_write_button.clicked.connect(self.finish_write_button_cb)
+
+        self.finish_append_button = QPushButton("Append",enabled=False)
+        self.finish_append_button.setStyleSheet(self.main_window.qpushbutton_style_sheet)
+        self.finish_append_button.clicked.connect(self.finish_append_button_cb)
+
+        hbox = QHBoxLayout()
+        hbox.addWidget(self.finish_write_button)
+        hbox.addWidget(self.finish_append_button)
+        vbox.addLayout(hbox)
 
         self.setLayout(vbox)
         self.hide()
@@ -169,7 +176,7 @@ class BioinfImportPlotWindow(QWidget):
                 except:
                     pass
                 pt.textChanged.connect(self.annulus_plotter)
-            for i in range(3,len(self.par_label)):
+            for i in range(4,len(self.par_label)):
                 self.par_label[i].setText("")
             self.annulus_plotter()
     
@@ -179,7 +186,8 @@ class BioinfImportPlotWindow(QWidget):
         else:
             self.preview_patch.set_bounds(self.plot_xmin,self.plot_ymin,self.plot_dx,self.plot_dy)
 
-        self.plot_cells_button.setEnabled(True)
+        # self.plot_cells_button.setEnabled(True)
+        self.plot_cells_button.setEnabled(self.main_window.is_any_cell_type_button_group_checked())
         self.canvas.update()
         self.canvas.draw()
 
@@ -192,12 +200,18 @@ class BioinfImportPlotWindow(QWidget):
                 self.plot_cells_button.setEnabled(False)
                 return # do not update unless all are ready
             pars.append(float(pt.text()))
-        self.plot_cells_button.setEnabled(True)
+        # self.plot_cells_button.setEnabled(True)
         x0, y0, width, height = pars
         if self.preview_patch is None:
             self.preview_patch = self.ax0.add_patch(Rectangle((x0,y0),width,height,alpha=0.2))
         else:
             self.preview_patch.set_bounds(x0,y0,width,height)
+
+        # check left edge of rect is left of right edge of domain, right edge of rect is right of left edge of domain (similar in y direction)
+        bval = (x0 < self.plot_xmax) and (x0+width > self.plot_xmin) and (y0 < self.plot_ymax) and (y0+height > self.plot_ymin) # make sure the rectangle intersects the domain with positive area
+
+        # self.plot_cells_button.setEnabled(True)
+        self.plot_cells_button.setEnabled(bval and self.main_window.is_any_cell_type_button_group_checked())
 
         self.canvas.update()
         self.canvas.draw()
@@ -211,16 +225,37 @@ class BioinfImportPlotWindow(QWidget):
                 self.plot_cells_button.setEnabled(False)
                 return # do not update unless all are ready
             pars.append(float(pt.text()))
-        self.plot_cells_button.setEnabled(True)
+        # self.plot_cells_button.setEnabled(True)
         x0, y0, r = pars
         if self.preview_patch is None:
             self.preview_patch = self.ax0.add_patch(Circle((x0,y0),r,alpha=0.2))
         else:
             self.preview_patch.set(center=(x0,y0),radius=r)
+
+        # check the disc intersects the domain in non-trivial manner
+        r2 = self.get_distance_to_domain(x0, y0)
+        bval = r2 < r*r # make sure the distance from center of Circle to domain is less than radius of circle
         
+        self.plot_cells_button.setEnabled(bval and self.main_window.is_any_cell_type_button_group_checked())
         self.canvas.update()
         self.canvas.draw()
 
+    def get_distance_to_domain(self, x0, y0):
+        if x0 < self.plot_xmin:
+            dx = self.plot_xmin - x0
+        elif x0 <= self.plot_xmax:
+            dx = 0
+        else:
+            dx = x0 - self.plot_xmax
+
+        if y0 < self.plot_ymin:
+            dy = self.plot_ymin - y0
+        elif y0 <= self.plot_ymax:
+            dy = 0
+        else:
+            dy = y0 - self.plot_ymax
+        return dx*dx + dy*dy
+    
     def annulus_plotter(self):
         pars = []
         for idx, pt in enumerate(self.par_text):
@@ -231,15 +266,23 @@ class BioinfImportPlotWindow(QWidget):
                 return # do not update unless all are ready
             pars.append(float(pt.text()))
         x0, y0, r0, r1 = pars
-        if r1 < r0 and self.preview_patch: # probably a way to impose this using validators, but that would require dynamically updating the validators...
-            self.preview_patch.remove()
-            self.canvas.update()
-            self.canvas.draw()
-            self.preview_patch = None
+        if r1 < r0:
+            if self.preview_patch: # probably a way to impose this using validators, but that would require dynamically updating the validators...
+                self.preview_patch.remove()
+                self.canvas.update()
+                self.canvas.draw()
+                self.preview_patch = None
             self.plot_cells_button.setEnabled(False)
             return
-        self.plot_cells_button.setEnabled(True)
-            
+        
+        r2 = self.get_distance_to_domain(x0,y0)
+        cr2 = self.get_circumscribing_radius(x0, y0)
+        # outer_radius_reaches_domain = r2 < r1*r1
+        # inner_radius_does_not_contain_entire_domain = cr2 > r0*r0
+        bval = (r2 < r1*r1) and (cr2 > r0*r0)
+
+        self.plot_cells_button.setEnabled(bval and self.main_window.is_any_cell_type_button_group_checked())
+
         if self.preview_patch is None:
             self.preview_patch = self.ax0.add_patch(Annulus((x0,y0),r1,r1-r0,alpha=0.2))
         else:
@@ -247,7 +290,17 @@ class BioinfImportPlotWindow(QWidget):
         
         self.canvas.update()
         self.canvas.draw()
-        pass
+
+    def get_circumscribing_radius(self,x0,y0):
+        if 2*x0 < self.plot_xmin + self.plot_xmax: # if left of midpoint
+            dx = self.plot_xmax - x0
+        else:
+            dx = x0 - self.plot_xmin
+        if 2*y0 < self.plot_ymin + self.plot_ymax: # if left of midpoint
+            dy = self.plot_ymax - y0
+        else:
+            dy = y0 - self.plot_ymin
+        return dx*dx + dy*dy
 
     def create_figure(self):
         self.figure = plt.figure()
@@ -273,11 +326,14 @@ class BioinfImportPlotWindow(QWidget):
         self.canvas.update()
         self.canvas.draw()
 
+        self.plot_cells_button.setEnabled(False)
+
         for b in self.main_window.checkbox_dict.values():
             if b.isEnabled() is True:
                 return
         # If control passes here, then all the buttons are disabled and the plotting is done
-        self.finish_button.setEnabled(True)
+        self.finish_write_button.setEnabled(True)
+        self.finish_append_button.setEnabled(True)
 
     def plot_cell_pos_single(self, ctn):
         # print(f"ctn = {ctn}")
@@ -439,16 +495,32 @@ class BioinfImportPlotWindow(QWidget):
         self.hide() # this will work for now, but maybe a better way to handle closing the window?
         pass
 
-    def finish_button_cb(self):
+    def finish_write_button_cb(self):
+        self.check_for_new_celldefs()
+        with open(self.main_window.full_fname, 'w') as f:
+            f.write('x,y,z,type\n')
+        self.add_cel_positions_to_file()
+
+    def finish_append_button_cb(self):
+        self.check_for_new_celldefs()
+        with open(self.main_window.full_fname, 'r') as f:
+            first_line = f.readline()
+            if "x,y,z,type" not in first_line:
+                print("self.main_window.full_fname is not properly formatted for appending.\nIt needs to start with 'x,y,z,type,...'")
+                return
+        self.add_cel_positions_to_file()
+
+    def check_for_new_celldefs(self):
         for cell_type in self.main_window.cell_types_list_final:
             if cell_type in self.main_window.celldef_tab.celltypes_list:
                 print(f"BioinfImportPlotWindow: {cell_type} found in current list of cell types. Not appending this...")
             else:
                 self.main_window.celldef_tab.new_cell_def_named(cell_type)
-        with open(self.main_window.full_fname, 'w') as f:
-            f.write('x,y,z,type\n')
+
+    def add_cel_positions_to_file(self):
+        with open(self.main_window.full_fname, 'a') as f:
             for pos, ctn in zip(self.csv_array[0],self.csv_array[1]):
-                f.write(f'{pos[0]},{pos[1]},{pos[2]},{ctn}\n')
+                    f.write(f'{pos[0]},{pos[1]},{pos[2]},{ctn}\n')
         self.main_window.ics_tab.import_from_file(self.main_window.full_fname)
         self.main_window.ics_tab.tab_widget.setCurrentIndex(self.main_window.ics_tab.base_tab_id)
         self.close()
@@ -517,6 +589,14 @@ class BioinfImport(QWidget):
                 color: black;
             }
             """
+        self.qpushbutton_style_sheet = """
+            QPushButton:enabled {
+                background-color : lightgreen;
+            }
+            QPushButton:disabled {
+                background-color : grey;
+            }
+            """
 
         vbox = QVBoxLayout()
         hbox = QHBoxLayout()
@@ -539,6 +619,22 @@ class BioinfImport(QWidget):
         base_widget.setLayout(vbox)
         self.layout = QVBoxLayout(self)  # leave this!
         self.layout.addWidget(base_widget)
+
+    def select_all_button_cb(self):
+        for cbd in self.checkbox_dict.values():
+            if cbd.isEnabled():
+                cbd.setChecked(True)
+        bval = self.is_any_cell_type_button_group_checked()
+        if self.ics_plot_area:
+            self.ics_plot_area.plot_cells_button.setEnabled(bval)
+    
+    def deselect_all_button_cb(self):
+        for cbd in self.checkbox_dict.values():
+            if cbd.isEnabled():
+                cbd.setChecked(False)
+        self.show_plot_button.setEnabled(False)
+        if self.ics_plot_area:
+            self.ics_plot_area.plot_cells_button.setEnabled(False)
 
     def import_cb(self):
         full_file_path = QFileDialog.getOpenFileName(self,'',".")
@@ -794,12 +890,10 @@ class BioinfImport(QWidget):
         if self.counts_button_group.checkedId()==0: # use counts found in data file
             pass
         elif self.counts_button_group.checkedId()==1: # use counts found in data file
-            for idx, cell_type in enumerate(self.cell_types_list_final):
-                # print(f"idx = {idx}, cell_type = {cell_type}")
+            for cell_type in self.cell_types_list_final:
                 self.cell_counts[cell_type] = int(self.type_prop[cell_type].text())
         elif self.counts_button_group.checkedId()==2:
-            for idx, cell_type in enumerate(self.cell_types_list_final):
-                # print(f"idx = {idx}, cell_type = {cell_type}")
+            for cell_type in self.cell_types_list_final:
                 self.cell_counts[cell_type] = int(self.type_manual[cell_type].text())
 
         self.cell_types_to_place = self.cell_types_list_final
@@ -811,23 +905,9 @@ class BioinfImport(QWidget):
         splitter.addWidget(self.cell_type_scroll_area)
         splitter.addWidget(self.pos_scroll_area)
 
-        # vert_splitter = QSplitter()
-        # vert_splitter.setOrientation(QtCore.Qt.Vertical)
-        # vert_splitter.addWidget(splitter)
-        # vert_splitter.addWidget(self.ics_plot_area)
-
         vbox = QVBoxLayout()
         vbox.addWidget(splitter)
 
-        self.qpushbutton_style_sheet = """
-            QPushButton:enabled {
-                background-color : lightgreen;
-            }
-            QPushButton:disabled {
-                background-color : grey;
-            }
-            """
-            
         self.show_plot_button = QPushButton("Show plot window",enabled=False)
         self.show_plot_button.setStyleSheet(self.qpushbutton_style_sheet)
         self.show_plot_button.clicked.connect(self.show_plot_button_cb)
@@ -842,8 +922,6 @@ class BioinfImport(QWidget):
         
         print(f"self.cell_counts = {self.cell_counts}")
             
-        # self.save_ics()
-
     def show_plot_button_cb(self):
         if self.ics_plot_area is None:
             self.create_ics_plot_area()
@@ -852,15 +930,26 @@ class BioinfImport(QWidget):
 
     def create_cell_type_scroll_area(self):
         vbox = QVBoxLayout()
-        label = QLabel("Select from remaining cell types to jointly place:")
+        label = QLabel("Select cell type(s) to place.\nGreyed out cell types have already been placed.")
         vbox.addWidget(label)
 
-        self.cell_type_button_group = QButtonGroup()
-        self.cell_type_button_group.setExclusive(False)
+        self.cell_type_button_group = QButtonGroup(exclusive=False)
+        # self.cell_type_button_group.setExclusive(False)
         self.cell_type_button_group.buttonClicked.connect(self.cell_type_button_group_cb)
         self.checkbox_dict = create_checkboxes_for_cell_types(vbox, self.cell_types_to_place)
         for cbd in self.checkbox_dict.values():
             self.cell_type_button_group.addButton(cbd)
+
+        self.select_all_button = QPushButton("Select remaining",styleSheet=self.qpushbutton_style_sheet)
+        self.select_all_button.clicked.connect(self.select_all_button_cb)
+        
+        self.deselect_all_button = QPushButton("Unselect all",styleSheet=self.qpushbutton_style_sheet)
+        self.deselect_all_button.clicked.connect(self.deselect_all_button_cb)
+        hbox = QHBoxLayout()
+        hbox.addWidget(self.select_all_button)
+        hbox.addWidget(self.deselect_all_button)
+        
+        vbox.addLayout(hbox)
 
         cell_type_scroll_area_widget = QWidget()
         cell_type_scroll_area_widget.setLayout(vbox)
@@ -869,7 +958,19 @@ class BioinfImport(QWidget):
         self.cell_type_scroll_area.setWidget(cell_type_scroll_area_widget)
 
     def cell_type_button_group_cb(self):
-        self.show_plot_button.setEnabled(self.cell_type_button_group.checkedButton() is not None)
+        bval = self.is_any_cell_type_button_group_checked()
+        if self.ics_plot_area is None:
+            return
+        if bval:
+            # The plot is created and at least one is checked. See if the parameters are ready
+            self.ics_plot_area.sync_par_area() # this call is overkill, I just want to see if the parameters call for the Plot button being enabled
+        else:
+            self.ics_plot_area.plot_cells_button.setEnabled(False)
+
+    def is_any_cell_type_button_group_checked(self):
+        bval = self.cell_type_button_group.checkedButton() is not None
+        self.show_plot_button.setEnabled(bval)
+        return bval
 
     def cell_pos_button_group_cb(self):
         if self.ics_plot_area:
@@ -887,7 +988,7 @@ class BioinfImport(QWidget):
         icon_height = round(0.8 * button_height)
         master_vbox = QVBoxLayout()
 
-        tool_button_style_sheet = """
+        qpushbutton_style_sheet = """
             QPushButton {
                 background-color : lightblue;
                 color : black;
@@ -914,11 +1015,11 @@ class BioinfImport(QWidget):
         full_rectangle_button.setIconSize(size)
         full_rectangle_button.setCheckable(True)
         full_rectangle_button.setChecked(True)
-        full_rectangle_button.setStyleSheet(tool_button_style_sheet) 
+        full_rectangle_button.setStyleSheet(qpushbutton_style_sheet) 
         self.cell_pos_button_group.addButton(full_rectangle_button,0)
         vbox.addWidget(full_rectangle_button)
 
-        label = QLabel("Whole Environment")
+        label = QLabel("Everywhere")
         label.setFixedWidth(button_width)
         label.setAlignment(QtCore.Qt.AlignCenter)
         vbox.addWidget(label)
@@ -931,7 +1032,7 @@ class BioinfImport(QWidget):
         size = QtCore.QSize(icon_width, icon_height) 
         partial_rectangle_button.setIconSize(size)
         partial_rectangle_button.setCheckable(True)
-        partial_rectangle_button.setStyleSheet(tool_button_style_sheet) 
+        partial_rectangle_button.setStyleSheet(qpushbutton_style_sheet) 
         self.cell_pos_button_group.addButton(partial_rectangle_button,1)
         vbox.addWidget(partial_rectangle_button)
 
@@ -948,7 +1049,7 @@ class BioinfImport(QWidget):
         size = QtCore.QSize(icon_width, icon_height) 
         disc_button.setIconSize(size)
         disc_button.setCheckable(True)
-        disc_button.setStyleSheet(tool_button_style_sheet) 
+        disc_button.setStyleSheet(qpushbutton_style_sheet) 
         self.cell_pos_button_group.addButton(disc_button,2)
         vbox.addWidget(disc_button)
 
@@ -965,7 +1066,7 @@ class BioinfImport(QWidget):
         size = QtCore.QSize(icon_width, icon_height) 
         annulus_button.setIconSize(size)
         annulus_button.setCheckable(True)
-        annulus_button.setStyleSheet(tool_button_style_sheet) 
+        annulus_button.setStyleSheet(qpushbutton_style_sheet) 
         self.cell_pos_button_group.addButton(annulus_button,3)
         vbox.addWidget(annulus_button)
 
@@ -986,50 +1087,6 @@ class BioinfImport(QWidget):
 
     def create_ics_plot_area(self):
         self.ics_plot_area = BioinfImportPlotWindow(self, self.config_tab)
-
-    def save_ics(self):
-        # if len(self.csv_array) == 0:
-        #     msg = "No cells created. You must Plot first."
-        #     print(msg)
-        #     msgBox = QMessageBox()
-        #     msgBox.setIcon(QMessageBox.Information)
-        #     msgBox.setText(msg)
-        #     msgBox.setStandardButtons(QMessageBox.Ok)
-        #     returnValue = msgBox.exec()
-        #     return
-
-        # print("\n------- ics_tab.py: save_cb() -------")
-        # x = y = z = np.arange(0.0,5.0,1.0)
-        # np.savetxt('cells.csv', (x,y,z), delimiter=',')
-        # print(self.csv_array)
-        dir_name = "./config/"
-        # print(f'dir_name={dir_name}<end>')
-        if len(dir_name) > 0 and not os.path.isdir(dir_name):
-            os.makedirs(dir_name)
-            time.sleep(1)
-        full_fname = os.path.join(dir_name,"cells.csv")
-        print("save_cb(): full_fname=",full_fname)
-        print("----- Writing v2 (with cell names) .csv file for cells")
-        print("----- full_fname=",full_fname)
-        
-        xmin = float(self.config_tab.xmin.text())
-        xmax = float(self.config_tab.xmax.text())
-        dx = xmax-xmin
-        ymin = float(self.config_tab.ymin.text())
-        ymax = float(self.config_tab.ymax.text())
-        dy = ymax-ymin
-        with open(full_fname, 'w') as f:
-            f.write('x,y,z,type\n')  # PhysiCell checks for "x" or "X"
-            for ctn in self.cell_types_final:
-                x = xmin + dx * np.random.uniform()
-                y = ymin + dy * np.random.uniform()
-                z = 0
-                f.write(f'{x},{y},{z},{ctn}\n')
-
-        # else:
-        #     print("----- Writing v1 (with cell indices) .csv file for cells")
-        #     print("----- full_fname=",full_fname)
-        #     np.savetxt(full_fname, self.csv_array, delimiter=',')
 
     def accept_as_is_cb(self):
         self.cell_types_final = self.cell_types_original
