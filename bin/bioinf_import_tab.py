@@ -18,7 +18,7 @@ import copy
 import numpy as np
 import time
 import matplotlib.pyplot as plt
-from matplotlib.patches import Circle, Patch, Rectangle, Annulus
+from matplotlib.patches import Circle, Patch, Rectangle, Annulus, Wedge
 from matplotlib.collections import PatchCollection
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 
@@ -100,7 +100,7 @@ class BioinfImportPlotWindow(QWidget):
         self.par_label = []
         self.par_text = []
         hbox = QHBoxLayout()
-        for i in range(4):
+        for i in range(6):
             self.par_label.append(QLabel())
             self.par_label[i].setFixedWidth(par_label_width)
             self.par_text.append(QLineEdit())
@@ -112,9 +112,11 @@ class BioinfImportPlotWindow(QWidget):
         coord_validator = QtGui.QDoubleValidator()
         self.par_text[0].setValidator(coord_validator)
         self.par_text[1].setValidator(coord_validator)
+        self.par_text[4].setValidator(coord_validator) # theta 1
+        self.par_text[5].setValidator(coord_validator) # theta 2
         pos_par_validator = QtGui.QDoubleValidator()
         pos_par_validator.setBottom(0)
-        for i in range(2,len(self.par_text)):
+        for i in range(2,4):
             self.par_text[i].setValidator(pos_par_validator)
 
         return hbox
@@ -134,51 +136,73 @@ class BioinfImportPlotWindow(QWidget):
             self.everywhere_plotter()
 
         elif self.main_window.cell_pos_button_group.checkedId()==1:
-            self.par_label[0].setText("x0 (left)")
-            self.par_label[1].setText("y0 (bottom)")
+            npars = 4
+            self.par_label[0].setText("x0")
+            self.par_label[1].setText("y0")
             self.par_label[2].setText("width")
             self.par_label[3].setText("height")
             for idx, pt in enumerate(self.par_text):
-                pt.setEnabled(idx <= 3)
+                pt.setEnabled(idx < npars)
                 try:
                     pt.textChanged.disconnect()
                 except:
                     pass
                 pt.textChanged.connect(self.rectangle_plotter)
-            for i in range(4,len(self.par_label)):
+            for i in range(npars,len(self.par_label)):
                 self.par_label[i].setText("")
             self.rectangle_plotter()
 
         elif self.main_window.cell_pos_button_group.checkedId()==2:
+            npars = 3
             self.par_label[0].setText("x0")
             self.par_label[1].setText("y0")
             self.par_label[2].setText("r")
             for idx, pt in enumerate(self.par_text):
-                pt.setEnabled(idx <= 2)
+                pt.setEnabled(idx < npars)
                 try:
                     pt.textChanged.disconnect()
                 except:
                     pass
                 pt.textChanged.connect(self.disc_plotter)
-            for i in range(3,len(self.par_label)):
+            for i in range(npars,len(self.par_label)):
                 self.par_label[i].setText("")
             self.disc_plotter()
 
         elif self.main_window.cell_pos_button_group.checkedId()==3:
+            npars = 4
             self.par_label[0].setText("x0")
             self.par_label[1].setText("y0")
             self.par_label[2].setText("r0")
             self.par_label[3].setText("r1")
             for idx, pt in enumerate(self.par_text):
-                pt.setEnabled(idx <= 3)
+                pt.setEnabled(idx < npars)
                 try:
                     pt.textChanged.disconnect()
                 except:
                     pass
                 pt.textChanged.connect(self.annulus_plotter)
-            for i in range(4,len(self.par_label)):
+            for i in range(npars,len(self.par_label)):
                 self.par_label[i].setText("")
             self.annulus_plotter()
+
+        elif self.main_window.cell_pos_button_group.checkedId()==4:
+            npars = 6
+            self.par_label[0].setText("x0")
+            self.par_label[1].setText("y0")
+            self.par_label[2].setText("r0")
+            self.par_label[3].setText("r1")
+            self.par_label[4].setText("\u03b81 (\u00b0)")
+            self.par_label[5].setText("\u03b82 (\u00b0)")
+            for idx, pt in enumerate(self.par_text):
+                pt.setEnabled(idx < npars)
+                try:
+                    pt.textChanged.disconnect()
+                except:
+                    pass
+                pt.textChanged.connect(self.wedge_plotter)
+            for i in range(npars,len(self.par_label)):
+                self.par_label[i].setText("")
+            self.wedge_plotter()
     
     def everywhere_plotter(self):
         if self.preview_patch is None:
@@ -233,7 +257,7 @@ class BioinfImportPlotWindow(QWidget):
             self.preview_patch.set(center=(x0,y0),radius=r)
 
         # check the disc intersects the domain in non-trivial manner
-        r2 = self.get_distance_to_domain(x0, y0)
+        r2, _, _ = self.get_distance_to_domain(x0, y0)
         bval = r2 < r*r # make sure the distance from center of Circle to domain is less than radius of circle
         
         self.plot_cells_button.setEnabled(bval and self.main_window.is_any_cell_type_button_group_checked())
@@ -242,19 +266,19 @@ class BioinfImportPlotWindow(QWidget):
 
     def get_distance_to_domain(self, x0, y0):
         if x0 < self.plot_xmin:
-            dx = self.plot_xmin - x0
+            dx = x0 - self.plot_xmin # negative
         elif x0 <= self.plot_xmax:
             dx = 0
         else:
-            dx = x0 - self.plot_xmax
+            dx = x0 - self.plot_xmax # positive
 
         if y0 < self.plot_ymin:
-            dy = self.plot_ymin - y0
+            dy = y0 - self.plot_ymin # negative
         elif y0 <= self.plot_ymax:
             dy = 0
         else:
-            dy = y0 - self.plot_ymax
-        return dx*dx + dy*dy
+            dy = y0 - self.plot_ymax # positive
+        return dx*dx + dy*dy, dx, dy
     
     def annulus_plotter(self):
         pars = []
@@ -275,7 +299,7 @@ class BioinfImportPlotWindow(QWidget):
             self.plot_cells_button.setEnabled(False)
             return
         
-        r2 = self.get_distance_to_domain(x0,y0)
+        r2, _, _ = self.get_distance_to_domain(x0,y0)
         cr2 = self.get_circumscribing_radius(x0, y0)
         # outer_radius_reaches_domain = r2 < r1*r1
         # inner_radius_does_not_contain_entire_domain = cr2 > r0*r0
@@ -302,6 +326,259 @@ class BioinfImportPlotWindow(QWidget):
             dy = y0 - self.plot_ymin
         return dx*dx + dy*dy
 
+    def wedge_plotter(self):
+        pars = []
+        for idx, pt in enumerate(self.par_text):
+            if idx >= 6:
+                break
+            if pt.hasAcceptableInput() is False:
+                self.plot_cells_button.setEnabled(False)
+                return # do not update unless all are ready
+            pars.append(float(pt.text()))
+        x0, y0, r0, r1, th1, th2 = pars
+        if r1 < r0:
+            if self.preview_patch: # probably a way to impose this using validators, but that would require dynamically updating the validators...
+                self.preview_patch.remove()
+                self.canvas.update()
+                self.canvas.draw()
+                self.preview_patch = None
+            self.plot_cells_button.setEnabled(False)
+            return
+        
+        r2, dx, dy = self.get_distance_to_domain(x0,y0)
+        cr2 = self.get_circumscribing_radius(x0, y0)
+        # outer_radius_reaches_domain = r2 < r1*r1
+        # inner_radius_does_not_contain_entire_domain = cr2 > r0*r0
+        bval = (r2 < r1*r1) and (cr2 > r0*r0)
+
+        bval = bval and self.wedge_in_domain(x0,y0,r0,r1,th1,th2,dx,dy,r2)
+
+        if bval is True:
+            # then we know that the full annulus intersects the domain, just need to check if the angles specified also do the trick
+            th2 -= 360 * ((th2-th1) // 360) # get th2 in interval (th1,th1+360)
+            pts = self.rays_intersects_with_domain((x0,y0),th1,th2)
+            if self.is_in_domain((x0,y0)): # first assume that center is inside the domain
+                pass
+
+        self.plot_cells_button.setEnabled(bval and self.main_window.is_any_cell_type_button_group_checked())
+
+        if self.preview_patch is None:
+            self.preview_patch = self.ax0.add_patch(Wedge((x0,y0),r1,th1,th2,width=r1-r0,alpha=0.2))
+        else:
+            self.preview_patch.set(center=(x0,y0),radius=r1,theta1=th1,theta2=th2,width=r1-r0)
+        
+        self.canvas.update()
+        self.canvas.draw()
+
+    def wedge_in_domain(self,x0,y0,r0,r1,th1,th2,dx,dy,r2):
+        th1, th2 = normalize_thetas(th1,th2)
+        if r2==0: # then (x0,y0) is in domain
+            # first find shortest distances to edge of domain
+            r_th1 = self.distance_to_domain_from_within(x0,y0,th1)
+            if r_th1 > r0:
+                return True
+            r_th2 = self.distance_to_domain_from_within(x0,y0,th2)
+            if r_th2 > r0:
+                return True
+
+            # If the above don't work, then hopefully checking these easy distances may work
+            starting_theta_step = 1 + (th1 // 90) # first 90 deg angle that could go to side of domain for shortest distance purposes
+            end_theta_step = 1 + (th2 // 90) # first 90 deg angle that could go to side of domain for shortest distance purposes
+            mid_thetas_step = np.arange(starting_theta_step,end_theta_step)
+            for th in mid_thetas_step:
+                if th % 4 == 0: # right
+                    d = self.plot_xmax - x0
+                elif th % 4 == 1: # up
+                    d = self.plot_ymax - y0
+                elif th % 4 == 2: # left
+                    d = x0 - self.plot_xmin
+                elif th % 4 == 3: # down
+                   d = y0 - self.plot_ymin
+                if d > r0:
+                    return True
+            
+            # If those easy-to-calculate distances fail, then we try the corners, which are our last hope
+            r02 = r0*r0
+            th1_rad = th1*0.017453292519943
+            th2_rad = th2*0.017453292519943
+            th = np.arctan2(self.plot_ymax-y0,self.plot_xmax-x0)
+            if th > th1_rad and th < th2_rad:
+                if  (self.plot_xmax - x0)**2 + (self.plot_ymax-y0)**2 > r02:
+                    return True
+            th = np.arctan2(self.plot_ymax-y0,self.plot_xmin-x0)
+            if th > th1_rad and th < th2_rad:
+                if  (self.plot_xmin - x0)**2 + (self.plot_ymax-y0)**2 > r02:
+                    return True
+            th = np.arctan2(self.plot_ymin-y0,self.plot_xmin-x0)
+            if th > th1_rad and th < th2_rad:
+                if  (self.plot_xmin - x0)**2 + (self.plot_ymin-y0)**2 > r02:
+                    return True
+            th = np.arctan2(self.plot_ymin-y0,self.plot_xmax-x0)
+            if th > th1_rad and th < th2_rad:
+                if  (self.plot_xmax - x0)**2 + (self.plot_ymin-y0)**2 > r02:
+                    return True
+            return False
+        else: # then (x0,y0) is not in the domain
+            self.wedge_in_domain_center_out(x0,y0,r0,r1,th1,th2,dx,dy,r2)
+
+    def wedge_in_domain_center_out(self,x0,y0,r0,r1,th1,th2,dx,dy,r2):
+        xL, xR, yL, yR = [self.plot_xmin, self.plot_xmax, self.plot_ymin, self.plot_ymax]
+        if dx > 0: 
+            if dy == 0: # reflect so it is on left
+                xL, xR = [-xR,-xL]
+                x0 *= -1
+                th1 = 180-th1
+                th2 = 180-th2
+                dx *= -1
+            elif dy > 0: # rotate 180
+                xL, xR, yL, yR = [-xR, -xL, -yR, -yL]
+                x0 *= -1
+                y0 *= -1
+                th1 += 180
+                th2 += 180
+                dx *= -1
+                dy *= -1
+            else: # dy < 0 rotate 270
+                xL, xR, yL, yR = [yL, yR, -xL, -xR]
+                x0, y0 = [y0, -x0]
+                th1 += 270
+                th2 += 270
+                dx, dy = [dy, -dx]
+        elif dx == 0:
+            if dy < 0: # rotate 270
+                xL, xR, yL, yR = [yL, yR, -xL, -xR]
+                x0, y0 = [y0, -x0]
+                th1 += 270
+                th2 += 270
+                dx, dy = [dy, 0]
+            else: # dy > 0 rotate 90
+                xL, xR, yL, yR = [-yL, -yR, xL, xR]
+                x0, y0 = [-y0, x0]
+                th1 += 90
+                th2 += 90
+                dx, dy = [-dy, 0]
+        else: # dx < 0
+            if dy > 0: # reflect in y axis so on the bottom
+                yL, yR = [-yR,-yL]
+                y0 *= -1
+                th1 *= -1
+                th2 *= -1
+                dy *= -1
+        th1, th2 = normalize_thetas(th1,th2)
+
+        # Now I can proceed as if the center is left or bottom-left of domain, i.e. dx<0 and dy<=0
+
+        th1_rad = th1*0.017453292519943
+        th2_rad = th2*0.017453292519943
+        if dy==0: # then starting left of domain
+            yy = np.array([yL,yR,yL,yR])-y0
+            xx = np.array([xL,xL,xR,xR])-x0
+            th = np.arctan2(yy,xx)
+            th_bl, th_ul, th_br, th_ur = th # bottom-left, upper-left, bottom-right, upper-right
+            dth_all = th - th1_rad
+            dth = copy.deepcopy(dth_all)
+            dth[dth<0] += 2*np.pi
+            dth = dth[dth<th2_rad-th1_rad] # filter out those that are further around than th2
+
+            # determine if th1 intersects the domain (works because everything in [-pi,pi])
+            th1_intersects_domain = th1_rad > th_bl and th1_rad < th_ul
+            temp = th2_rad % 2*np.pi
+            temp -= 2*np.pi if temp > np.pi else 0
+            th2_intersects_domain = temp > th_bl and temp < th_ul
+            if th1_intersects_domain:
+                DTH = [0]
+            else:
+                DTH = []
+            DTH = np.concatenate((DTH,dth,))
+            if th2_intersects_domain:
+                DTH = np.concatenate((DTH,[th2_rad-th1_rad]))
+            if (th1 < 0 and th2 > 0) or (th1 > 0 and th2 > 360):
+                new_dth = -th1_rad if th1_rad < 0 else 2*np.pi - th1_rad
+                DTH = np.append(DTH,new_dth) # add 0
+            DTH.sort()
+            d1, d2 = [None, None]
+            for d in DTH:
+                if d == new_dth: # then directly right, d1 and d2 have been decreasing
+                    new_d1 = xL - x0
+                    new_d2 = xR - x0
+                elif d in dth_all: # then at a corner
+                    pass
+
+
+            
+            
+
+        
+        # th_corners = np.arctan2(np.array([self.plot_ymax,self.plot_ymax,self.plot_ymin,self.plot_ymin])-y0,np.array([self.plot_xmax,self.plot_xmax,self.plot_xmin,self.plot_xmin])-x0)
+        # dth = th_corners - th1_rad
+        # if all(dth<=0) or all(dth>=0):
+        #     # 
+        # th_perp = []
+        # if dx < 0:
+        #     th_perp.append(0)
+        # elif dx > 0:
+        #     th_perp.append(-np.pi)
+        # if dy < 0:
+        #     th_perp.append(0.5*np.pi)
+        # elif dy > 0:
+        #     th_perp.append(-0.5*np.pi)
+        # dth_perp = [th - th1_rad if th > th1_rad else th + 2*np.pi - th1_rad for th in th_perp]
+        # dth = [th - th1_rad if th > th1_rad else th + 2*np.pi - th1_rad for th in th_corners]
+        # dth = [x for x in dth if x < th2_rad - th1_rad] # filter for corners that are within the arc of th1 to th2
+        # dth += dth_perp
+        # dth += [0,th2_rad - th1_rad]
+        # dth = np.unique(dth)
+        # TH = dth + th1_rad # back to angles from 0, rather than from th1
+        # d0, d1 = [None,None]
+        # for th in TH:
+        #     v = (np.cos(th),np.sin(th))
+
+        # pass 
+
+    def distance_to_domain_from_within(self, x0, y0, th):
+        v1_x = np.cos(th)
+        v1_y = np.sin(th)
+        if v1_x > 0:
+            r_x = (self.plot_xmax - x0) / v1_x
+        elif v1_x < 0:
+            r_x = (self.plot_xmin - x0) / v1_x
+        else:
+            r_x = np.inf
+        if v1_y > 0:
+            r_y = (self.plot_ymax - y0) / v1_y
+        elif v1_y < 0:
+            r_y = (self.plot_ymin - y0) / v1_y
+        else:
+            r_y = np.inf
+        return r_x if r_x <= r_y else r_y
+
+    def rays_intersects_with_domain(self,p,th1,th2):
+        x0 = self.plot_xmin
+        x1 = self.plot_xmax
+        y0 = self.plot_ymin
+        y1 = self.plot_ymax
+
+    def ray_intersects_with_domain(self,p,x0,x1,y0,y1,th):
+        v = (np.cos(th),np.sin(th))
+        if v[0]==0:
+            t_x0 = None
+            t_x1 = None
+        else:
+            t_x0 = (x0-p[0]) / v[0]
+            t_x1 = (x1-p[0]) / v[0]
+        if v[1]==0:
+            t_y0 = None
+            t_y1 = None
+        else:
+            t_y0 = (y0-p[1]) / v[1]
+            t_y1 = (y1-p[1]) / v[1]
+
+        pass
+
+    def is_in_domain(self, p):
+        x,y = p
+        return x >= self.plot_xmin and x <= self.plot_xmax and y >= self.plot_ymin and y <= self.plot_ymax
+    
     def create_figure(self):
         self.figure = plt.figure()
         self.canvas = FigureCanvasQTAgg(self.figure)
@@ -353,67 +630,53 @@ class BioinfImportPlotWindow(QWidget):
             y = y0 + height * np.random.uniform(size=(N,1))
             z = np.zeros((N,1))
             self.new_pos = np.concatenate((x,y,z),axis=1)
-            self.csv_array[0] = np.append(self.csv_array[0],self.new_pos,axis=0)
-            self.csv_array[1] += N*[ctn]
         elif type(self.preview_patch) is Circle:
             x0, y0 = self.preview_patch.get_center()
             r = self.preview_patch.get_radius()
-            i_start = 0
-            self.new_pos = np.empty((N,3))
-            while i_start < N:
-                d = r*np.sqrt(np.random.uniform(size=N-i_start))
-                i_start += self.annulus_sample(x0,y0,d,i_start)
-                # th = 2*np.pi * np.random.uniform(size=N-i_start)
-                # x = x0 + d * np.cos(th)
-                # y = y0 + d * np.sin(th)
-                # xy = np.array([[a,b] for a,b in zip(x,y) if a>=self.plot_xmin and a<=self.plot_xmax and b>=self.plot_ymin and b<=self.plot_ymax])
-                # if len(xy)==0:
-                #     continue
-                # z = np.zeros((len(xy),1))
-                # self.new_pos[range(i_start,i_start+xy.shape[0])] = np.append(xy,z,axis=1)
-                # i_start = i_start + xy.shape[0]
-            self.csv_array[0] = np.append(self.csv_array[0],self.new_pos,axis=0)
-            self.csv_array[1] += N*[ctn]
+            self.wedge_sample(N, x0, y0, r)
         elif type(self.preview_patch) is Annulus:
             x0, y0 = self.preview_patch.get_center()
             r1 = self.preview_patch.get_radii()[0] # annulus is technically an ellipse, get_radii returns (semi-major,semi-minor) axis lengths, since I'm using circles, these will be the same
             width = self.preview_patch.get_width()
             r0 = r1 - width
-            i_start = 0
-            self.new_pos = np.empty((N,3))
-            while i_start < N:
-                d = np.sqrt(r0*r0 + (r1*r1-r0*r0)*np.random.uniform(size=N-i_start))
-                i_start += self.annulus_sample(x0,y0,d,i_start)
-                # th = 2*np.pi * np.random.uniform(size=N-i_start)
-                # x = x0 + d * np.cos(th)
-                # y = y0 + d * np.sin(th)
-                # xy = np.array([[a,b] for a,b in zip(x,y) if a>=self.plot_xmin and a<=self.plot_xmax and b>=self.plot_ymin and b<=self.plot_ymax])
-                # if len(xy)==0:
-                #     continue
-                # z = np.zeros((len(xy),1))
-                # self.new_pos[range(i_start,i_start+xy.shape[0])] = np.append(xy,z,axis=1)
-                # i_start = i_start + xy.shape[0]
-            self.csv_array[0] = np.append(self.csv_array[0],self.new_pos,axis=0)
-            self.csv_array[1] += N*[ctn]
-
+            self.wedge_sample(N, x0, y0, r1, r0=r0)
+        elif type(self.preview_patch) is Wedge:
+            x0, y0 = self.preview_patch.center
+            r1 = self.preview_patch.r
+            th1 = self.preview_patch.theta1  
+            th2 = self.preview_patch.theta2
+            th2 -= 360 * ((th2-th1) // 360) # I promise this works if dth=th2-th1 < 0, 0<dth<360, and dth>360. 
+            width = self.preview_patch.width
+            r0 = r1 - width
+            self.wedge_sample(N, x0, y0, r1, r0=r0, th_lim=(th1*0.017453292519943,th2*0.017453292519943))
         else:
             print("unknown patch")
+        self.csv_array[0] = np.append(self.csv_array[0],self.new_pos,axis=0)
+        self.csv_array[1] += N*[ctn]
 
         self.circles(self.new_pos, s=8., color=self.color_by_celltype[ctn], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
 
         self.main_window.checkbox_dict[ctn].setEnabled(False)
         self.main_window.checkbox_dict[ctn].setChecked(False)
 
-    def annulus_sample(self,x0,y0,d,i_start):
-        th = 2*np.pi * np.random.uniform(size=len(d))
-        x = x0 + d * np.cos(th)
-        y = y0 + d * np.sin(th)
-        xy = np.array([[a,b] for a,b in zip(x,y) if a>=self.plot_xmin and a<=self.plot_xmax and b>=self.plot_ymin and b<=self.plot_ymax])
-        if len(xy)==0:
-            return 0
-        z = np.zeros((len(xy),1))
-        self.new_pos[range(i_start,i_start+xy.shape[0])] = np.append(xy,z,axis=1)
-        return xy.shape[0]
+    def wedge_sample(self,N,x0,y0,r1, r0=0, th_lim=(0,2*np.pi)):
+        i_start = 0
+        self.new_pos = np.empty((N,3))
+        while i_start < N:
+            if r0 == 0:
+                d = r1*np.sqrt(np.random.uniform(size=N-i_start))
+            else:
+                d = np.sqrt(r0*r0 + (r1*r1-r0*r0)*np.random.uniform(size=N-i_start))
+            th = th_lim[0] + (th_lim[1]-th_lim[0]) * np.random.uniform(size=N-i_start)
+            x = x0 + d * np.cos(th)
+            y = y0 + d * np.sin(th)
+            xy = np.array([[a,b] for a,b in zip(x,y) if a>=self.plot_xmin and a<=self.plot_xmax and b>=self.plot_ymin and b<=self.plot_ymax])
+            if len(xy)==0:
+                return 0
+            # z = np.zeros((len(xy),1))
+            self.new_pos[range(i_start,i_start+xy.shape[0]),0:2] = xy
+            # self.new_pos[range(i_start,i_start+xy.shape[0]),2] = z
+            i_start += xy.shape[0]
 
     def circles(self, pos, s, c='b', vmin=None, vmax=None, **kwargs):
         """
@@ -981,9 +1244,10 @@ class BioinfImport(QWidget):
         self.cell_pos_button_group = QButtonGroup()
         self.cell_pos_button_group.setExclusive(True)
         self.cell_pos_button_group.idToggled.connect(self.cell_pos_button_group_cb)
+        next_button_id = 0
         
-        button_width = 150
-        button_height = 150
+        button_width = 250
+        button_height = 250
         icon_width = round(0.8 * button_width)
         icon_height = round(0.8 * button_height)
         master_vbox = QVBoxLayout()
@@ -1016,7 +1280,8 @@ class BioinfImport(QWidget):
         full_rectangle_button.setCheckable(True)
         full_rectangle_button.setChecked(True)
         full_rectangle_button.setStyleSheet(qpushbutton_style_sheet) 
-        self.cell_pos_button_group.addButton(full_rectangle_button,0)
+        self.cell_pos_button_group.addButton(full_rectangle_button,next_button_id)
+        next_button_id += 1
         vbox.addWidget(full_rectangle_button)
 
         label = QLabel("Everywhere")
@@ -1033,7 +1298,8 @@ class BioinfImport(QWidget):
         partial_rectangle_button.setIconSize(size)
         partial_rectangle_button.setCheckable(True)
         partial_rectangle_button.setStyleSheet(qpushbutton_style_sheet) 
-        self.cell_pos_button_group.addButton(partial_rectangle_button,1)
+        self.cell_pos_button_group.addButton(partial_rectangle_button,next_button_id)
+        next_button_id += 1
         vbox.addWidget(partial_rectangle_button)
 
         label = QLabel("Rectangle")
@@ -1050,7 +1316,8 @@ class BioinfImport(QWidget):
         disc_button.setIconSize(size)
         disc_button.setCheckable(True)
         disc_button.setStyleSheet(qpushbutton_style_sheet) 
-        self.cell_pos_button_group.addButton(disc_button,2)
+        self.cell_pos_button_group.addButton(disc_button,next_button_id)
+        next_button_id += 1
         vbox.addWidget(disc_button)
 
         label = QLabel("Disc")
@@ -1067,10 +1334,29 @@ class BioinfImport(QWidget):
         annulus_button.setIconSize(size)
         annulus_button.setCheckable(True)
         annulus_button.setStyleSheet(qpushbutton_style_sheet) 
-        self.cell_pos_button_group.addButton(annulus_button,3)
+        self.cell_pos_button_group.addButton(annulus_button,next_button_id)
+        next_button_id += 1
         vbox.addWidget(annulus_button)
 
         label = QLabel("Annulus")
+        label.setFixedWidth(button_width)
+        label.setAlignment(QtCore.Qt.AlignCenter)
+        vbox.addWidget(label)
+
+        hbox.addLayout(vbox)
+
+        vbox = QVBoxLayout()
+        wedge_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/wedge.svg"))
+        wedge_button.setFixedSize(button_width,button_height)
+        size = QtCore.QSize(icon_width, icon_height) 
+        wedge_button.setIconSize(size)
+        wedge_button.setCheckable(True)
+        wedge_button.setStyleSheet(qpushbutton_style_sheet) 
+        self.cell_pos_button_group.addButton(wedge_button,next_button_id)
+        next_button_id += 1
+        vbox.addWidget(wedge_button)
+
+        label = QLabel("Wedge")
         label.setFixedWidth(button_width)
         label.setAlignment(QtCore.Qt.AlignCenter)
         vbox.addWidget(label)
@@ -1292,3 +1578,9 @@ def create_checkboxes_for_cell_types(vbox, cell_types):
         vbox.addWidget(checkbox_dict[cell_type])
 
     return checkbox_dict
+
+def normalize_thetas(th1,th2)
+    th1 = th1 % 360
+    th1 = th1 - 360 if th1 >= 180 else th1 # get th1 in [-180,180]
+    th2 -= 360 * ((th2-th1) // 360) # get th2 in interval (th1,th1+360)
+    return th1, th2
