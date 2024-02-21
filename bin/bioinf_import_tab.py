@@ -337,6 +337,7 @@ class BioinfImportPlotWindow(QWidget):
             pars.append(float(pt.text()))
         x0, y0, r0, r1, th1, th2 = pars
         if r1 < r0:
+            print(f"r1 = {r1}, r0 = {r0}")
             if self.preview_patch: # probably a way to impose this using validators, but that would require dynamically updating the validators...
                 self.preview_patch.remove()
                 self.canvas.update()
@@ -352,13 +353,6 @@ class BioinfImportPlotWindow(QWidget):
         bval = (r2 < r1*r1) and (cr2 > r0*r0)
 
         bval = bval and self.wedge_in_domain(x0,y0,r0,r1,th1,th2,dx,dy,r2)
-
-        if bval is True:
-            # then we know that the full annulus intersects the domain, just need to check if the angles specified also do the trick
-            th2 -= 360 * ((th2-th1) // 360) # get th2 in interval (th1,th1+360)
-            pts = self.rays_intersects_with_domain((x0,y0),th1,th2)
-            if self.is_in_domain((x0,y0)): # first assume that center is inside the domain
-                pass
 
         self.plot_cells_button.setEnabled(bval and self.main_window.is_any_cell_type_button_group_checked())
 
@@ -419,150 +413,138 @@ class BioinfImportPlotWindow(QWidget):
                     return True
             return False
         else: # then (x0,y0) is not in the domain
-            self.wedge_in_domain_center_out(x0,y0,r0,r1,th1,th2,dx,dy,r2)
+            return self.wedge_in_domain_center_out(x0,y0,r0,r1,th1,th2,dx,dy)
 
-    # def wedge_in_domain_center_out(self,x0,y0,r0,r1,th1,th2,dx,dy,r2):
-    #     xL, xR, yL, yR = [self.plot_xmin, self.plot_xmax, self.plot_ymin, self.plot_ymax]
-    #     # WLOG set center on left or bottom-left of domain
-    #     if dx > 0: 
-    #         if dy == 0: # reflect so it is on left
-    #             xL, xR = [-xR,-xL]
-    #             x0 *= -1
-    #             th1 = 180-th1
-    #             th2 = 180-th2
-    #             dx *= -1
-    #         elif dy > 0: # rotate 180
-    #             xL, xR, yL, yR = [-xR, -xL, -yR, -yL]
-    #             x0 *= -1
-    #             y0 *= -1
-    #             th1 += 180
-    #             th2 += 180
-    #             dx *= -1
-    #             dy *= -1
-    #         else: # dy < 0 rotate 270
-    #             xL, xR, yL, yR = [yL, yR, -xL, -xR]
-    #             x0, y0 = [y0, -x0]
-    #             th1 += 270
-    #             th2 += 270
-    #             dx, dy = [dy, -dx]
-    #     elif dx == 0:
-    #         if dy < 0: # rotate 270
-    #             xL, xR, yL, yR = [yL, yR, -xL, -xR]
-    #             x0, y0 = [y0, -x0]
-    #             th1 += 270
-    #             th2 += 270
-    #             dx, dy = [dy, 0]
-    #         else: # dy > 0 rotate 90
-    #             xL, xR, yL, yR = [-yL, -yR, xL, xR]
-    #             x0, y0 = [-y0, x0]
-    #             th1 += 90
-    #             th2 += 90
-    #             dx, dy = [-dy, 0]
-    #     else: # dx < 0
-    #         if dy > 0: # reflect in y axis so on the bottom
-    #             yL, yR = [-yR,-yL]
-    #             y0 *= -1
-    #             th1 *= -1
-    #             th2 *= -1
-    #             dy *= -1
-    #     th1, th2 = normalize_thetas(th1,th2)
+    def wedge_in_domain_center_out(self,x0,y0,r0,r1,th1,th2,dx,dy):
+        # check to see if the wedge is at all in the domain when the center is outside the domain
+        xL, xR, yL, yR = [self.plot_xmin, self.plot_xmax, self.plot_ymin, self.plot_ymax]
+        # WLOG set center on left or bottom-left of domain
+        if dx > 0: 
+            if dy == 0: # reflect so it is on left
+                xL, xR = [-xR,-xL]
+                x0 *= -1
+                th1, th2 = [180-th2,180-th1] # reflections flip orientation
+                dx *= -1
+            elif dy > 0: # rotate 180
+                xL, xR, yL, yR = [-xR, -xL, -yR, -yL]
+                x0 *= -1
+                y0 *= -1
+                th1 += 180
+                th2 += 180
+                dx *= -1
+                dy *= -1
+            else: # dy < 0 rotate 270
+                xL, xR, yL, yR = [yL, yR, -xL, -xR]
+                x0, y0 = [y0, -x0]
+                th1 += 270
+                th2 += 270
+                dx, dy = [dy, -dx]
+        elif dx == 0:
+            if dy < 0: # rotate 270
+                xL, xR, yL, yR = [yL, yR, -xL, -xR]
+                x0, y0 = [y0, -x0]
+                th1 += 270
+                th2 += 270
+                dx, dy = [dy, 0]
+            else: # dy > 0 rotate 90
+                xL, xR, yL, yR = [-yL, -yR, xL, xR]
+                x0, y0 = [-y0, x0]
+                th1 += 90
+                th2 += 90
+                dx, dy = [-dy, 0]
+        else: # dx < 0
+            if dy > 0: # reflect in y axis so on the bottom
+                yL, yR = [-yR,-yL]
+                y0 *= -1
+                th1, th2 = [-th2,-th1] # reflections flip orientation
+                dy *= -1
+        th1, th2 = normalize_thetas(th1,th2)
 
-    #     # Now I can proceed as if the center is left or bottom-left of domain, i.e. dx<0 and dy<=0
+        # now affine shift so (x0,y0) at (0,0)
+        xL -= x0
+        xR -= x0
+        yL -= y0
+        yR -= y0
+        x0 = 0
+        y0 = 0
 
-    #     th1_rad = th1*0.017453292519943
-    #     th2_rad = th2*0.017453292519943
+        # print(f"Transformed coords: (x0,y0,xL,xR,yL,yR,th1,th2,dx,dy) = {(x0,y0,xL,xR,yL,yR,th1,th2,dx,dy)}")
 
-    #     bounding_th_R = np.arctan2(yR,xL) # top-left corner is always the upper (Right) theta bound in this reference frame
-    #     inner_th = np.arctan2(yR,xR) # top-right is always interior in this frame of reference
-    #     if dy == 0:
-    #         bounding_th_L = np.arctan2(yL,xL)
-    #         inner_th = np.append(inner_th,np.arctan2(yL,xR))
-    #         th_right = [0]
-    #     else:
-    #         bounding_th_L = np.arctan2(yL,xR)
-    #         inner_th = np.append(inner_th,np.arctan2(yL,xL))
-    #         th_right = []
-    #     th1_inbounds = th1_rad > bounding_th_L and th1_rad < bounding_th_R
-    #     th2_inbounds = th2_rad > bounding_th_L and th2_rad < bounding_th_R
-    #     th2_inbounds = th2_inbounds or ((th2_rad-2*np.pi) > bounding_th_L and (th2_rad-2*np.pi) < bounding_th_R) # it's possible that th2 being on [th1,th1+360] might not lie between these theta value, but intersect nonetheless
+        # Now I can proceed as if the center is left or bottom-left of domain, i.e. dx<0 and dy<=0
 
-    #     all_thetas = np.concatenate(([bounding_th_L,bounding_th_R],inner_th,th_right))
-    #     if th1_inbounds:
-    #         all_thetas = np.append(all_thetas,th1_rad)
-    #     if th2_inbounds:
-    #         all_thetas = np.append(all_thetas,th2_rad)
+        th1_rad = th1*0.017453292519943
+        th2_rad = th2*0.017453292519943
 
-    #     all_relative_thetas = (all_thetas - th1_rad) % 2*np.pi
-    #     d1 = None # short distance to domain
-    #     d2 = None # long distance to domain
+        bounding_th_R = np.arctan2(yR,xL) # top-left corner is always the upper (Right) theta bound in this reference frame
+        bounding_d_R2 = xL**2 + yR**2 + np.zeros((2,1))
+        inner_th_1 = np.arctan2(yR,xR) # top-right is always interior in this frame of reference
+        if dy == 0:
+            inner_1_d2 = np.array([(xL/np.cos(inner_th_1))**2,xR**2 + yR**2]).reshape((2,1))
+            bounding_th_L = np.arctan2(yL,xL)
+            bounding_d_L2 = xL**2 + yL**2 + np.zeros((2,1))
+            inner_th_2 = np.arctan2(yL,xR)
+            inner_2_d2 = np.array([(xL/np.cos(inner_th_2))**2,xR**2 + yL**2]).reshape((2,1))
+            th_right_d2 = np.array([xL**2,xR**2]).reshape((2,1))
+            TH = np.array([bounding_th_L,inner_th_2,0,inner_th_1,bounding_th_R])
+            D = np.concatenate((bounding_d_L2,inner_2_d2,th_right_d2,inner_1_d2,bounding_d_R2),axis=1)
+        else:
+            temp_dx = xL/np.cos(inner_th_1)
+            temp_dy = yL/np.sin(inner_th_1)
+            inner_1_d2 = np.array([(np.max([temp_dx,temp_dy]))**2,xR**2 + yR**2]).reshape((2,1))
+            bounding_th_L = np.arctan2(yL,xR)
+            bounding_d_L2 = xR**2 + yL**2 + np.zeros((2,1))
+            inner_th_2 = np.arctan2(yL,xL)
+            temp_dx =  xR/np.cos(inner_th_1)
+            temp_dy = yR/np.sin(inner_th_1)
+            inner_2_d2 = np.array([xL**2 + yL**2,(np.min([temp_dx,temp_dy]))**2]).reshape((2,1))
+            if inner_th_1 > inner_th_2:
+                inner_th_1, inner_th_2 = [inner_th_2, inner_th_1]
+                inner_1_d2, inner_2_d2 = [inner_2_d2, inner_1_d2]
+            TH = np.array([bounding_th_L,inner_th_1,inner_th_2,bounding_th_R])
+            D = np.concatenate((bounding_d_L2,inner_1_d2,inner_2_d2,bounding_d_R2),axis=1)
+        # print(f"TH = {TH * 180/np.pi}")
+        # print(f"D = {D}")
+        th1_inbounds = th1_rad > bounding_th_L and th1_rad < bounding_th_R
+        if th1_inbounds and (th1_rad not in TH):
+            TH, D = compute_theta_intersection_distances(TH,D,th1_rad,x0,y0,xL,xR,yL,yR,dy)
+        th2_inbounds = th2_rad > bounding_th_L and th2_rad < bounding_th_R
+        th2_inbounds = th2_inbounds or ((th2_rad-2*np.pi) > bounding_th_L and (th2_rad-2*np.pi) < bounding_th_R) # it's possible that th2 being on [th1,th1+360] might not lie between these theta value, but intersect nonetheless
+        if th2_inbounds and (th2_rad not in TH):
+            TH, D = compute_theta_intersection_distances(TH,D,th2_rad,x0,y0,xL,xR,yL,yR,dy)
+        # print(f"TH = {TH * 180/np.pi}")
+        # print(f"D = {D}")
+       
+        TH_rel = (TH-th1_rad) % 2*np.pi
+        d_old2 = None
 
-    #     for idx, th_rel in enumerate(all_relative_thetas):
+        A = np.concatenate((TH_rel.reshape(1,len(TH_rel)),TH.reshape(1,len(TH)),D),axis=0)
+        ord = np.argsort(A[0])
+        A = A[:,ord]
 
+        # print(f"A[0] = {A[0] * 180/np.pi}")
+        # print(f"A[1] = {A[1] * 180/np.pi}")
+        # print(f"A[2:] = {A[2:]}")
 
-    #     if dy==0: # then starting left of domain
-    #         yy = np.array([yL,yR,yL,yR])-y0
-    #         xx = np.array([xL,xL,xR,xR])-x0
-    #         th = np.arctan2(yy,xx)
-    #         th_bl, th_ul, th_br, th_ur = th # bottom-left, upper-left, bottom-right, upper-right
-    #         dth_all = th - th1_rad
-    #         dth = copy.deepcopy(dth_all)
-    #         dth[dth<0] += 2*np.pi
-    #         dth = dth[dth<th2_rad-th1_rad] # filter out those that are further around than th2
-
-    #         # determine if th1 intersects the domain (works because everything in [-pi,pi])
-    #         th1_intersects_domain = th1_rad > th_bl and th1_rad < th_ul
-    #         temp = th2_rad % 2*np.pi
-    #         temp -= 2*np.pi if temp > np.pi else 0
-    #         th2_intersects_domain = temp > th_bl and temp < th_ul
-    #         if th1_intersects_domain:
-    #             DTH = [0]
-    #         else:
-    #             DTH = []
-    #         DTH = np.concatenate((DTH,dth,))
-    #         if th2_intersects_domain:
-    #             DTH = np.concatenate((DTH,[th2_rad-th1_rad]))
-    #         if (th1 < 0 and th2 > 0) or (th1 > 0 and th2 > 360):
-    #             new_dth = -th1_rad if th1_rad < 0 else 2*np.pi - th1_rad
-    #             DTH = np.append(DTH,new_dth) # add 0
-    #         DTH.sort()
-    #         d1, d2 = [None, None]
-    #         for d in DTH:
-    #             if d == new_dth: # then directly right, d1 and d2 have been decreasing
-    #                 new_d1 = xL - x0
-    #                 new_d2 = xR - x0
-    #             elif d in dth_all: # then at a corner
-    #                 pass
-
-
-            
-            
-
-        
-    #     # th_corners = np.arctan2(np.array([self.plot_ymax,self.plot_ymax,self.plot_ymin,self.plot_ymin])-y0,np.array([self.plot_xmax,self.plot_xmax,self.plot_xmin,self.plot_xmin])-x0)
-    #     # dth = th_corners - th1_rad
-    #     # if all(dth<=0) or all(dth>=0):
-    #     #     # 
-    #     # th_perp = []
-    #     # if dx < 0:
-    #     #     th_perp.append(0)
-    #     # elif dx > 0:
-    #     #     th_perp.append(-np.pi)
-    #     # if dy < 0:
-    #     #     th_perp.append(0.5*np.pi)
-    #     # elif dy > 0:
-    #     #     th_perp.append(-0.5*np.pi)
-    #     # dth_perp = [th - th1_rad if th > th1_rad else th + 2*np.pi - th1_rad for th in th_perp]
-    #     # dth = [th - th1_rad if th > th1_rad else th + 2*np.pi - th1_rad for th in th_corners]
-    #     # dth = [x for x in dth if x < th2_rad - th1_rad] # filter for corners that are within the arc of th1 to th2
-    #     # dth += dth_perp
-    #     # dth += [0,th2_rad - th1_rad]
-    #     # dth = np.unique(dth)
-    #     # TH = dth + th1_rad # back to angles from 0, rather than from th1
-    #     # d0, d1 = [None,None]
-    #     # for th in TH:
-    #     #     v = (np.cos(th),np.sin(th))
-
-    #     # pass 
+        r02 = r0*r0
+        r12 = r1*r1
+        # print(f"r02 = {r02}, r12 = {r12}")
+        for idx, abs_th in enumerate(A[1]):
+            if A[0,idx] > th2_rad - th1_rad: # then we've finished our rotations
+                break
+            d_new2 = A[2:4,idx]
+            # print(f"\tidx = {idx}\n\tabs_th = {abs_th}\n\td_new2 = {d_new2}\n\td_old2 = {d_old2}")
+            if d_new2[0] < r12 and d_new2[1] > r02:
+                return True
+            if d_old2 is not None:
+                if (d_old2[0] >= r12 and d_new2[1] <= r02) or (d_old2[1] <= r02 and d_new2[0] >= r12):
+                    # then the interval passed through the region
+                    return True
+            if abs_th == bounding_th_R: # the sweep of the ray is leaving the domain
+                d_old2 = None
+            else:
+                d_old2 = copy.deepcopy(d_new2)
+        # if control passes here, then we have found that the wedge does not intersect the domain
+        return False
 
     def distance_to_domain_from_within(self, x0, y0, th):
         v1_x = np.cos(th)
@@ -581,33 +563,6 @@ class BioinfImportPlotWindow(QWidget):
             r_y = np.inf
         return r_x if r_x <= r_y else r_y
 
-    def rays_intersects_with_domain(self,p,th1,th2):
-        x0 = self.plot_xmin
-        x1 = self.plot_xmax
-        y0 = self.plot_ymin
-        y1 = self.plot_ymax
-
-    def ray_intersects_with_domain(self,p,x0,x1,y0,y1,th):
-        v = (np.cos(th),np.sin(th))
-        if v[0]==0:
-            t_x0 = None
-            t_x1 = None
-        else:
-            t_x0 = (x0-p[0]) / v[0]
-            t_x1 = (x1-p[0]) / v[0]
-        if v[1]==0:
-            t_y0 = None
-            t_y1 = None
-        else:
-            t_y0 = (y0-p[1]) / v[1]
-            t_y1 = (y1-p[1]) / v[1]
-
-        pass
-
-    def is_in_domain(self, p):
-        x,y = p
-        return x >= self.plot_xmin and x <= self.plot_xmax and y >= self.plot_ymin and y <= self.plot_ymax
-    
     def create_figure(self):
         self.figure = plt.figure()
         self.canvas = FigureCanvasQTAgg(self.figure)
@@ -1608,8 +1563,23 @@ def create_checkboxes_for_cell_types(vbox, cell_types):
 
     return checkbox_dict
 
-def normalize_thetas(th1,th2)
+def normalize_thetas(th1,th2):
     th1 = th1 % 360
     th1 = th1 - 360 if th1 >= 180 else th1 # get th1 in [-180,180]
     th2 -= 360 * ((th2-th1) // 360) # get th2 in interval (th1,th1+360)
     return th1, th2
+
+def compute_theta_intersection_distances(TH,D,th,x0,y0,xL,xR,yL,yR,dy):
+    if dy == 0:
+        ds = (np.array([xL,xR])-x0)/np.cos(th)
+        if th > 0:
+            ds = np.append(ds, (yR-y0)/np.sin(th))
+        else:
+            ds = np.append(ds, (yL-y0)/np.sin(th))
+        d2 = np.array([(xL-x0)/np.cos(th),np.min(ds)]).reshape((2,1))
+    else:
+        d2 = np.max([(xL-x0)/np.cos(th),(yL-y0)/np.sin(th)])
+        d2 = np.append(d2,np.min([(xR-x0)/np.cos(th),(yR-y0)/np.sin(th)]))
+    TH = np.append(TH,th)
+    D = np.append(D,d2,axis=1)
+    return TH, D
