@@ -421,119 +421,148 @@ class BioinfImportPlotWindow(QWidget):
         else: # then (x0,y0) is not in the domain
             self.wedge_in_domain_center_out(x0,y0,r0,r1,th1,th2,dx,dy,r2)
 
-    def wedge_in_domain_center_out(self,x0,y0,r0,r1,th1,th2,dx,dy,r2):
-        xL, xR, yL, yR = [self.plot_xmin, self.plot_xmax, self.plot_ymin, self.plot_ymax]
-        if dx > 0: 
-            if dy == 0: # reflect so it is on left
-                xL, xR = [-xR,-xL]
-                x0 *= -1
-                th1 = 180-th1
-                th2 = 180-th2
-                dx *= -1
-            elif dy > 0: # rotate 180
-                xL, xR, yL, yR = [-xR, -xL, -yR, -yL]
-                x0 *= -1
-                y0 *= -1
-                th1 += 180
-                th2 += 180
-                dx *= -1
-                dy *= -1
-            else: # dy < 0 rotate 270
-                xL, xR, yL, yR = [yL, yR, -xL, -xR]
-                x0, y0 = [y0, -x0]
-                th1 += 270
-                th2 += 270
-                dx, dy = [dy, -dx]
-        elif dx == 0:
-            if dy < 0: # rotate 270
-                xL, xR, yL, yR = [yL, yR, -xL, -xR]
-                x0, y0 = [y0, -x0]
-                th1 += 270
-                th2 += 270
-                dx, dy = [dy, 0]
-            else: # dy > 0 rotate 90
-                xL, xR, yL, yR = [-yL, -yR, xL, xR]
-                x0, y0 = [-y0, x0]
-                th1 += 90
-                th2 += 90
-                dx, dy = [-dy, 0]
-        else: # dx < 0
-            if dy > 0: # reflect in y axis so on the bottom
-                yL, yR = [-yR,-yL]
-                y0 *= -1
-                th1 *= -1
-                th2 *= -1
-                dy *= -1
-        th1, th2 = normalize_thetas(th1,th2)
+    # def wedge_in_domain_center_out(self,x0,y0,r0,r1,th1,th2,dx,dy,r2):
+    #     xL, xR, yL, yR = [self.plot_xmin, self.plot_xmax, self.plot_ymin, self.plot_ymax]
+    #     # WLOG set center on left or bottom-left of domain
+    #     if dx > 0: 
+    #         if dy == 0: # reflect so it is on left
+    #             xL, xR = [-xR,-xL]
+    #             x0 *= -1
+    #             th1 = 180-th1
+    #             th2 = 180-th2
+    #             dx *= -1
+    #         elif dy > 0: # rotate 180
+    #             xL, xR, yL, yR = [-xR, -xL, -yR, -yL]
+    #             x0 *= -1
+    #             y0 *= -1
+    #             th1 += 180
+    #             th2 += 180
+    #             dx *= -1
+    #             dy *= -1
+    #         else: # dy < 0 rotate 270
+    #             xL, xR, yL, yR = [yL, yR, -xL, -xR]
+    #             x0, y0 = [y0, -x0]
+    #             th1 += 270
+    #             th2 += 270
+    #             dx, dy = [dy, -dx]
+    #     elif dx == 0:
+    #         if dy < 0: # rotate 270
+    #             xL, xR, yL, yR = [yL, yR, -xL, -xR]
+    #             x0, y0 = [y0, -x0]
+    #             th1 += 270
+    #             th2 += 270
+    #             dx, dy = [dy, 0]
+    #         else: # dy > 0 rotate 90
+    #             xL, xR, yL, yR = [-yL, -yR, xL, xR]
+    #             x0, y0 = [-y0, x0]
+    #             th1 += 90
+    #             th2 += 90
+    #             dx, dy = [-dy, 0]
+    #     else: # dx < 0
+    #         if dy > 0: # reflect in y axis so on the bottom
+    #             yL, yR = [-yR,-yL]
+    #             y0 *= -1
+    #             th1 *= -1
+    #             th2 *= -1
+    #             dy *= -1
+    #     th1, th2 = normalize_thetas(th1,th2)
 
-        # Now I can proceed as if the center is left or bottom-left of domain, i.e. dx<0 and dy<=0
+    #     # Now I can proceed as if the center is left or bottom-left of domain, i.e. dx<0 and dy<=0
 
-        th1_rad = th1*0.017453292519943
-        th2_rad = th2*0.017453292519943
-        if dy==0: # then starting left of domain
-            yy = np.array([yL,yR,yL,yR])-y0
-            xx = np.array([xL,xL,xR,xR])-x0
-            th = np.arctan2(yy,xx)
-            th_bl, th_ul, th_br, th_ur = th # bottom-left, upper-left, bottom-right, upper-right
-            dth_all = th - th1_rad
-            dth = copy.deepcopy(dth_all)
-            dth[dth<0] += 2*np.pi
-            dth = dth[dth<th2_rad-th1_rad] # filter out those that are further around than th2
+    #     th1_rad = th1*0.017453292519943
+    #     th2_rad = th2*0.017453292519943
 
-            # determine if th1 intersects the domain (works because everything in [-pi,pi])
-            th1_intersects_domain = th1_rad > th_bl and th1_rad < th_ul
-            temp = th2_rad % 2*np.pi
-            temp -= 2*np.pi if temp > np.pi else 0
-            th2_intersects_domain = temp > th_bl and temp < th_ul
-            if th1_intersects_domain:
-                DTH = [0]
-            else:
-                DTH = []
-            DTH = np.concatenate((DTH,dth,))
-            if th2_intersects_domain:
-                DTH = np.concatenate((DTH,[th2_rad-th1_rad]))
-            if (th1 < 0 and th2 > 0) or (th1 > 0 and th2 > 360):
-                new_dth = -th1_rad if th1_rad < 0 else 2*np.pi - th1_rad
-                DTH = np.append(DTH,new_dth) # add 0
-            DTH.sort()
-            d1, d2 = [None, None]
-            for d in DTH:
-                if d == new_dth: # then directly right, d1 and d2 have been decreasing
-                    new_d1 = xL - x0
-                    new_d2 = xR - x0
-                elif d in dth_all: # then at a corner
-                    pass
+    #     bounding_th_R = np.arctan2(yR,xL) # top-left corner is always the upper (Right) theta bound in this reference frame
+    #     inner_th = np.arctan2(yR,xR) # top-right is always interior in this frame of reference
+    #     if dy == 0:
+    #         bounding_th_L = np.arctan2(yL,xL)
+    #         inner_th = np.append(inner_th,np.arctan2(yL,xR))
+    #         th_right = [0]
+    #     else:
+    #         bounding_th_L = np.arctan2(yL,xR)
+    #         inner_th = np.append(inner_th,np.arctan2(yL,xL))
+    #         th_right = []
+    #     th1_inbounds = th1_rad > bounding_th_L and th1_rad < bounding_th_R
+    #     th2_inbounds = th2_rad > bounding_th_L and th2_rad < bounding_th_R
+    #     th2_inbounds = th2_inbounds or ((th2_rad-2*np.pi) > bounding_th_L and (th2_rad-2*np.pi) < bounding_th_R) # it's possible that th2 being on [th1,th1+360] might not lie between these theta value, but intersect nonetheless
+
+    #     all_thetas = np.concatenate(([bounding_th_L,bounding_th_R],inner_th,th_right))
+    #     if th1_inbounds:
+    #         all_thetas = np.append(all_thetas,th1_rad)
+    #     if th2_inbounds:
+    #         all_thetas = np.append(all_thetas,th2_rad)
+
+    #     all_relative_thetas = (all_thetas - th1_rad) % 2*np.pi
+    #     d1 = None # short distance to domain
+    #     d2 = None # long distance to domain
+
+    #     for idx, th_rel in enumerate(all_relative_thetas):
+
+
+    #     if dy==0: # then starting left of domain
+    #         yy = np.array([yL,yR,yL,yR])-y0
+    #         xx = np.array([xL,xL,xR,xR])-x0
+    #         th = np.arctan2(yy,xx)
+    #         th_bl, th_ul, th_br, th_ur = th # bottom-left, upper-left, bottom-right, upper-right
+    #         dth_all = th - th1_rad
+    #         dth = copy.deepcopy(dth_all)
+    #         dth[dth<0] += 2*np.pi
+    #         dth = dth[dth<th2_rad-th1_rad] # filter out those that are further around than th2
+
+    #         # determine if th1 intersects the domain (works because everything in [-pi,pi])
+    #         th1_intersects_domain = th1_rad > th_bl and th1_rad < th_ul
+    #         temp = th2_rad % 2*np.pi
+    #         temp -= 2*np.pi if temp > np.pi else 0
+    #         th2_intersects_domain = temp > th_bl and temp < th_ul
+    #         if th1_intersects_domain:
+    #             DTH = [0]
+    #         else:
+    #             DTH = []
+    #         DTH = np.concatenate((DTH,dth,))
+    #         if th2_intersects_domain:
+    #             DTH = np.concatenate((DTH,[th2_rad-th1_rad]))
+    #         if (th1 < 0 and th2 > 0) or (th1 > 0 and th2 > 360):
+    #             new_dth = -th1_rad if th1_rad < 0 else 2*np.pi - th1_rad
+    #             DTH = np.append(DTH,new_dth) # add 0
+    #         DTH.sort()
+    #         d1, d2 = [None, None]
+    #         for d in DTH:
+    #             if d == new_dth: # then directly right, d1 and d2 have been decreasing
+    #                 new_d1 = xL - x0
+    #                 new_d2 = xR - x0
+    #             elif d in dth_all: # then at a corner
+    #                 pass
 
 
             
             
 
         
-        # th_corners = np.arctan2(np.array([self.plot_ymax,self.plot_ymax,self.plot_ymin,self.plot_ymin])-y0,np.array([self.plot_xmax,self.plot_xmax,self.plot_xmin,self.plot_xmin])-x0)
-        # dth = th_corners - th1_rad
-        # if all(dth<=0) or all(dth>=0):
-        #     # 
-        # th_perp = []
-        # if dx < 0:
-        #     th_perp.append(0)
-        # elif dx > 0:
-        #     th_perp.append(-np.pi)
-        # if dy < 0:
-        #     th_perp.append(0.5*np.pi)
-        # elif dy > 0:
-        #     th_perp.append(-0.5*np.pi)
-        # dth_perp = [th - th1_rad if th > th1_rad else th + 2*np.pi - th1_rad for th in th_perp]
-        # dth = [th - th1_rad if th > th1_rad else th + 2*np.pi - th1_rad for th in th_corners]
-        # dth = [x for x in dth if x < th2_rad - th1_rad] # filter for corners that are within the arc of th1 to th2
-        # dth += dth_perp
-        # dth += [0,th2_rad - th1_rad]
-        # dth = np.unique(dth)
-        # TH = dth + th1_rad # back to angles from 0, rather than from th1
-        # d0, d1 = [None,None]
-        # for th in TH:
-        #     v = (np.cos(th),np.sin(th))
+    #     # th_corners = np.arctan2(np.array([self.plot_ymax,self.plot_ymax,self.plot_ymin,self.plot_ymin])-y0,np.array([self.plot_xmax,self.plot_xmax,self.plot_xmin,self.plot_xmin])-x0)
+    #     # dth = th_corners - th1_rad
+    #     # if all(dth<=0) or all(dth>=0):
+    #     #     # 
+    #     # th_perp = []
+    #     # if dx < 0:
+    #     #     th_perp.append(0)
+    #     # elif dx > 0:
+    #     #     th_perp.append(-np.pi)
+    #     # if dy < 0:
+    #     #     th_perp.append(0.5*np.pi)
+    #     # elif dy > 0:
+    #     #     th_perp.append(-0.5*np.pi)
+    #     # dth_perp = [th - th1_rad if th > th1_rad else th + 2*np.pi - th1_rad for th in th_perp]
+    #     # dth = [th - th1_rad if th > th1_rad else th + 2*np.pi - th1_rad for th in th_corners]
+    #     # dth = [x for x in dth if x < th2_rad - th1_rad] # filter for corners that are within the arc of th1 to th2
+    #     # dth += dth_perp
+    #     # dth += [0,th2_rad - th1_rad]
+    #     # dth = np.unique(dth)
+    #     # TH = dth + th1_rad # back to angles from 0, rather than from th1
+    #     # d0, d1 = [None,None]
+    #     # for th in TH:
+    #     #     v = (np.cos(th),np.sin(th))
 
-        # pass 
+    #     # pass 
 
     def distance_to_domain_from_within(self, x0, y0, th):
         v1_x = np.cos(th)
