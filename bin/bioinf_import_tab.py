@@ -61,8 +61,27 @@ class BioinfImportPlotWindow(QWidget):
         hbox = self.create_par_area()
         vbox.addLayout(hbox)
 
+        hbox = QHBoxLayout()
+        label = QLabel("""
+                       Use your mouse and keyboard to draw your selected region:\
+                       <html><ul>\
+                       <li>Click: set (x0,y0)</li>\
+                       <li>Shift-click: set ((w,h), r, or r1</li>\
+                       <li>Click-and-drag: set (x0,y0) + ((w,h), r, or r1)</li>\
+                       <li>Shift-click-and-drag: set (r0,r1)</li>\
+                       <li>Ctrl-click-and-drag: set (r0,r1)</li>\
+                       <li>Ctrl-click: set r0</li>\
+                       <li>Alt-click-and-drag: set (\u03b81,\u03b82)</li>\
+                       <li>Alt+ctrl-click: set \u03b81</li>\
+                       <li>Alt+shift-click: set \u03b82</li>\
+                       </ul></html>
+                       """
+                       )
+        hbox.addWidget(label)
         self.create_figure()
-        vbox.addWidget(self.canvas)
+        hbox.addWidget(self.canvas)
+        
+        vbox.addLayout(hbox)
 
         hbox = QHBoxLayout()
         self.plot_cells_button = QPushButton("Plot", enabled=True)
@@ -104,6 +123,7 @@ class BioinfImportPlotWindow(QWidget):
         hbox = QHBoxLayout()
         for i in range(6):
             self.par_label.append(QLabel())
+            self.par_label[i].setAlignment(QtCore.Qt.AlignRight)
             self.par_label[i].setFixedWidth(par_label_width)
             self.par_text.append(QLineEdit())
             self.par_text[i].setFixedWidth(par_text_width)
@@ -130,111 +150,367 @@ class BioinfImportPlotWindow(QWidget):
             self.canvas.draw()
             self.preview_patch = None
 
+        for cid in self.mpl_cid:
+            self.canvas.mpl_disconnect(cid) # might throw error if none exist...
+        self.mpl_cid = []
+
         if self.main_window.cell_pos_button_group.checkedId()==0:
             for pt in self.par_text:
                 pt.setEnabled(False)
             for pl in self.par_label:
                 pl.setText("")
             self.everywhere_plotter()
+        
+        else: # set callbacks common to all
+            self.mpl_cid.append(self.canvas.mpl_connect("button_release_event", self.mouse_released_cb)) 
 
-        elif self.main_window.cell_pos_button_group.checkedId()==1:
-            npars = 4
-            self.par_label[0].setText("x0")
-            self.par_label[1].setText("y0")
-            self.par_label[2].setText("width")
-            self.par_label[3].setText("height")
-            for idx, pt in enumerate(self.par_text):
-                pt.setEnabled(idx < npars)
-                try:
-                    pt.textChanged.disconnect()
-                except:
-                    pass
-                pt.textChanged.connect(self.rectangle_plotter)
-            for i in range(npars,len(self.par_label)):
-                self.par_label[i].setText("")
-            self.rectangle_plotter()
+            if self.main_window.cell_pos_button_group.checkedId()==1:
+                npars = 4
+                self.par_label[0].setText("x0")
+                self.par_label[1].setText("y0")
+                self.par_label[2].setText("width")
+                self.par_label[3].setText("height")
+                for idx, pt in enumerate(self.par_text):
+                    pt.setEnabled(idx < npars)
+                    try:
+                        pt.textChanged.disconnect()
+                    except:
+                        pass
+                    pt.textChanged.connect(self.rectangle_plotter)
+                for i in range(npars,len(self.par_label)):
+                    self.par_label[i].setText("")
 
-        elif self.main_window.cell_pos_button_group.checkedId()==2:
-            npars = 3
-            self.par_label[0].setText("x0")
-            self.par_label[1].setText("y0")
-            self.par_label[2].setText("r")
-            for idx, pt in enumerate(self.par_text):
-                pt.setEnabled(idx < npars)
-                try:
-                    pt.textChanged.disconnect()
-                except:
-                    pass
-                pt.textChanged.connect(self.disc_plotter)
-            for i in range(npars,len(self.par_label)):
-                self.par_label[i].setText("")
-            self.disc_plotter()
+                print("Switching to rectangle_plotter")
+                self.mpl_cid.append(self.canvas.mpl_connect("button_press_event", self.rectangle_mouse_press))
+                self.mpl_cid.append(self.canvas.mpl_connect("motion_notify_event", self.rectangle_mouse_motion))
+                self.rectangle_plotter()
 
-        elif self.main_window.cell_pos_button_group.checkedId()==3:
-            npars = 4
-            self.par_label[0].setText("x0")
-            self.par_label[1].setText("y0")
-            self.par_label[2].setText("r0")
-            self.par_label[3].setText("r1")
-            for idx, pt in enumerate(self.par_text):
-                pt.setEnabled(idx < npars)
-                try:
-                    pt.textChanged.disconnect()
-                except:
-                    pass
-                pt.textChanged.connect(self.annulus_plotter)
-            for i in range(npars,len(self.par_label)):
-                self.par_label[i].setText("")
-            self.annulus_plotter()
+            elif self.main_window.cell_pos_button_group.checkedId()==2:
+                npars = 3
+                self.par_label[0].setText("x0")
+                self.par_label[1].setText("y0")
+                self.par_label[2].setText("r")
+                for idx, pt in enumerate(self.par_text):
+                    pt.setEnabled(idx < npars)
+                    try:
+                        pt.textChanged.disconnect()
+                    except:
+                        pass
+                    pt.textChanged.connect(self.disc_plotter)
+                for i in range(npars,len(self.par_label)):
+                    self.par_label[i].setText("")
+                print("Switching to disc_plotter")
+                self.mpl_cid.append(self.canvas.mpl_connect("button_press_event", self.disc_mouse_press))
+                self.mpl_cid.append(self.canvas.mpl_connect("motion_notify_event", self.disc_mouse_motion))
+                self.disc_plotter()
 
-        elif self.main_window.cell_pos_button_group.checkedId()==4:
-            npars = 6
-            self.par_label[0].setText("x0")
-            self.par_label[1].setText("y0")
-            self.par_label[2].setText("r0")
-            self.par_label[3].setText("r1")
-            self.par_label[4].setText("\u03b81 (\u00b0)")
-            self.par_label[5].setText("\u03b82 (\u00b0)")
-            for idx, pt in enumerate(self.par_text):
-                pt.setEnabled(idx < npars)
-                try:
-                    pt.textChanged.disconnect()
-                except:
-                    pass
-                pt.textChanged.connect(self.wedge_plotter)
-            for i in range(npars,len(self.par_label)):
-                self.par_label[i].setText("")
-            self.wedge_plotter()
+            elif self.main_window.cell_pos_button_group.checkedId()==3:
+                npars = 4
+                self.par_label[0].setText("x0")
+                self.par_label[1].setText("y0")
+                self.par_label[2].setText("r0")
+                self.par_label[3].setText("r1")
+                for idx, pt in enumerate(self.par_text):
+                    pt.setEnabled(idx < npars)
+                    try:
+                        pt.textChanged.disconnect()
+                    except:
+                        pass
+                    pt.textChanged.connect(self.annulus_plotter)
+                for i in range(npars,len(self.par_label)):
+                    self.par_label[i].setText("")
+                print("Switching to annulus_plotter")
+                self.mpl_cid.append(self.canvas.mpl_connect("button_press_event", self.annulus_mouse_press))
+                self.mpl_cid.append(self.canvas.mpl_connect("motion_notify_event", self.annulus_mouse_motion))
+                self.annulus_plotter()
 
-        elif self.main_window.cell_pos_button_group.checkedId()==5:
-            npars = 6
-            self.par_label[0].setText("x0")
-            self.par_label[1].setText("y0")
-            self.par_label[2].setText("r0")
-            self.par_label[3].setText("r1")
-            self.par_label[4].setText("\u03b81 (\u00b0)")
-            self.par_label[5].setText("\u03b82 (\u00b0)")
-            for idx, pt in enumerate(self.par_text):
-                pt.setEnabled(idx > 1 and idx < npars)
-                try:
-                    pt.textChanged.disconnect()
-                except:
-                    pass
-                pt.textChanged.connect(self.wedge_plotter)
-            for i in range(npars,len(self.par_label)):
-                self.par_label[i].setText("")
-            self.wedge_plotter()
+            elif self.main_window.cell_pos_button_group.checkedId()==4:
+                npars = 6
+                self.par_label[0].setText("x0")
+                self.par_label[1].setText("y0")
+                self.par_label[2].setText("r0")
+                self.par_label[3].setText("r1")
+                self.par_label[4].setText("\u03b81 (\u00b0)")
+                self.par_label[5].setText("\u03b82 (\u00b0)")
+                for idx, pt in enumerate(self.par_text):
+                    pt.setEnabled(idx < npars)
+                    try:
+                        pt.textChanged.disconnect()
+                    except:
+                        pass
+                    pt.textChanged.connect(self.wedge_plotter)
+                for i in range(npars,len(self.par_label)):
+                    self.par_label[i].setText("")
+                print("Switching to wedge_plotter")
+                self.mpl_cid.append(self.canvas.mpl_connect("button_press_event", self.wedge_mouse_press))
+                self.mpl_cid.append(self.canvas.mpl_connect("motion_notify_event", self.wedge_mouse_motion))
+                self.wedge_plotter()
+
+            elif self.main_window.cell_pos_button_group.checkedId()==5:
+                npars = 6
+                self.par_label[0].setText("x0")
+                self.par_label[1].setText("y0")
+                self.par_label[2].setText("r0")
+                self.par_label[3].setText("r1")
+                self.par_label[4].setText("\u03b81 (\u00b0)")
+                self.par_label[5].setText("\u03b82 (\u00b0)")
+                for idx, pt in enumerate(self.par_text):
+                    pt.setEnabled(idx > 1 and idx < npars)
+                    try:
+                        pt.textChanged.disconnect()
+                    except:
+                        pass
+                    pt.textChanged.connect(self.wedge_plotter)
+                for i in range(npars,len(self.par_label)):
+                    self.par_label[i].setText("")
+                self.wedge_plotter()
+
+        for pt in self.par_text:
+            if pt.isEnabled():
+                pt.editingFinished.connect(self.move_cursor_to_start)
     
+    def move_cursor_to_start(self):
+        self.sender().setCursorPosition(0)
+
     def everywhere_plotter(self):
         if self.preview_patch is None:
             self.preview_patch = self.ax0.add_patch(Rectangle((self.plot_xmin,self.plot_ymin),self.plot_dx,self.plot_dy,alpha=0.2))
         else:
             self.preview_patch.set_bounds(self.plot_xmin,self.plot_ymin,self.plot_dx,self.plot_dy)
 
-        # self.plot_cells_button.setEnabled(True)
         self.plot_cells_button.setEnabled(self.main_window.is_any_cell_type_button_group_checked())
+
         self.canvas.update()
         self.canvas.draw()
+
+    def get_x0y0(self):
+        return float(self.par_text[0].text()), float(self.par_text[1].text())
+        
+    def set_x0y0(self, event):
+        self.x0y0 = (event.xdata,event.ydata)
+        self.assign_par(self.x0y0[0],0)
+        self.assign_par(self.x0y0[1],1)
+
+    def mouse_released_cb(self, event):
+        self.mouse_pressed = False
+        self.x0y0 = None
+
+    def time_check(self):
+        bval = self.need_to_check_time and (time.time() < self.time_of_press + self.single_click_grace_period)
+        if bval is False:
+            self.need_to_check_time = False
+        return bval
+    
+    def assign_par(self, value, idx):
+        self.par_text[idx].setText(str(value))
+        self.par_text[idx].setCursorPosition(0)
+
+    def rectangle_mouse_press(self, event):
+        if event.inaxes is None:
+            self.x0y0 = None
+            self.mouse_pressed = False
+            return # then mouse is not over axes, move on
+        self.mouse_pressed = True
+        self.current_key_is_shift = event.key=="shift"
+        self.need_to_check_time = True
+        self.time_of_press = time.time()
+        if self.current_key_is_shift:
+            self.x0y0 = None
+            self.rectangle_helper(event, *self.get_x0y0)
+        else:
+            self.set_x0y0(event)
+        if self.shape_started is False:
+            self.default_rectangle_pars()
+
+    def rectangle_mouse_motion(self, event):
+        if (event.inaxes is None) or (self.mouse_pressed is False) or (self.current_key_is_shift) or self.time_check(): # make sure we are in the axes, that the mouse is pressed, and we're not holding shift
+            return
+        self.rectangle_helper(event, *self.x0y0)
+ 
+    def rectangle_helper(self, event, xL, yL):
+        xR = event.xdata
+        yR = event.ydata
+        self.assign_par(np.min([xL,xR]),0)
+        self.assign_par(np.min([yL,yR]),1)
+        self.assign_par(abs(xR-xL),2)
+        self.assign_par(abs(yR-yL),3)
+
+    def default_rectangle_pars(self):
+        self.default_x0y0()
+        self.default_wh()
+        self.shape_started = True
+
+    def default_x0y0(self):
+        if self.par_text[0].text() == "":
+            self.assign_par(0.5*(self.plot_xmin+self.plot_xmax), 0)
+        if self.par_text[1].text() == "":
+            self.assign_par(0.5*(self.plot_ymin+self.plot_ymax), 1)
+            
+    def default_wh(self, factor = 0.5):
+        x0, y0 = self.get_x0y0()
+        if self.par_text[2].text() == "":
+            dL = abs(self.plot_xmin-x0)
+            dR = abs(self.plot_xmax-x0)
+            if dL > dR:
+                w = factor * dL
+                x0 -= w
+                self.assign_par(x0, 0)
+            else:
+                w = factor * dR
+            self.assign_par(w, 2)
+        if self.par_text[3].text() == "":
+            dL = abs(self.plot_ymin-y0)
+            dR = abs(self.plot_ymax-y0)
+            if dL > dR:
+                h = factor * dL
+                y0 -= h
+                self.assign_par(y0, 1)
+            else:
+                h = factor * dR
+            self.assign_par(h, 3)
+
+    def disc_mouse_press(self, event):
+        if event.inaxes is None:
+            self.x0y0 = None
+            self.mouse_pressed = False
+            return # then mouse is not over axes, move on
+        self.mouse_pressed = True
+        self.current_key_is_shift = event.key=="shift"
+        self.need_to_check_time = True
+        self.time_of_press = time.time()
+        if self.current_key_is_shift:
+            self.x0y0 = None
+            self.set_radius_helper(event, *self.get_x0y0(), 2)
+        else:
+            self.set_x0y0(event)
+        if self.shape_started is False:
+            self.default_disc_pars()
+
+    def disc_mouse_motion(self, event):
+        if (event.inaxes is None) or (self.mouse_pressed is False) or (self.current_key_is_shift) or self.time_check(): # make sure we are in the axes, that the mouse is pressed, and we're not holding shift
+            return
+        self.set_radius_helper(event, *self.x0y0, 2)
+    
+    def default_disc_pars(self):
+        self.default_x0y0()
+        self.default_radius(2)
+        self.shape_started = True
+       
+    def default_radius(self, idx, factor = 0.9):
+        if self.par_text[idx].text() == "":
+            x0, y0 = self.get_x0y0()
+            r = factor * np.min(np.abs([self.plot_xmax-x0,self.plot_xmin-x0,self.plot_ymax-y0,self.plot_ymin-y0]))
+            self.assign_par(r, idx)
+            
+    def annulus_mouse_press(self, event):
+        if event.inaxes is None:
+            self.x0y0 = None
+            self.mouse_pressed = False
+            return # then mouse is not over axes, move on
+        self.mouse_pressed = True
+        self.current_key = event.key
+        self.need_to_check_time = True
+        self.time_of_press = time.time()
+        if self.current_key is None:
+            self.set_x0y0(event)
+        elif self.current_key == "shift":
+            self.x0y0 = self.get_x0y0()
+            self.r_start = self.compute_radius(event, *self.x0y0)
+            self.set_radius_helper(event, *self.x0y0, 3)
+        elif self.current_key == "control":
+            self.x0y0 = self.get_x0y0()
+            self.r_start = self.compute_radius(event, *self.x0y0)
+            self.set_radius_helper(event, *self.x0y0, 2)
+        if self.shape_started is False:
+            self.default_annulus_pars()
+
+    def annulus_mouse_motion(self, event):
+        if (event.inaxes is None) or (self.mouse_pressed is False) or self.time_check() or (self.current_key not in [None,"shift","control"]) : # make sure we are in the axes, that the mouse is pressed, and we're not holding shift or control
+            return
+        self.radii_motion_helper(event)
+
+    def default_annulus_pars(self):
+        self.default_x0y0()
+        self.default_radius(2, factor = 0) # set inner radius to half the distance to the nearest boundary
+        self.default_radius(3)
+        self.shape_started = True
+
+    def compute_radius(self,event, x0, y0):
+        x1 = event.xdata
+        y1 = event.ydata
+        return np.sqrt((x1-x0)**2 + (y1-y0)**2)
+
+    def radii_motion_helper(self, event):
+        if self.current_key is None:
+            self.set_radius_helper(event, *self.x0y0, 3)
+            return
+        # if we're here, then we clicked (and continue to click) with the shift or control key pressed for at least a little time; we are setting the inner and outer radii by the start and current mouse position
+        self.r_end = self.compute_radius(event, *self.x0y0)
+        r0, r1 = [self.r_start,self.r_end] if self.r_start < self.r_end else [self.r_end,self.r_start]
+        self.assign_par(r0, 2)
+        self.assign_par(r1, 3)
+
+    def set_radius_helper(self, event, x0, y0, idx):
+        r = self.compute_radius(event, x0, y0)
+        if r is None: # then left axes or something to cause this
+            return
+        self.assign_par(r, idx)
+        return r
+
+    def wedge_mouse_press(self, event):
+        if event.inaxes is None:
+            self.x0y0 = None
+            self.mouse_pressed = False
+            return # then mouse is not over axes, move on
+        self.mouse_pressed = True
+        self.current_key = event.key
+        self.need_to_check_time = True
+        self.time_of_press = time.time()
+        if self.current_key is None:
+            self.set_x0y0(event)
+        elif self.current_key == "shift":
+            self.x0y0 = self.get_x0y0()
+            self.r_start = self.compute_radius(event, *self.x0y0)
+            self.set_radius_helper(event, *self.x0y0, 3)
+        elif self.current_key == "control":
+            self.x0y0 = self.get_x0y0()
+            self.r_start = self.compute_radius(event, *self.x0y0)
+            self.set_radius_helper(event, *self.x0y0, 2)
+        elif "alt" in self.current_key: # then work with thetas somehow
+            self.x0y0 = self.get_x0y0()
+            if "shift" in self.current_key:
+                self.assign_par(self.get_angle(event, *self.x0y0), 5) # set theta 2 because shift is above control on my keyboard
+            elif "control" in self.current_key or "ctrl" in self.current_key: # I cannot fathom why someone decided that control should show up in two different ways...
+                self.assign_par(self.get_angle(event, *self.x0y0), 4) # set theta 2 because shift is above control on my keyboard
+            elif self.current_key == "alt":
+                theta = self.get_angle(event, *self.x0y0)
+                self.assign_par(theta, 4)
+                self.assign_par(theta, 5)
+        if self.shape_started is False:
+            self.default_wedge_pars()
+
+    def wedge_mouse_motion(self, event):
+        if (event.inaxes is None) or (self.mouse_pressed is False) or self.time_check() or (self.current_key not in [None,"shift","control","alt","alt+control","ctrl+alt","alt+shift","shift+alt"]) : # make sure we are in the axes, that the mouse is pressed, and we're not holding shift or control or alt
+            return
+        if self.current_key == "alt" or self.current_key == "alt+shift" or self.current_key == "shift+alt":
+            self.assign_par(self.get_angle(event, *self.x0y0), 5)
+            return
+        if self.current_key == "alt+control" or self.current_key == "ctrl+alt":
+            self.assign_par(self.get_angle(event, *self.x0y0), 4)
+            return
+        self.radii_motion_helper(event)
+
+    def default_wedge_pars(self):
+        self.default_annulus_pars()
+        if self.par_text[4].text() == "":
+            self.assign_par("0",4)
+        if self.par_text[5].text() == "":
+            self.assign_par("360",5)
+        
+    def get_angle(self, event, x0, y0):
+        x1 = event.xdata
+        y1 = event.ydata
+        return 57.295779513082323 * np.arctan2(y1-y0,x1-x0) # convert to degrees
 
     def rectangle_plotter(self):
         pars = []
@@ -311,7 +587,7 @@ class BioinfImportPlotWindow(QWidget):
                 return # do not update unless all are ready
             pars.append(float(pt.text()))
         x0, y0, r0, r1 = pars
-        if r1 < r0:
+        if r1==0 or (r1 < r0):
             if self.preview_patch: # probably a way to impose this using validators, but that would require dynamically updating the validators...
                 self.preview_patch.remove()
                 self.canvas.update()
@@ -334,6 +610,11 @@ class BioinfImportPlotWindow(QWidget):
             width *= 1 - np.finfo(width).eps # reduce width by the littlest bit possible to make sure this bug doesn't hit
         if self.preview_patch is None:
             self.preview_patch = self.ax0.add_patch(Annulus((x0,y0),r1,width,alpha=0.2))
+            ### This should no be necessary since we make sure to set the width less than r1
+            # try:
+            #     self.preview_patch = self.ax0.add_patch(Annulus((x0,y0),r1,width,alpha=0.2))
+            # except:
+            #     print(f"r1 = {r1}, width = {width}, r1-width = {r1-width}")
         else:
             self.preview_patch.set(center=(x0,y0),radii=r1,width=width)
         
@@ -601,9 +882,20 @@ class BioinfImportPlotWindow(QWidget):
         self.canvas = FigureCanvasQTAgg(self.figure)
         self.canvas.setStyleSheet("background-color:transparent;")
 
+        self.canvas.setFocusPolicy( QtCore.Qt.ClickFocus )
+        self.canvas.setFocus()
+
         self.ax0 = self.figure.add_subplot(111, adjustable='box')
 
         self.format_axis()
+
+        self.mpl_cid = []
+
+        self.mouse_pressed = False
+        self.x0y0 = None
+        self.current_key_is_shift = False
+        self.single_click_grace_period = 0.1 # seconds for a single-click grace period, don't allow movement within this window to cause a redraw
+        self.shape_started = False
 
         self.canvas.update()
         self.canvas.draw()
@@ -791,16 +1083,18 @@ class BioinfImportPlotWindow(QWidget):
 
     def finish_write_button_cb(self):
         self.check_for_new_celldefs()
-        with open(self.main_window.full_fname, 'w') as f:
+        self.set_file_name()
+        with open(self.full_fname, 'w') as f:
             f.write('x,y,z,type\n')
         self.add_cell_positions_to_file()
 
     def finish_append_button_cb(self):
         self.check_for_new_celldefs()
-        with open(self.main_window.full_fname, 'r') as f:
+        self.set_file_name()
+        with open(self.full_fname, 'r') as f:
             first_line = f.readline()
             if "x,y,z,type" not in first_line:
-                print("self.main_window.full_fname is not properly formatted for appending.\nIt needs to start with 'x,y,z,type,...'")
+                print(f"{self.full_fname} is not properly formatted for appending.\nIt needs to start with 'x,y,z,type,...'")
                 return
         self.add_cell_positions_to_file()
 
@@ -811,13 +1105,26 @@ class BioinfImportPlotWindow(QWidget):
             else:
                 self.main_window.celldef_tab.new_cell_def_named(cell_type)
 
+    def set_file_name(self):
+        dir_name = self.main_window.csv_folder.text()
+        # print(f'dir_name={dir_name}<end>')
+        if len(dir_name) > 0 and not os.path.isdir(dir_name):
+            os.makedirs(dir_name)
+            time.sleep(1)
+        self.full_fname = os.path.join(dir_name,self.main_window.csv_file.text())
+        Path(self.full_fname).touch() # make sure the file exists
+        print("save_cb(): self.full_fname=",self.full_fname)
+
     def add_cell_positions_to_file(self):
-        with open(self.main_window.full_fname, 'a') as f:
+        with open(self.full_fname, 'a') as f:
             for cell_type in self.csv_array.keys():
                 for pos in self.csv_array[cell_type]:
                     f.write(f'{pos[0]},{pos[1]},{pos[2]},{cell_type}\n')
-        self.main_window.ics_tab.import_from_file(self.main_window.full_fname)
+        self.main_window.ics_tab.clear_cb()
+        self.main_window.ics_tab.import_from_file(self.full_fname)
         self.main_window.ics_tab.tab_widget.setCurrentIndex(self.main_window.ics_tab.base_tab_id)
+        self.main_window.ics_tab.csv_folder.setText(self.main_window.csv_folder.text())
+        self.main_window.ics_tab.output_file.setText(self.main_window.csv_file.text())
         self.close()
         self.main_window.window.close()
         print("BioinfImportWindow: Colors will likely change in the ICs tab due to previous cell types being present.")
@@ -873,7 +1180,7 @@ class BioinfImport(QWidget):
         self.ics_tab = ics_tab
         self.default_time_units = "min"
 
-        self.full_fname = "./config/cells.csv"
+        # self.full_fname = f"{self.csv_folder.text()}/{self.csv_file.text()}"
         self.qlineedit_style_sheet = """
             QLineEdit:disabled {
                 background-color: rgb(200,200,200);
@@ -910,6 +1217,20 @@ class BioinfImport(QWidget):
 
         vbox.addLayout(hbox)
 
+        hbox = QHBoxLayout()
+        label = QLabel("folder")
+        hbox.addWidget(label)
+
+        self.csv_folder = QLineEdit("./config")
+        hbox.addWidget(self.csv_folder)
+        label = QLabel("file")
+        hbox.addWidget(label)
+
+        self.csv_file = QLineEdit("cells.csv")
+        hbox.addWidget(self.csv_file)
+
+        vbox.addLayout(hbox)
+
         base_widget = QWidget()
         base_widget.setLayout(vbox)
         self.layout = QVBoxLayout(self)  # leave this!
@@ -935,7 +1256,11 @@ class BioinfImport(QWidget):
         full_file_path = QFileDialog.getOpenFileName(self,'',".")
         file_path = full_file_path[0]
         # file_path = "./data/pbmc3k_clustered.h5ad"
-        self.adata = anndata.read_h5ad(file_path)
+        try:
+            self.adata = anndata.read_h5ad(file_path)
+        except:
+            print(f"Import failed...")
+            return
 
         print("------------anndata object loaded-------------")
         # print(self.adata)
@@ -1392,6 +1717,7 @@ class BioinfImport(QWidget):
         if self.ics_plot_area:
             # print("syncing...")
             self.ics_plot_area.sync_par_area()
+            self.ics_plot_area.shape_started = False # for helping with default parameters when using the mouse
         
     def create_pos_scroll_area(self):
         self.cell_pos_button_group = QButtonGroup()
@@ -1762,6 +2088,10 @@ class BioinfImport(QWidget):
             self.prop_total_area_one[cell_type] = (((9*np.pi*cell_volume**2) / 16) ** (1./3)) / volume_env
             self.prop_dot_ratios += (self.cell_type_props[idx] * self.prop_total_area_one[cell_type])
         pass
+
+    def fill_gui(self):
+        self.csv_folder.setText(self.config_tab.csv_folder.text())
+        self.csv_file.setText(self.config_tab.csv_file.text())
 
 def create_checkboxes_for_cell_types(vbox, cell_types):
     checkbox_dict = {}

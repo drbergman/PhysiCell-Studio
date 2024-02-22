@@ -193,7 +193,8 @@ class ICs(QWidget):
         self.tab_widget = QTabWidget()
         self.base_tab_id = self.tab_widget.addTab(self.create_base_ics_tab(),"Base")
         if self.bioinf_import_flag:
-            self.tab_widget.addTab(BioinfImport(self.config_tab, self.celldef_tab, self),"Bioinformatics Import")
+            self.bioinf_import_tab = BioinfImport(self.config_tab, self.celldef_tab, self)
+            self.tab_widget.addTab(self.bioinf_import_tab,"Bioinformatics Import")
 
         self.layout = QVBoxLayout(self)
         self.layout.addWidget(self.tab_widget)
@@ -1938,3 +1939,5 @@ class ICs(QWidget):
     def fill_gui(self):
         self.csv_folder.setText(self.config_tab.csv_folder.text())
         self.output_file.setText(self.config_tab.csv_file.text())
+        if self.bioinf_import_flag:
+            self.bioinf_import_tab.fill_gui()
