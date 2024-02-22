@@ -278,14 +278,14 @@ class BioinfImportPlotWindow(QWidget):
             self.preview_patch.set(center=(x0,y0),radius=r)
 
         # check the disc intersects the domain in non-trivial manner
-        r2, _, _ = self.get_distance_to_domain(x0, y0)
+        r2 = self.get_distance2_to_domain(x0, y0)[0]
         bval = r2 < r*r # make sure the distance from center of Circle to domain is less than radius of circle
         
         self.plot_cells_button.setEnabled(bval and self.main_window.is_any_cell_type_button_group_checked())
         self.canvas.update()
         self.canvas.draw()
 
-    def get_distance_to_domain(self, x0, y0):
+    def get_distance2_to_domain(self, x0, y0):
         if x0 < self.plot_xmin:
             dx = x0 - self.plot_xmin # negative
         elif x0 <= self.plot_xmax:
@@ -320,7 +320,7 @@ class BioinfImportPlotWindow(QWidget):
             self.plot_cells_button.setEnabled(False)
             return
         
-        r2, _, _ = self.get_distance_to_domain(x0,y0)
+        r2 = self.get_distance2_to_domain(x0,y0)[0]
         cr2 = self.get_circumscribing_radius(x0, y0)
         # outer_radius_reaches_domain = r2 < r1*r1
         # inner_radius_does_not_contain_entire_domain = cr2 > r0*r0
@@ -328,10 +328,14 @@ class BioinfImportPlotWindow(QWidget):
 
         self.plot_cells_button.setEnabled(bval and self.main_window.is_any_cell_type_button_group_checked())
 
+        # print(f"r0 = {r0}\t r1 = {r1}\twidth = {r1-r0}\twidth <= r1 = {r1-r0 <= r1}")
+        width = r1-r0
+        if width==r1: # hack to address the bug in matplotlib.patches.Annulus which checks if width < r0 rather than <= r0 as the error message suggests it does
+            width *= 1 - np.finfo(width).eps # reduce width by the littlest bit possible to make sure this bug doesn't hit
         if self.preview_patch is None:
-            self.preview_patch = self.ax0.add_patch(Annulus((x0,y0),r1,r1-r0,alpha=0.2))
+            self.preview_patch = self.ax0.add_patch(Annulus((x0,y0),r1,width,alpha=0.2))
         else:
-            self.preview_patch.set(center=(x0,y0),radii=r1,width=r1-r0)
+            self.preview_patch.set(center=(x0,y0),radii=r1,width=width)
         
         self.canvas.update()
         self.canvas.draw()
@@ -367,7 +371,7 @@ class BioinfImportPlotWindow(QWidget):
             self.plot_cells_button.setEnabled(False)
             return
         
-        r2, dx, dy = self.get_distance_to_domain(x0,y0)
+        r2, dx, dy = self.get_distance2_to_domain(x0,y0)
         cr2 = self.get_circumscribing_radius(x0, y0)
         # outer_radius_reaches_domain = r2 < r1*r1
         # inner_radius_does_not_contain_entire_domain = cr2 > r0*r0
@@ -628,6 +632,12 @@ class BioinfImportPlotWindow(QWidget):
         self.finish_write_button.setEnabled(True)
         self.finish_append_button.setEnabled(True)
 
+    def max_dist_to_domain(self,x0,y0):
+        xL, xR, yL, yR = [self.plot_xmin, self.plot_xmax, self.plot_ymin, self.plot_ymax]
+        dx = xL-x0 if (2*x0 > xL+xR) else x0-xR # distance to furtherst vertical edge
+        dy = yL-y0 if (2*y0 > yL+yR) else y0-yR # distance to furtherst horizontal edge
+        return np.sqrt(dx*dx + dy*dy)
+    
     def plot_cell_pos_single(self, cell_type):
         # print(f"cell_type = {cell_type}")
         # print(f"self.main_window.cell_counts.keys() = {self.main_window.cell_counts.keys()}")
@@ -649,21 +659,26 @@ class BioinfImportPlotWindow(QWidget):
         elif type(self.preview_patch) is Circle:
             x0, y0 = self.preview_patch.get_center()
             r = self.preview_patch.get_radius()
+            r = np.min([r,self.max_dist_to_domain(x0,y0)])
             self.wedge_sample(N, x0, y0, r)
         elif type(self.preview_patch) is Annulus:
             x0, y0 = self.preview_patch.get_center()
             r1 = self.preview_patch.get_radii()[0] # annulus is technically an ellipse, get_radii returns (semi-major,semi-minor) axis lengths, since I'm using circles, these will be the same
+            r1 = np.min([r1,self.max_dist_to_domain(x0,y0)])
             width = self.preview_patch.get_width()
             r0 = r1 - width
+            r0 = np.max([r0,np.sqrt(self.get_distance2_to_domain(x0,y0)[0])])
             self.wedge_sample(N, x0, y0, r1, r0=r0)
         elif type(self.preview_patch) is Wedge:
             x0, y0 = self.preview_patch.center
             r1 = self.preview_patch.r
+            r1 = np.min([r1,self.max_dist_to_domain(x0,y0)])
             th1 = self.preview_patch.theta1  
             th2 = self.preview_patch.theta2
             th2 -= 360 * ((th2-th1) // 360) # I promise this works if dth=th2-th1 < 0, 0<dth<360, and dth>360. 
             width = self.preview_patch.width
             r0 = r1 - width
+            r0 = np.max([r0,np.sqrt(self.get_distance2_to_domain(x0,y0)[0])])
             self.wedge_sample(N, x0, y0, r1, r0=r0, th_lim=(th1*0.017453292519943,th2*0.017453292519943))
         else:
             print("unknown patch")
