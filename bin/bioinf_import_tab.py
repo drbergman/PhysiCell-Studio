@@ -973,6 +973,7 @@ class BioinfImport(QWidget):
         counts_width = 120
         props_width = 120
         manual_width = 120
+        confluence_width = 150
         
         vbox = QVBoxLayout()
 
@@ -983,23 +984,35 @@ class BioinfImport(QWidget):
 
         self.counts_button_group = QButtonGroup()
         self.counts_button_group.idToggled.connect(self.counts_button_cb)
+        counts_button_group_next_id = 0
 
         self.use_counts_as_is_radio_button = QRadioButton("Use counts")
         self.use_counts_as_is_radio_button.setFixedWidth(counts_width)
         self.use_counts_as_is_radio_button.setChecked(True)
-        self.counts_button_group.addButton(self.use_counts_as_is_radio_button,0)
-        hbox.addWidget(self.use_counts_as_is_radio_button)
+        self.counts_button_group.addButton(self.use_counts_as_is_radio_button,counts_button_group_next_id)
+        counts_button_group_next_id += 1
 
         self.use_props_radio_button = QRadioButton("Use proportions")
         self.use_props_radio_button.setFixedWidth(props_width)
         self.use_props_radio_button.setChecked(False)
-        self.counts_button_group.addButton(self.use_props_radio_button,1)
-        hbox.addWidget(self.use_props_radio_button)
+        self.counts_button_group.addButton(self.use_props_radio_button,counts_button_group_next_id)
+        counts_button_group_next_id += 1
+
+        self.use_confluence_radio_button = QRadioButton("Set confluence (%)")
+        self.use_confluence_radio_button.setFixedWidth(confluence_width)
+        self.use_confluence_radio_button.setChecked(False)
+        self.counts_button_group.addButton(self.use_confluence_radio_button,counts_button_group_next_id)
+        counts_button_group_next_id += 1
 
         self.use_manual_radio_button = QRadioButton("Set manually")
         self.use_manual_radio_button.setFixedWidth(manual_width)
         self.use_manual_radio_button.setChecked(False)
-        self.counts_button_group.addButton(self.use_manual_radio_button,2)
+        self.counts_button_group.addButton(self.use_manual_radio_button,counts_button_group_next_id)
+        counts_button_group_next_id += 1
+
+        hbox.addWidget(self.use_counts_as_is_radio_button)
+        hbox.addWidget(self.use_props_radio_button)
+        hbox.addWidget(self.use_confluence_radio_button)
         hbox.addWidget(self.use_manual_radio_button)
 
         vbox.addLayout(hbox)
@@ -1014,21 +1027,25 @@ class BioinfImport(QWidget):
 
         self.type_prop = {}
         self.type_manual = {}
+        self.type_confluence = {}
+
+        self.prop_box_callback_paused = False
+        self.conf_box_callback_paused = False
 
         num_validator = QtGui.QIntValidator()
         num_validator.setBottom(0)
+
+        self.setup_confluence_info()
 
         for idx, cell_type in enumerate(self.cell_types_list_final):
             hbox = QHBoxLayout()
             label = QLabel(cell_type)
             label.setFixedWidth(names_width)
-            hbox.addWidget(label)
 
             type_count = QLineEdit(enabled=False)
             type_count.setText(str(self.cell_counts[cell_type]))
             type_count.setFixedWidth(counts_width)
             type_count.setStyleSheet(self.qlineedit_style_sheet)
-            hbox.addWidget(type_count)
 
             self.type_prop[cell_type] = QLineEdit(enabled=False)
             self.type_prop[cell_type].setText(str(self.cell_counts[cell_type]))
@@ -1037,28 +1054,37 @@ class BioinfImport(QWidget):
             self.type_prop[cell_type].setValidator(num_validator)
             self.type_prop[cell_type].setObjectName(str(idx))
             self.type_prop[cell_type].textChanged.connect(self.prop_box_changed_cb)
-            hbox.addWidget(self.type_prop[cell_type])
 
-            self.type_manual[cell_type] =QLineEdit(enabled=False)
+            self.type_confluence[cell_type] = QLineEdit(enabled=False)
+            self.type_confluence[cell_type].setFixedWidth(confluence_width)
+            self.type_confluence[cell_type].setStyleSheet(self.qlineedit_style_sheet)
+            self.type_confluence[cell_type].setValidator(QtGui.QDoubleValidator(bottom=0))
+            self.type_confluence[cell_type].setObjectName(str(idx))
+            self.type_confluence[cell_type].textChanged.connect(self.confluence_box_changed_cb)
+
+            self.type_manual[cell_type] = QLineEdit(enabled=False)
             self.type_manual[cell_type].setText(str(self.cell_counts[cell_type]))
             self.type_manual[cell_type].setFixedWidth(manual_width)
             self.type_manual[cell_type].setStyleSheet(self.qlineedit_style_sheet)
             self.type_manual[cell_type].setValidator(num_validator)
             self.type_manual[cell_type].setObjectName(str(idx))
-            hbox.addWidget(self.type_manual[cell_type])
             
+            hbox.addWidget(label)
+            hbox.addWidget(type_count)
+            hbox.addWidget(self.type_prop[cell_type])
+            hbox.addWidget(self.type_confluence[cell_type])
+            hbox.addWidget(self.type_manual[cell_type])
+
             vbox.addLayout(hbox)
         
         hbox = QHBoxLayout()
         label = QLabel("Total")
         label.setFixedWidth(names_width)
-        hbox.addWidget(label)
 
         type_count = QLineEdit(enabled=False)
         type_count.setText(str(len(self.cell_types_final)))
         type_count.setFixedWidth(counts_width)
         type_count.setStyleSheet(self.qlineedit_style_sheet)
-        hbox.addWidget(type_count)
 
         self.total_prop = QLineEdit(enabled=False)
         self.total_prop.setText(str(len(self.cell_types_final)))
@@ -1067,13 +1093,25 @@ class BioinfImport(QWidget):
         self.total_prop.setValidator(num_validator)
         self.total_prop.textChanged.connect(self.prop_box_changed_cb)
         self.total_prop.setObjectName("total_prop")
-        hbox.addWidget(self.total_prop)
 
         self.total_manual = QLineEdit(enabled=False)
         self.total_manual.setText(str(len(self.cell_types_final)))
         self.total_manual.setFixedWidth(manual_width)
         self.total_manual.setStyleSheet(self.qlineedit_style_sheet)
         self.total_manual.setValidator(num_validator)
+
+        self.total_conf = QLineEdit(enabled=False)
+        self.total_conf.setFixedWidth(confluence_width)
+        self.total_conf.setStyleSheet(self.qlineedit_style_sheet)
+        self.total_conf.setValidator(QtGui.QDoubleValidator(bottom=0))
+        self.total_conf.textChanged.connect(self.confluence_box_changed_cb)
+        self.total_conf.setObjectName("total_conf")
+        self.total_conf.setText("100")
+
+        hbox.addWidget(label)
+        hbox.addWidget(type_count)
+        hbox.addWidget(self.total_prop)
+        hbox.addWidget(self.total_conf)
         hbox.addWidget(self.total_manual)
 
         vbox.addLayout(hbox)
@@ -1089,8 +1127,6 @@ class BioinfImport(QWidget):
         # hack to bring to foreground
         self.window.hide()
         self.window.show()
-
-        self.prop_box_callback_paused = False
     
     def prop_box_changed_cb(self, text):
         # print(f"self.prop_box_callback_paused = {self.prop_box_callback_paused}")
@@ -1101,47 +1137,103 @@ class BioinfImport(QWidget):
             return
         # text = type_prop_sender.text()
         # print(f"text = {text}")
-        current_idx = type_prop_sender.objectName()
-        # print(f"type_prop_sender.objectName() = {current_idx}")
+        current_name = type_prop_sender.objectName()
+        # print(f"type_prop_sender.objectName() = {current_name}")
         self.prop_box_callback_paused = True
-        if type_prop_sender.objectName()=="total_prop":
+        if current_name=="total_prop":
             mult = int(text)
         else:
             # print(f"int(text) = {int(text)}")
-            # print(f"self.cell_type_props[int(current_idx)] = {self.cell_type_props[int(current_idx)]}")
-            mult = int(text) / self.cell_type_props[int(current_idx)]
+            # print(f"self.cell_type_props[int(current_name)] = {self.cell_type_props[int(current_name)]}")
+            mult = int(text) / self.cell_type_props[int(current_name)]
             self.total_prop.setText(str(round(mult)))
 
         for idx, cell_type in enumerate(self.cell_types_list_final):
             # print(f"idx = {idx}, cell_type = {cell_type}")
-            if current_idx==str(idx):
+            if current_name==str(idx):
                 continue
             self.type_prop[cell_type].setText(str(round(mult * self.cell_type_props[idx])))
         self.prop_box_callback_paused = False
 
+    def confluence_box_changed_cb(self, text):
+        # print(f"self.conf_box_callback_paused = {self.conf_box_callback_paused}")
+        if self.conf_box_callback_paused:
+            return
+        type_conf_sender = self.sender()
+        if type_conf_sender.hasAcceptableInput() is False:
+            return
+        # text = type_conf_sender.text()
+        # print(f"text = {text}")
+        current_name = type_conf_sender.objectName()
+        # print(f"type_conf_sender.objectName() = {current_name}")
+        self.conf_box_callback_paused = True
+        current_conf = float(text)
+        if current_name=="total_conf":
+            mult = current_conf
+            mult /= self.prop_dot_ratios
+            pass # not sure yet
+        else:
+            # print(f"int(text) = {int(text)}")
+            # print(f"self.cell_type_props[int(current_name)] = {self.cell_type_props[int(current_name)]}")
+            current_idx = int(current_name)
+            mult = current_conf
+            mult /= self.prop_total_area_one[self.cell_types_list_final[current_idx]]
+            mult /= self.cell_type_props[current_idx]
+
+        total_conf = 0
+        for idx, cell_type in enumerate(self.cell_types_list_final):
+            # print(f"idx = {idx}, cell_type = {cell_type}")
+            if current_name==str(idx):
+                total_conf += current_conf
+                continue
+            new_conf = mult * self.cell_type_props[idx] * self.prop_total_area_one[cell_type]
+            total_conf += new_conf
+            self.type_confluence[cell_type].setText(str(new_conf))
+        if current_name!="total_conf":
+            self.total_conf.setText(str(total_conf))
+        
+        if total_conf > 100:
+            self.total_conf.setStyleSheet("QLineEdit {background-color : red; color : black;}")
+        else:
+            self.total_conf.setStyleSheet(self.qlineedit_style_sheet)
+            
+        self.conf_box_callback_paused = False
+
     def counts_button_cb(self):
         enable_props = self.counts_button_group.checkedId()==1
+        enable_confluence = self.counts_button_group.checkedId()==2
+        enable_manual = self.counts_button_group.checkedId()==3
+
         for k in self.type_prop.keys():
             self.type_prop[k].setEnabled(enable_props)
-            # self.type_prop[k].setStyleSheet(self.qlineedit_style[enable_props])
         self.total_prop.setEnabled(enable_props)
-        # self.total_prop.setStyleSheet(self.qlineedit_style[enable_props])
-        enable_manual = self.counts_button_group.checkedId()==2
+        
+        for k in self.type_confluence.keys():
+            self.type_confluence[k].setEnabled(enable_confluence)
+        self.total_conf.setEnabled(enable_confluence)
+        if enable_confluence and float(self.total_conf.text()) > 100:
+            self.total_conf.setStyleSheet("QLineEdit {background-color : red; color : black;}")
+        else:
+            self.total_conf.setStyleSheet(self.qlineedit_style_sheet)
+        
         for k in self.type_manual.keys():
             self.type_manual[k].setEnabled(enable_manual)
-            # self.type_manual[k].setStyleSheet(self.qlineedit_style[enable_manual])
         self.total_manual.setEnabled(enable_manual)
-        # self.total_manual.setStyleSheet(self.qlineedit_style[enable_manual])
 
     def continue_to_cell_pos_cb(self):
         if self.counts_button_group.checkedId()==0: # use counts found in data file
             pass
-        elif self.counts_button_group.checkedId()==1: # use counts found in data file
+        elif self.counts_button_group.checkedId()==1: # use props found in data file
             for cell_type in self.cell_types_list_final:
                 self.cell_counts[cell_type] = int(self.type_prop[cell_type].text())
-        elif self.counts_button_group.checkedId()==2:
+        elif self.counts_button_group.checkedId()==2: # set by confluence
+            for cell_type in self.cell_types_list_final:
+                self.cell_counts[cell_type] = round(0.01 * float(self.type_confluence[cell_type].text()) / self.prop_total_area_one[cell_type])
+        elif self.counts_button_group.checkedId()==3: # manually set
             for cell_type in self.cell_types_list_final:
                 self.cell_counts[cell_type] = int(self.type_manual[cell_type].text())
+
+        print(f"self.cell_counts = {self.cell_counts}")
 
         self.cell_types_to_place = self.cell_types_list_final
         self.ics_plot_area = None
@@ -1553,6 +1645,19 @@ class BioinfImport(QWidget):
         label_text += "</ul></html>"
         return QLabel(label_text)
     
+    def setup_confluence_info(self):
+        volume_env = (float(self.config_tab.xmax.text()) - float(self.config_tab.xmin.text())) * (float(self.config_tab.ymax.text()) - float(self.config_tab.ymin.text()))
+        self.prop_total_area_one = {}
+        self.prop_dot_ratios = 0
+        for idx, cell_type in enumerate(self.cell_types_list_final):
+            if cell_type in self.celldef_tab.param_d.keys():
+                cell_volume = self.celldef_tab.param_d[cell_type]['volume_total']
+            else:
+                cell_volume = 2494 # use PhysiCell default
+            self.prop_total_area_one[cell_type] = (((9*np.pi*cell_volume**2) / 16) ** (1./3)) / volume_env
+            self.prop_dot_ratios += (self.cell_type_props[idx] * self.prop_total_area_one[cell_type])
+        pass
+
 def create_checkboxes_for_cell_types(vbox, cell_types):
     checkbox_dict = {}
     for cell_type in cell_types:
