@@ -66,14 +66,14 @@ class BioinfImportPlotWindow(QWidget):
                        Use your mouse and keyboard to draw your selected region:\
                        <html><ul>\
                        <li>Click: set (x0,y0)</li>\
-                       <li>Shift-click: set ((w,h), r, or r1</li>\
-                       <li>Click-and-drag: set (x0,y0) + ((w,h), r, or r1)</li>\
+                       <li>Shift-click: set (w,h), r, or r1</li>\
+                       <li>Click-and-drag: set (x0,y0) + {(w,h), r, or r1}</li>\
                        <li>Shift-click-and-drag: set (r0,r1)</li>\
                        <li>Ctrl-click-and-drag: set (r0,r1)</li>\
                        <li>Ctrl-click: set r0</li>\
                        <li>Alt-click-and-drag: set (\u03b81,\u03b82)</li>\
-                       <li>Alt+ctrl-click: set \u03b81</li>\
-                       <li>Alt+shift-click: set \u03b82</li>\
+                       <li>Alt+ctrl-click-and-drag: set \u03b81</li>\
+                       <li>Alt+shift-click-and-drag: set \u03b82</li>\
                        </ul></html>
                        """
                        )
