@@ -606,20 +606,23 @@ class BioinfImportPlotWindow(QWidget):
 
         # print(f"r0 = {r0}\t r1 = {r1}\twidth = {r1-r0}\twidth <= r1 = {r1-r0 <= r1}")
         width = r1-r0
-        if width==r1: # hack to address the bug in matplotlib.patches.Annulus which checks if width < r0 rather than <= r0 as the error message suggests it does
-            width *= 1 - np.finfo(width).eps # reduce width by the littlest bit possible to make sure this bug doesn't hit
-        if self.preview_patch is None:
-            self.preview_patch = self.ax0.add_patch(Annulus((x0,y0),r1,width,alpha=0.2))
-            ### This should no be necessary since we make sure to set the width less than r1
-            # try:
-            #     self.preview_patch = self.ax0.add_patch(Annulus((x0,y0),r1,width,alpha=0.2))
-            # except:
-            #     print(f"r1 = {r1}, width = {width}, r1-width = {r1-width}")
-        else:
-            self.preview_patch.set(center=(x0,y0),radii=r1,width=width)
-        
+        try:
+            self.annulus_setter(x0,y0,r1,width)
+        except:
+            # my PR to matplotlib should resolve the need for this check!
+            # if width==r1: # hack to address the bug in matplotlib.patches.Annulus which checks if width < r0 rather than <= r0 as the error message suggests it does
+            #     width *= 1 - np.finfo(width).eps # reduce width by the littlest bit possible to make sure this bug doesn't hit
+            print("\tBioinfImport WARNING: You likely can use an update to matplotlib to fix a bug in their Annulus plots.\n\tWe'll take care of it for now.")
+            self.annulus_setter(x0,y0,r1,width*(1-np.finfo(width).eps))
+
         self.canvas.update()
         self.canvas.draw()
+
+    def annulus_setter(self, x0, y0, r1, width):
+        if self.preview_patch is None:
+            self.preview_patch = self.ax0.add_patch(Annulus((x0,y0),r1,width,alpha=0.2))
+        else:
+            self.preview_patch.set(center=(x0,y0),radii=r1,width=width)
 
     def get_circumscribing_radius(self,x0,y0):
         if 2*x0 < self.plot_xmin + self.plot_xmax: # if left of midpoint
@@ -967,7 +970,13 @@ class BioinfImportPlotWindow(QWidget):
             r1 = np.min([r1,self.max_dist_to_domain(x0,y0)])
             th1 = self.preview_patch.theta1  
             th2 = self.preview_patch.theta2
-            th2 -= 360 * ((th2-th1) // 360) # I promise this works if dth=th2-th1 < 0, 0<dth<360, and dth>360. 
+            if th2 == th1:
+                pass
+            elif ((th2-th1) % 360) == 0:
+                # print(f"th1 = {th1}, th2 = {th2}, th2-th1 = {th2-th1}, (th2-th11) % 360 = {(th2-th1) % 360}")
+                th2 = th1 + 360
+            else:
+                th2 -= 360 * ((th2-th1) // 360) # I promise this works if dth=th2-th1 < 0, 0<dth<360, and dth>360. 
             width = self.preview_patch.width
             r0 = r1 - width
             r0 = np.max([r0,np.sqrt(self.get_distance2_to_domain(x0,y0)[0])])
