@@ -28,6 +28,15 @@ from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import QFrame,QApplication,QWidget,QTabWidget,QLineEdit,QHBoxLayout,QVBoxLayout,QRadioButton,QPushButton, QLabel,QCheckBox,QComboBox,QScrollArea,QGridLayout, QFileDialog, QButtonGroup, QToolButton, QSplitter  # , QMessageBox
 from PyQt5.QtGui import QIcon
 
+from studio_classes import QHLine, QVLine
+
+class GoBackButton(QPushButton):
+    def __init__(self, parent):
+        super().__init__()
+        self.setText("\u2190 Go back")
+        self.setStyleSheet(f"QPushButton {{background-color: lightgreen; color: black;}}")
+        self.clicked.connect(parent.go_back_to_prev_window)
+
 class BioinfImportWindow(QWidget):
     def __init__(self):
         super().__init__()
@@ -1167,7 +1176,7 @@ class QCheckBox_custom(QCheckBox):  # it's insane to have to do this!
         self.setStyleSheet(checkbox_style)
 
 class BioinfImport(QWidget):
-    def __init__(self, config_tab, celldef_tab, ics_tab):
+    def __init__(self, config_tab, celldef_tab, ics_tab, bioinf_import_test):
         super().__init__()
         if HAVE_ANNDATA is False:
             vbox = QVBoxLayout()
@@ -1210,8 +1219,10 @@ class BioinfImport(QWidget):
             """
 
         vbox = QVBoxLayout()
+        vbox.addStretch(1)
+        vbox.addWidget(QLabel("Importing",styleSheet="QLabel {background-color : orange;}",alignment=QtCore.Qt.AlignCenter,maximumHeight=20))
         hbox = QHBoxLayout()
-        self.import_button = QPushButton("Import")
+        self.import_button = QPushButton("Import from AnnData")
         self.import_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
         self.import_button.clicked.connect(self.import_cb)
         hbox.addWidget(self.import_button)
@@ -1225,6 +1236,10 @@ class BioinfImport(QWidget):
         hbox.addWidget(self.column_line_edit)
 
         vbox.addLayout(hbox)
+
+        vbox.addWidget(QHLine())
+
+        vbox.addWidget(QLabel("Cell initial conditions file",styleSheet="QLabel {background-color : orange;}",alignment=QtCore.Qt.AlignCenter,maximumHeight=20))
 
         hbox = QHBoxLayout()
         label = QLabel("folder")
@@ -1240,10 +1255,19 @@ class BioinfImport(QWidget):
 
         vbox.addLayout(hbox)
 
+        vbox.addStretch(1)
+
         base_widget = QWidget()
         base_widget.setLayout(vbox)
         self.layout = QVBoxLayout(self)  # leave this!
         self.layout.addWidget(base_widget)
+
+        if bioinf_import_test:
+            self.import_file("./data/pbmc3k_clustered.h5ad")
+            self.continue_to_rename()
+            self.continue_on_rename_cb()
+            self.continue_to_cell_pos_cb()
+
 
     def select_all_button_cb(self):
         for cbd in self.checkbox_dict.values():
@@ -1265,6 +1289,10 @@ class BioinfImport(QWidget):
         full_file_path = QFileDialog.getOpenFileName(self,'',".")
         file_path = full_file_path[0]
         # file_path = "./data/pbmc3k_clustered.h5ad"
+
+        self.import_file(file_path)
+
+    def import_file(self,file_path):
         try:
             self.adata = anndata.read_h5ad(file_path)
         except:
@@ -1276,13 +1304,17 @@ class BioinfImport(QWidget):
 
         self.editing_cell_type_names = True
         col_names = list(self.adata.obs.columns)
+        auto_continue = False
         if self.column_line_edit.text() in col_names:
-            self.current_column = self.column_line_edit.text()
-            self.continue_to_cell_type_names_cb()
-            return
+            s = "Select column that contains cell type info:"
+            auto_continue = True
+        elif self.column_line_edit.text() != "":
+            s = f"{self.column_line_edit.text()} not found in the columns of the obs matrix.\nSelect from the following:"
+        else:
+            s = "Select column that contains cell type info:"
         
         vbox = QVBoxLayout()
-        label = QLabel("Select column that contains cell type info:")
+        label = QLabel(s)
         vbox.addWidget(label)
 
         self.column_combobox = QComboBox()
@@ -1292,7 +1324,7 @@ class BioinfImport(QWidget):
         vbox.addWidget(self.column_combobox)
 
         hbox = QHBoxLayout()
-        continue_button = QPushButton("Continue")
+        continue_button = QPushButton("Continue \u2192")
         continue_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
         continue_button.clicked.connect(self.continue_to_cell_type_names_cb)
         hbox.addWidget(continue_button)
@@ -1302,6 +1334,10 @@ class BioinfImport(QWidget):
         self.window = BioinfImportWindow()
         self.window.setLayout(vbox)
 
+        if auto_continue:
+            self.current_column = self.column_line_edit.text()
+            self.continue_to_cell_type_names_cb()
+            return
         # hack to bring to foreground
         self.window.hide()
         self.window.show()
@@ -1320,27 +1356,164 @@ class BioinfImport(QWidget):
         self.check_cell_type_names()
 
     def check_cell_type_names(self):
-        label = self.list_current_cell_type_names() 
+        # continue_button = self.list_remaining_with_checkboxes("Keep")
+        # label = self.list_current_cell_type_names() 
 
+        keep_color = "lightgreen"
+        merge_color = "yellow"
+        delete_color = "#FFCCCB"
+        # label = QLabel(f"""The following cell types were found. \
+        #                 Choose which to <b style="color: {keep_color}; background-color: black">KEEP</b>, \
+        #                 <b style="color: {merge_color}; background-color: black">MERGE</b>, and \
+        #                 <b style="color: {delete_color}; background-color: black">DELETE</b>.
+        #                 By default, all are kept.\
+        #                 """)
+        label = QLabel(f"""The following cell types were found.<br>\
+                        Choose which to <b style="background-color: {keep_color};">KEEP</b>, \
+                        <b style="background-color: {merge_color};">MERGE</b>, and \
+                        <b style="background-color: {delete_color};">DELETE</b>.<br>\
+                        By default, all are kept.\
+                        """)
+        # label.setWordWrap(True)
+        # label.setM
+        checkbox_style_template = lambda x : f"""
+                QCheckBox {{
+                    color : black;
+                    font-weight: bold;
+                    background-color: {x};
+                }}
+                QCheckBox::indicator:checked {{
+                    background-color: rgb(255,255,255);
+                    border: 1px solid #5A5A5A;
+                    width : 15px;
+                    height : 15px;
+                    border-radius : 3px;
+                    image: url(images:checkmark.png);
+                }}
+                QCheckBox::indicator:unchecked
+                {{
+                    background-color: {"rgb(255,255,255)" if x==keep_color else "rgb(0,0,0)"};
+                    border: 1px solid #5A5A5A;
+                    width : 15px;
+                    height : 15px;
+                    border-radius : 3px;
+                }}
+                """
+        self.checkbox_style = {}
+        self.checkbox_style["keep"] = checkbox_style_template(keep_color)
+        self.checkbox_style["merge"] = checkbox_style_template(merge_color)
+        self.checkbox_style["delete"] = checkbox_style_template(delete_color)
         self.cell_type_dict = {}
-        vbox = QVBoxLayout()
-        vbox.addWidget(label)
 
-        label = QLabel("Accept these as is or edit (merge and delete, and rename)?")
+        vbox = QVBoxLayout()
+        # label = QLabel(f"Select cell types :")
         vbox.addWidget(label)
+        self.checkbox_dict = {}
+        self.keep_button = {}
+        self.checkbox_group = QButtonGroup(exclusive=False)
+        self.checkbox_group.buttonToggled.connect(self.cell_type_toggled_cb)
+        self.merge_id = 0
+        rename_button_style_sheet_template = lambda x : f"""
+            QPushButton {{
+                color : black;
+                font-weight : bold;
+            }}
+            QPushButton:enabled {{
+                background-color: {x};
+            }}
+            QPushButton:disabled {{
+                background-color : grey;
+            }}
+            """
+        self.rename_button_style_sheet = {}
+        self.rename_button_style_sheet["keep"] = rename_button_style_sheet_template(keep_color)
+        self.rename_button_style_sheet["merge"] = rename_button_style_sheet_template(merge_color)
+        self.rename_button_style_sheet["delete"] = rename_button_style_sheet_template(delete_color)
+        row_height = 30
+        print(f"self.cell_types_list_original = {self.cell_types_list_original}")
+        for cell_type in self.cell_types_list_original:
+            hbox = QHBoxLayout()
+            self.checkbox_dict[cell_type] = QCheckBox(cell_type,styleSheet=self.checkbox_style["keep"])
+            self.checkbox_dict[cell_type].setChecked(False)
+            self.checkbox_dict[cell_type].setEnabled(True)
+            self.checkbox_dict[cell_type].setFixedHeight(row_height)
+            self.checkbox_group.addButton(self.checkbox_dict[cell_type])
+            
+            self.keep_button[cell_type] = QPushButton("Keep",enabled=False,objectName=cell_type)
+            self.keep_button[cell_type].setStyleSheet(rename_button_style_sheet_template(keep_color))
+            self.keep_button[cell_type].setFixedHeight(row_height)
+            self.keep_button[cell_type].clicked.connect(self.continue_on_keep_cb)
+
+            hbox.addWidget(self.checkbox_dict[cell_type])
+            hbox.addStretch(1)
+            hbox.addWidget(self.keep_button[cell_type])
+            vbox.addLayout(hbox)
+            self.cell_type_dict[cell_type] = cell_type
 
         hbox = QHBoxLayout()
-        accept_button = QPushButton("Accept")
-        accept_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
-        accept_button.clicked.connect(self.accept_as_is_cb)
-        hbox.addWidget(accept_button)
 
-        edit_button = QPushButton("Edit")
-        edit_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
-        edit_button.clicked.connect(self.edit_cell_types_cb)
-        hbox.addWidget(edit_button)
+        self.merge_button = QPushButton("Merge",enabled=False,styleSheet=rename_button_style_sheet_template(merge_color))
+        self.merge_button.clicked.connect(self.continue_on_merge_cb)
+        hbox.addWidget(self.merge_button)
+
+        self.delete_button = QPushButton("Delete",enabled=False,styleSheet=rename_button_style_sheet_template(delete_color))
+        self.delete_button.clicked.connect(self.continue_on_delete_cb)
+        hbox.addWidget(self.delete_button)
 
         vbox.addLayout(hbox)
+        vbox.addWidget(QHLine())
+
+        hbox = QHBoxLayout()
+
+        go_back_button = GoBackButton(self)
+        # go_back_button = QPushButton("\u2190 Go back")
+        # go_back_button.setStyleSheet(f"QPushButton {{background-color: lightgreen; color: black;}}")
+        # go_back_button.clicked.connect(self.go_back_to_prev_window)
+
+        accept_button = QPushButton("Finish \u2192")
+        accept_button.setStyleSheet(f"QPushButton {{background-color: lightgreen; color: black;}}")
+        accept_button.clicked.connect(self.continue_to_rename)
+
+        hbox.addWidget(go_back_button)
+        hbox.addWidget(accept_button)
+        vbox.addLayout(hbox)
+        # self.checkbox_dict = create_checkboxes_for_cell_types(vbox, self.remaining_cell_types_list_original)
+
+        # hbox = QHBoxLayout()
+        # continue_button = QPushButton("Continue")
+        # continue_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
+        # hbox.addWidget(continue_button)
+
+        # go_back = QPushButton("Go back")
+        # go_back.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
+        # go_back.clicked.connect(self.go_back_cb)
+        # hbox.addWidget(go_back)
+
+        # vbox.addLayout(hbox)
+
+
+        
+        # vbox = QVBoxLayout()
+        # vbox.addWidget(label)
+
+        # label = QLabel("Accept these as is or edit (merge and delete, and rename)?")
+        # vbox.addWidget(label)
+
+        # hbox = QHBoxLayout()
+        # accept_button = QPushButton("Accept")
+        # accept_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
+        # accept_button.clicked.connect(self.accept_as_is_cb)
+        # hbox.addWidget(accept_button)
+
+        # edit_button = QPushButton("Edit")
+        # edit_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
+        # edit_button.clicked.connect(self.edit_cell_types_cb)
+        # hbox.addWidget(edit_button)
+
+        # vbox.addLayout(hbox)
+
+        self.previous_windows = [self.window]
+        self.previous_windows[0].hide()
 
         self.window = BioinfImportWindow()
         self.window.setLayout(vbox)
@@ -1348,6 +1521,20 @@ class BioinfImport(QWidget):
         # hack to bring to foreground
         self.window.hide()
         self.window.show()
+
+    def cell_type_toggled_cb(self):
+        checked_count = 0
+        enable_delete_button = False
+        enable_merge_button = False
+        for checkbox in self.checkbox_dict.values():
+            checked_count += checkbox.isChecked()
+            if checked_count == 1:
+                enable_delete_button = True
+            if checked_count == 2:
+                enable_merge_button = True
+                break
+        self.delete_button.setEnabled(enable_delete_button)
+        self.merge_button.setEnabled(enable_merge_button)
 
     def continue_to_cell_counts(self):
 
@@ -1359,10 +1546,14 @@ class BioinfImport(QWidget):
         
         vbox = QVBoxLayout()
 
-        hbox = QHBoxLayout()
+        vbox.addWidget(QLabel("Set how many of each cell type to place. You may use the counts found in your data, or use proportions or confluence to scale these counts.\nYou may also set the counts manually; these values will track the others, allowing you to adjust from those baselines."))
+
+        vbox_cols = [QVBoxLayout() for i in range(5)]
+
+        # hbox = QHBoxLayout()
         label = QLabel("Cell Type")
         label.setFixedWidth(names_width)
-        hbox.addWidget(label)
+        vbox_cols[0].addWidget(label)
 
         self.counts_button_group = QButtonGroup()
         self.counts_button_group.idToggled.connect(self.counts_button_cb)
@@ -1392,12 +1583,12 @@ class BioinfImport(QWidget):
         self.counts_button_group.addButton(self.use_manual_radio_button,counts_button_group_next_id)
         counts_button_group_next_id += 1
 
-        hbox.addWidget(self.use_counts_as_is_radio_button)
-        hbox.addWidget(self.use_props_radio_button)
-        hbox.addWidget(self.use_confluence_radio_button)
-        hbox.addWidget(self.use_manual_radio_button)
+        vbox_cols[1].addWidget(self.use_counts_as_is_radio_button)
+        vbox_cols[2].addWidget(self.use_props_radio_button)
+        vbox_cols[3].addWidget(self.use_confluence_radio_button)
+        vbox_cols[4].addWidget(self.use_manual_radio_button)
 
-        vbox.addLayout(hbox)
+        # vbox.addLayout(hbox)
 
         self.cell_counts = {}
         for cell_type in self.cell_types_list_final:
@@ -1451,15 +1642,15 @@ class BioinfImport(QWidget):
             self.type_manual[cell_type].setValidator(num_validator)
             self.type_manual[cell_type].setObjectName(str(idx))
             
-            hbox.addWidget(label)
-            hbox.addWidget(type_count)
-            hbox.addWidget(self.type_prop[cell_type])
-            hbox.addWidget(self.type_confluence[cell_type])
-            hbox.addWidget(self.type_manual[cell_type])
+            vbox_cols[0].addWidget(label)
+            vbox_cols[1].addWidget(type_count)
+            vbox_cols[2].addWidget(self.type_prop[cell_type])
+            vbox_cols[3].addWidget(self.type_confluence[cell_type])
+            vbox_cols[4].addWidget(self.type_manual[cell_type])
 
-            vbox.addLayout(hbox)
+            # vbox.addLayout(hbox)
         
-        hbox = QHBoxLayout()
+        # hbox = QHBoxLayout()
         label = QLabel("Total")
         label.setFixedWidth(names_width)
 
@@ -1490,26 +1681,50 @@ class BioinfImport(QWidget):
         self.total_conf.setObjectName("total_conf")
         self.total_conf.setText("100")
 
-        hbox.addWidget(label)
-        hbox.addWidget(type_count)
-        hbox.addWidget(self.total_prop)
-        hbox.addWidget(self.total_conf)
-        hbox.addWidget(self.total_manual)
+        vbox_cols[0].addWidget(label)
+        vbox_cols[1].addWidget(type_count)
+        vbox_cols[2].addWidget(self.total_prop)
+        vbox_cols[3].addWidget(self.total_conf)
+        vbox_cols[4].addWidget(self.total_manual)
 
+
+        hbox = QHBoxLayout()
+        for idx, vb in enumerate(vbox_cols):
+            hbox.addLayout(vb)
+            if idx != (len(vbox_cols)-1):
+                hbox.addWidget(QVLine())
         vbox.addLayout(hbox)
 
-        self.continue_to_cell_pos = QPushButton("Continue")
+        hbox = QHBoxLayout()
+
+        self.go_back_to_rename = GoBackButton(self)
+        # self.go_back_to_rename = QPushButton("\u2190 Go back")
+        # self.go_back_to_rename.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
+        # self.go_back_to_rename.clicked.connect(self.go_back_to_prev_window)
+
+        self.continue_to_cell_pos = QPushButton("Continue \u2192")
         self.continue_to_cell_pos.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
         self.continue_to_cell_pos.clicked.connect(self.continue_to_cell_pos_cb)
-        vbox.addWidget(self.continue_to_cell_pos)
+
+        hbox.addWidget(self.go_back_to_rename)
+        hbox.addWidget(self.continue_to_cell_pos)
         
+        vbox.addLayout(hbox)
+
+        self.previous_windows.append(self.window)
+        self.previous_windows[-1].hide()
+
         self.window = BioinfImportWindow()
         self.window.setLayout(vbox)
 
         # hack to bring to foreground
         self.window.hide()
         self.window.show()
+
+        print(f"self.counts_button_group.checkedButton().text() = {self.counts_button_group.checkedButton().text()}")
     
+    # def go_back_to_rename(self):
+
     def prop_box_changed_cb(self, text):
         # print(f"self.prop_box_callback_paused = {self.prop_box_callback_paused}")
         if self.prop_box_callback_paused:
@@ -1524,17 +1739,20 @@ class BioinfImport(QWidget):
         self.prop_box_callback_paused = True
         if current_name=="total_prop":
             mult = int(text)
+            self.total_manual.setText(text)
         else:
             # print(f"int(text) = {int(text)}")
             # print(f"self.cell_type_props[int(current_name)] = {self.cell_type_props[int(current_name)]}")
             mult = int(text) / self.cell_type_props[int(current_name)]
             self.total_prop.setText(str(round(mult)))
+            self.total_manual.setText(str(round(mult)))
 
         for idx, cell_type in enumerate(self.cell_types_list_final):
             # print(f"idx = {idx}, cell_type = {cell_type}")
             if current_name==str(idx):
                 continue
             self.type_prop[cell_type].setText(str(round(mult * self.cell_type_props[idx])))
+            self.type_manual[cell_type].setText(str(round(mult * self.cell_type_props[idx])))
         self.prop_box_callback_paused = False
 
     def confluence_box_changed_cb(self, text):
@@ -1553,7 +1771,6 @@ class BioinfImport(QWidget):
         if current_name=="total_conf":
             mult = current_conf
             mult /= self.prop_dot_ratios
-            pass # not sure yet
         else:
             # print(f"int(text) = {int(text)}")
             # print(f"self.cell_type_props[int(current_name)] = {self.cell_type_props[int(current_name)]}")
@@ -1563,16 +1780,24 @@ class BioinfImport(QWidget):
             mult /= self.cell_type_props[current_idx]
 
         total_conf = 0
+        total_n = 0
         for idx, cell_type in enumerate(self.cell_types_list_final):
             # print(f"idx = {idx}, cell_type = {cell_type}")
             if current_name==str(idx):
+                n = round(0.01*current_conf/self.prop_total_area_one[cell_type])
+                self.type_manual[cell_type].setText(str(n))
                 total_conf += current_conf
+                total_n += n
                 continue
             new_conf = mult * self.cell_type_props[idx] * self.prop_total_area_one[cell_type]
+            n = round(0.01*new_conf/self.prop_total_area_one[cell_type])
             total_conf += new_conf
+            total_n += n
             self.type_confluence[cell_type].setText(str(new_conf))
+            self.type_manual[cell_type].setText(str(n))
         if current_name!="total_conf":
             self.total_conf.setText(str(total_conf))
+        self.total_manual.setText(str(total_n))
         
         if total_conf > 100:
             self.total_conf.setStyleSheet("QLineEdit {background-color : red; color : black;}")
@@ -1629,10 +1854,23 @@ class BioinfImport(QWidget):
         vbox = QVBoxLayout()
         vbox.addWidget(splitter)
 
-        self.show_plot_button = QPushButton("Show plot window",enabled=False)
+        hbox = QHBoxLayout()
+        go_back_button = GoBackButton(self)
+        # go_back_button = QPushButton("\u2190 Go back")
+        # go_back_button.setStyleSheet(self.qpushbutton_style_sheet)
+        # go_back_button.clicked.connect(self.go_back_to_prev_window)
+
+        self.show_plot_button = QPushButton("Show plot window \u2193",enabled=False)
         self.show_plot_button.setStyleSheet(self.qpushbutton_style_sheet)
         self.show_plot_button.clicked.connect(self.show_plot_button_cb)
-        vbox.addWidget(self.show_plot_button)
+
+        hbox.addWidget(go_back_button)
+        hbox.addWidget(self.show_plot_button)
+
+        vbox.addLayout(hbox)
+
+        self.previous_windows.append(self.window)
+        self.previous_windows[-1].hide()
 
         self.window = BioinfImportWindow()
         self.window.setLayout(vbox)
@@ -1972,7 +2210,7 @@ class BioinfImport(QWidget):
         for final_type in self.final_types:
             hbox = QHBoxLayout()
             label_text = ", ".join(self.final_type_pre_image[final_type])
-            label_text += " --> "
+            label_text += " \u21d2 "
             labels[final_type] = QLabel(label_text)
             self.new_name_line_edit[final_type] = QLineEdit()
             self.new_name_line_edit[final_type].setText(self.final_type_pre_image[final_type][0])
@@ -1980,10 +2218,23 @@ class BioinfImport(QWidget):
             hbox.addWidget(self.new_name_line_edit[final_type])
             vbox.addLayout(hbox)
 
-        continue_button = QPushButton("Continue")
+        hbox = QHBoxLayout()
+        go_back_button = GoBackButton(self)
+        # go_back_button = QPushButton("\u2190 Go back")
+        # go_back_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
+        # go_back_button.clicked.connect(self.go_back_to_prev_window)
+
+        continue_button = QPushButton("Continue \u2192")
         continue_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
         continue_button.clicked.connect(self.continue_on_rename_cb)
-        vbox.addWidget(continue_button)
+
+        hbox.addWidget(go_back_button)
+        hbox.addWidget(continue_button)
+
+        vbox.addLayout(hbox)
+
+        self.previous_windows.append(self.window)
+        self.previous_windows[-1].hide()
 
         self.window = BioinfImportWindow()
         self.window.setLayout(vbox)
@@ -1992,8 +2243,14 @@ class BioinfImport(QWidget):
         self.window.hide()
         self.window.show()
 
+    def go_back_to_prev_window(self):
+        self.window = self.previous_windows.pop()
+        self.window.hide()
+        self.window.show()
+
     def continue_on_rename_cb(self):
         # keep editing here
+        self.cell_types_list_final = []
         for final_type in self.final_types:
             self.cell_types_list_final.append(self.new_name_line_edit[final_type].text())
             for ctn in self.final_type_pre_image[final_type]:
@@ -2007,13 +2264,6 @@ class BioinfImport(QWidget):
         label = QLabel(f"Select cell types to {s}:")
         vbox.addWidget(label)
         self.checkbox_dict = create_checkboxes_for_cell_types(vbox, self.remaining_cell_types_list_original)
-        # vbox.addWidget(label)
-        # self.checkbox_dict = {}
-        # for ctn in self.remaining_cell_types_list_original:
-        #     self.checkbox_dict[ctn] = QCheckBox_custom(ctn)
-        #     self.checkbox_dict[ctn].setChecked(False)
-        #     self.checkbox_dict[ctn].setEnabled(True)
-        #     vbox.addWidget(self.checkbox_dict[ctn])
 
         hbox = QHBoxLayout()
         continue_button = QPushButton("Continue")
@@ -2037,37 +2287,74 @@ class BioinfImport(QWidget):
         return continue_button
 
     def continue_on_keep_cb(self):
-        for ctn in self.checkbox_dict.keys():
-            if self.checkbox_dict[ctn].isChecked():
-                self.cell_type_dict[ctn] = ctn
-        self.remaining_cell_types_list_original = [ctn for ctn in self.remaining_cell_types_list_original if not self.checkbox_dict[ctn].isChecked()]
-        if self.remaining_cell_types_list_original:
-            self.edit_cell_types_cb()
-        else:
-            self.continue_to_rename()
+        cell_type = self.sender().objectName()
+        # for cell_type in self.checkbox_dict.keys():
+        # if self.checkbox_dict[cell_type].isChecked():
+        self.set_cell_type_to_keep(cell_type)
+
+    def set_cell_type_to_keep(self, cell_type, check_merge_gp=True):
+        self.cell_type_dict[cell_type] = cell_type
+        self.checkbox_dict[cell_type].setEnabled(True)
+        self.checkbox_dict[cell_type].setStyleSheet(self.checkbox_style["keep"])
+        if  check_merge_gp and ("\u21d2 Merge Gp. #" in self.checkbox_dict[cell_type].text()):
+            # check for merge group that is no longer merging
+            gp_preimage = [ctn for ctn, new_name in self.cell_type_dict.items() if (ctn != cell_type and new_name == self.cell_type_dict[cell_type])] # get cell types that map into this merge group
+            if len(gp_preimage)==1: # then delete this merge gp:
+                # gp_preimage = [ctn for ctn in gp_preimage if ctn != cell_type]
+                self.set_cell_type_to_keep(gp_preimage[0], check_merge_gp=False)
+            elif cell_type == self.cell_type_dict[cell_type]: # make sure this current cell type did not set the merge group name
+                first_name = None
+                for ctn in gp_preimage:
+                    if first_name is None:
+                        first_name = ctn
+                    self.cell_type_dict[ctn] = first_name
+
+            # new_name = self.cell_type_dict[cell_type]
+            # for ctn,  in self.cell_type_dict.items():
+            #     if self.cell_type_dict[ctn]
+        self.cell_type_dict[cell_type] = cell_type
+        self.checkbox_dict[cell_type].setText(f"{cell_type}")
+        self.keep_button[cell_type].setEnabled(False)
+        # self.remaining_cell_types_list_original = [cell_type for cell_type in self.remaining_cell_types_list_original if not self.checkbox_dict[cell_type].isChecked()]
+        # if self.remaining_cell_types_list_original:
+        #     self.edit_cell_types_cb()
+        # else:
+        #     self.continue_to_rename()
 
     def continue_on_delete_cb(self):
-        for ctn in self.checkbox_dict.keys():
-            if self.checkbox_dict[ctn].isChecked():
-                self.cell_type_dict[ctn] = None
-        self.remaining_cell_types_list_original = [ctn for ctn in self.remaining_cell_types_list_original if not self.checkbox_dict[ctn].isChecked()]
-        if self.remaining_cell_types_list_original:
-            self.edit_cell_types_cb()
-        else:
-            self.continue_to_rename()
+        for cell_type in self.checkbox_dict.keys():
+            if self.checkbox_dict[cell_type].isChecked():
+                self.cell_type_dict[cell_type] = None
+                self.checkbox_dict[cell_type].setChecked(False)
+                self.checkbox_dict[cell_type].setEnabled(False)
+                self.checkbox_dict[cell_type].setStyleSheet(self.checkbox_style["delete"])
+
+                self.keep_button[cell_type].setEnabled(True)
+        # self.remaining_cell_types_list_original = [cell_type for cell_type in self.remaining_cell_types_list_original if not self.checkbox_dict[cell_type].isChecked()]
+        # if self.remaining_cell_types_list_original:
+        #     self.edit_cell_types_cb()
+        # else:
+        #     self.continue_to_rename()
 
     def continue_on_merge_cb(self):
+        self.merge_id += 1
         first_name = None
-        for ctn in self.checkbox_dict.keys():
-            if self.checkbox_dict[ctn].isChecked():
+        for cell_type in self.checkbox_dict.keys():
+            if self.checkbox_dict[cell_type].isChecked():
                 if first_name is None:
-                    first_name = ctn
-                self.cell_type_dict[ctn] = first_name
-        self.remaining_cell_types_list_original = [ctn for ctn in self.remaining_cell_types_list_original if not self.checkbox_dict[ctn].isChecked()]
-        if self.remaining_cell_types_list_original:
-            self.edit_cell_types_cb()
-        else:
-            self.continue_to_rename()
+                    first_name = cell_type
+                self.cell_type_dict[cell_type] = first_name
+                self.checkbox_dict[cell_type].setChecked(False)
+                self.checkbox_dict[cell_type].setEnabled(False)
+                self.checkbox_dict[cell_type].setStyleSheet(self.checkbox_style["merge"])
+                self.checkbox_dict[cell_type].setText(f"{cell_type} \u21d2 Merge Gp. #{self.merge_id}")
+
+                self.keep_button[cell_type].setEnabled(True)
+        # self.remaining_cell_types_list_original = [cell_type for cell_type in self.remaining_cell_types_list_original if not self.checkbox_dict[cell_type].isChecked()]
+        # if self.remaining_cell_types_list_original:
+        #     self.edit_cell_types_cb()
+        # else:
+        #     self.continue_to_rename()
 
     def go_back_cb(self):
         self.edit_cell_types_cb()

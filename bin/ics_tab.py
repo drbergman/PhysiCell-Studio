@@ -29,6 +29,7 @@ from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import QFrame,QApplication,QWidget,QTabWidget,QFormLayout,QLineEdit, QHBoxLayout,QVBoxLayout,QRadioButton,QLabel,QCheckBox,QComboBox,QScrollArea,  QMainWindow,QGridLayout, QPushButton, QFileDialog, QMessageBox, QStackedWidget, QSplitter
 from PyQt5.QtGui import QPixmap
 
+from studio_classes import QHLine
 from bioinf_import_tab import BioinfImport
 
 import numpy as np
@@ -63,17 +64,9 @@ class QCheckBox_custom(QCheckBox):  # it's insane to have to do this!
                 """
         self.setStyleSheet(checkbox_style)
 
-class QHLine(QFrame):
-    def __init__(self):
-        super(QHLine, self).__init__()
-        self.setFrameShape(QFrame.HLine)
-        self.setFrameShadow(QFrame.Sunken)
-        # self.setFrameShadow(QFrame.Plain)
-        self.setStyleSheet("border:1px solid black")
-
 class ICs(QWidget):
 
-    def __init__(self, config_tab, celldef_tab, bioinf_import_flag):
+    def __init__(self, config_tab, celldef_tab, bioinf_import_flag, bioinf_import_test):
         super().__init__()
         # global self.config_params
 
@@ -193,7 +186,7 @@ class ICs(QWidget):
         self.tab_widget = QTabWidget()
         self.base_tab_id = self.tab_widget.addTab(self.create_base_ics_tab(),"Base")
         if self.bioinf_import_flag:
-            self.bioinf_import_tab = BioinfImport(self.config_tab, self.celldef_tab, self)
+            self.bioinf_import_tab = BioinfImport(self.config_tab, self.celldef_tab, self, bioinf_import_test)
             self.tab_widget.addTab(self.bioinf_import_tab,"Bioinformatics Import")
 
         self.layout = QVBoxLayout(self)

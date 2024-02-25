@@ -77,9 +77,8 @@ def quit_cb():
     global studio_app
     studio_app.quit()
 
-  
 class PhysiCellXMLCreator(QWidget):
-    def __init__(self, config_file, studio_flag, skip_validate_flag, rules_flag, model3D_flag, tensor_flag, exec_file, nanohub_flag, is_movable_flag, pytest_flag, bioinf_import_flag, parent = None):
+    def __init__(self, config_file, studio_flag, skip_validate_flag, rules_flag, model3D_flag, tensor_flag, exec_file, nanohub_flag, is_movable_flag, pytest_flag, bioinf_import_flag, bioinf_import_test_flag, parent = None):
         super(PhysiCellXMLCreator, self).__init__(parent)
         if model3D_flag:
             try:
@@ -423,7 +422,7 @@ class PhysiCellXMLCreator(QWidget):
 
         if self.studio_flag:
             logging.debug(f'studio.py: creating ICs, Run, and Plot tabs')
-            self.ics_tab = ICs(self.config_tab, self.celldef_tab, self.bioinf_import_flag)
+            self.ics_tab = ICs(self.config_tab, self.celldef_tab, self.bioinf_import_flag, bioinf_import_test_flag)
             self.ics_tab.fill_celltype_combobox()
             self.ics_tab.reset_info()
 
@@ -1401,6 +1400,7 @@ def main():
     is_movable_flag = False
     pytest_flag = False
     bioinf_import_flag = False
+    bioinf_import_test_flag = False
     try:
         parser = argparse.ArgumentParser(description='PhysiCell Studio.')
 
@@ -1415,6 +1415,7 @@ def main():
         parser.add_argument("-e ", "--exec", type=str, help="executable model")
         parser.add_argument("-p ", "--pconfig", help="use config/PhysiCell_settings.xml", action="store_true")
         parser.add_argument("--bioinf_import", help="display bioinformatics import tab on ICs tab", action="store_true")
+        parser.add_argument("--bioinf_import_test", help="immediately start loading anndata", action="store_true")
 
         exec_file = 'project'  # for template sample
 
@@ -1487,6 +1488,8 @@ def main():
                 sys.exit()
         if args.bioinf_import:
             bioinf_import_flag = True
+        if args.bioinf_import_test:
+            bioinf_import_test_flag = True
     except:
         # print("Error parsing command line args.")
         sys.exit(-1)
@@ -1560,7 +1563,7 @@ def main():
             # print("Warning: Rules module not found.\n")
 
     # print("calling PhysiCellXMLCreator with rules_flag= ",rules_flag)
-    ex = PhysiCellXMLCreator(config_file, studio_flag, skip_validate_flag, rules_flag, model3D_flag, tensor_flag, exec_file, nanohub_flag, is_movable_flag, pytest_flag, bioinf_import_flag)
+    ex = PhysiCellXMLCreator(config_file, studio_flag, skip_validate_flag, rules_flag, model3D_flag, tensor_flag, exec_file, nanohub_flag, is_movable_flag, pytest_flag, bioinf_import_flag, bioinf_import_test_flag)
     print("size=",ex.size())  # = PyQt5.QtCore.QSize(1100, 770)
     # ex.setFixedWidth(1101)  # = PyQt5.QtCore.QSize(1100, 770)
     # print("width=",ex.size())
