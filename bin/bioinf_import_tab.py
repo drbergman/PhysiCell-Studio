@@ -67,70 +67,63 @@ class BioinfImportPlotWindow(QWidget):
 
         vbox = QVBoxLayout()
        
-        hbox = self.create_par_area()
-        vbox.addLayout(hbox)
+        grid_layout = self.create_par_area()
 
         hbox = QHBoxLayout()
+
+        vbox_left = QVBoxLayout()
+        vbox_left.addLayout(grid_layout)
         label = QLabel("""
                        Use your mouse and keyboard to draw your selected region:\
                        <html><ul>\
                        <li>Click: set (x0,y0)</li>\
                        <li>Shift-click: set (w,h), r, or r1</li>\
-                       <li>Click-and-drag: set (x0,y0) + {(w,h), r, or r1}</li>\
-                       <li>Shift-click-and-drag: set (r0,r1)</li>\
-                       <li>Ctrl-click-and-drag: set (r0,r1)</li>\
                        <li>Ctrl-click: set r0</li>\
+                       <li>Alt+ctrl: set \u03b81</li>\
+                       <li>Alt+shift: set \u03b82</li>\
                        <li>Alt-click-and-drag: set (\u03b81,\u03b82)</li>\
-                       <li>Alt+ctrl-click-and-drag: set \u03b81</li>\
-                       <li>Alt+shift-click-and-drag: set \u03b82</li>\
                        </ul></html>
                        """
                        )
-        hbox.addWidget(label)
-        self.create_figure()
-        hbox.addWidget(self.canvas)
-        
-        vbox.addLayout(hbox)
+        vbox_left.addWidget(label)
 
-        hbox = QHBoxLayout()
         self.plot_cells_button = QPushButton("Plot", enabled=True)
         self.plot_cells_button.setStyleSheet(self.main_window.qpushbutton_style_sheet)
         self.plot_cells_button.clicked.connect(self.plot_cell_pos)
-        hbox.addWidget(self.plot_cells_button)
+        vbox_left.addWidget(self.plot_cells_button)
+        vbox_left.addStretch(1)
+
+        self.create_figure()
+        hbox.addLayout(vbox_left)
+        hbox.addWidget(self.canvas)
+        
+        vbox.addLayout(hbox)
         
         self.sync_par_area()
 
-        self.cancel_button = QPushButton("Hide")
-        self.cancel_button.setStyleSheet("QPushButton {background-color: white; color: black;}")
-        self.cancel_button.clicked.connect(self.cancel_cb)
-        hbox.addWidget(self.cancel_button)
+        # self.cancel_button = QPushButton("Hide")
+        # self.cancel_button.setStyleSheet("QPushButton {background-color: white; color: black;}")
+        # self.cancel_button.clicked.connect(self.cancel_cb)
+        # hbox.addWidget(self.cancel_button)
 
-        vbox.addLayout(hbox)
-
-        self.finish_write_button = QPushButton("Overwrite",enabled=False)
-        self.finish_write_button.setStyleSheet(self.main_window.qpushbutton_style_sheet)
-        self.finish_write_button.clicked.connect(self.finish_write_button_cb)
-
-        self.finish_append_button = QPushButton("Append",enabled=False)
-        self.finish_append_button.setStyleSheet(self.main_window.qpushbutton_style_sheet)
-        self.finish_append_button.clicked.connect(self.finish_append_button_cb)
-
-        hbox = QHBoxLayout()
-        hbox.addWidget(self.finish_write_button)
-        hbox.addWidget(self.finish_append_button)
-        vbox.addLayout(hbox)
+        # vbox.addLayout(hbox)
 
         self.setLayout(vbox)
-        self.hide()
-        self.show()
+
+        # self.hide()
+        # self.show()
 
     def create_par_area(self):
         par_label_width = 50
         par_text_width = 75
         self.par_label = []
         self.par_text = []
-        hbox = QHBoxLayout()
+        grid_layout = QGridLayout()
+        rI = 0
+        cI = 0
+        cmax = 2 
         for i in range(6):
+            hbox = QHBoxLayout()
             self.par_label.append(QLabel())
             self.par_label[i].setAlignment(QtCore.Qt.AlignRight)
             self.par_label[i].setFixedWidth(par_label_width)
@@ -139,6 +132,8 @@ class BioinfImportPlotWindow(QWidget):
             self.par_text[i].setStyleSheet(self.main_window.qlineedit_style_sheet)
             hbox.addWidget(self.par_label[i])
             hbox.addWidget(self.par_text[i])
+            grid_layout.addLayout(hbox,rI,cI)
+            rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
 
         coord_validator = QtGui.QDoubleValidator()
         self.par_text[0].setValidator(coord_validator)
@@ -150,7 +145,7 @@ class BioinfImportPlotWindow(QWidget):
         for i in range(2,4):
             self.par_text[i].setValidator(pos_par_validator)
 
-        return hbox
+        return grid_layout
     
     def sync_par_area(self):
         if self.preview_patch is not None:
@@ -193,6 +188,7 @@ class BioinfImportPlotWindow(QWidget):
                 self.mpl_cid.append(self.canvas.mpl_connect("button_press_event", self.rectangle_mouse_press))
                 self.mpl_cid.append(self.canvas.mpl_connect("motion_notify_event", self.rectangle_mouse_motion))
                 self.rectangle_plotter()
+                self.default_rectangle_pars()
 
             elif self.main_window.cell_pos_button_group.checkedId()==2:
                 npars = 3
@@ -212,6 +208,7 @@ class BioinfImportPlotWindow(QWidget):
                 self.mpl_cid.append(self.canvas.mpl_connect("button_press_event", self.disc_mouse_press))
                 self.mpl_cid.append(self.canvas.mpl_connect("motion_notify_event", self.disc_mouse_motion))
                 self.disc_plotter()
+                self.default_disc_pars()
 
             elif self.main_window.cell_pos_button_group.checkedId()==3:
                 npars = 4
@@ -232,6 +229,7 @@ class BioinfImportPlotWindow(QWidget):
                 self.mpl_cid.append(self.canvas.mpl_connect("button_press_event", self.annulus_mouse_press))
                 self.mpl_cid.append(self.canvas.mpl_connect("motion_notify_event", self.annulus_mouse_motion))
                 self.annulus_plotter()
+                self.default_annulus_pars()
 
             elif self.main_window.cell_pos_button_group.checkedId()==4:
                 npars = 6
@@ -254,6 +252,7 @@ class BioinfImportPlotWindow(QWidget):
                 self.mpl_cid.append(self.canvas.mpl_connect("button_press_event", self.wedge_mouse_press))
                 self.mpl_cid.append(self.canvas.mpl_connect("motion_notify_event", self.wedge_mouse_motion))
                 self.wedge_plotter()
+                self.default_wedge_pars()
 
             elif self.main_window.cell_pos_button_group.checkedId()==5:
                 npars = 6
@@ -293,48 +292,46 @@ class BioinfImportPlotWindow(QWidget):
         self.canvas.draw()
 
     def get_x0y0(self):
+        print("getting...")
         return float(self.par_text[0].text()), float(self.par_text[1].text())
         
     def set_x0y0(self, event):
-        self.x0y0 = (event.xdata,event.ydata)
-        self.assign_par(self.x0y0[0],0)
-        self.assign_par(self.x0y0[1],1)
+        # self.x0y0 = (event.xdata,event.ydata)
+        self.assign_par(event.xdata,0)
+        self.assign_par(event.ydata,1)
 
     def mouse_released_cb(self, event):
         self.mouse_pressed = False
-        self.x0y0 = None
+        # self.x0y0 = None
 
-    def time_check(self):
-        bval = self.need_to_check_time and (time.time() < self.time_of_press + self.single_click_grace_period)
-        if bval is False:
-            self.need_to_check_time = False
-        return bval
+    # def time_check(self):
+    #     bval = self.need_to_check_time and (time.time() < self.time_of_press + self.single_click_grace_period)
+    #     if bval is False:
+    #         self.need_to_check_time = False
+    #     return bval
     
     def assign_par(self, value, idx):
         self.par_text[idx].setText(str(value))
         self.par_text[idx].setCursorPosition(0)
 
     def rectangle_mouse_press(self, event):
-        if event.inaxes is None:
-            self.x0y0 = None
+        if event.inaxes is None or (event.key not in [None, "shift"]):
             self.mouse_pressed = False
             return # then mouse is not over axes, move on
         self.mouse_pressed = True
         self.current_key_is_shift = event.key=="shift"
-        self.need_to_check_time = True
-        self.time_of_press = time.time()
         if self.current_key_is_shift:
-            self.x0y0 = None
-            self.rectangle_helper(event, *self.get_x0y0)
+            x0y0 = self.get_x0y0()
+            self.updater = lambda e : self.rectangle_helper(e, *x0y0)
+            self.rectangle_helper(event, *self.get_x0y0())
         else:
+            self.updater = lambda e : self.set_x0y0(e)
             self.set_x0y0(event)
-        if self.shape_started is False:
-            self.default_rectangle_pars()
 
     def rectangle_mouse_motion(self, event):
-        if (event.inaxes is None) or (self.mouse_pressed is False) or (self.current_key_is_shift) or self.time_check(): # make sure we are in the axes, that the mouse is pressed, and we're not holding shift
+        if (event.inaxes is None) or (self.mouse_pressed is False): # or (self.current_key_is_shift) or self.time_check(): # make sure we are in the axes, that the mouse is pressed, and we're not holding shift
             return
-        self.rectangle_helper(event, *self.x0y0)
+        self.updater(event)
  
     def rectangle_helper(self, event, xL, yL):
         xR = event.xdata
@@ -379,26 +376,23 @@ class BioinfImportPlotWindow(QWidget):
             self.assign_par(h, 3)
 
     def disc_mouse_press(self, event):
-        if event.inaxes is None:
-            self.x0y0 = None
+        if event.inaxes is None or (event.key not in [None, "shift"]):
             self.mouse_pressed = False
             return # then mouse is not over axes, move on
         self.mouse_pressed = True
         self.current_key_is_shift = event.key=="shift"
-        self.need_to_check_time = True
-        self.time_of_press = time.time()
         if self.current_key_is_shift:
-            self.x0y0 = None
+            x0y0 = self.get_x0y0()
+            self.updater = lambda e : self.set_radius_helper(e, *x0y0, 2)
             self.set_radius_helper(event, *self.get_x0y0(), 2)
         else:
+            self.updater = lambda e : self.set_x0y0(e)
             self.set_x0y0(event)
-        if self.shape_started is False:
-            self.default_disc_pars()
 
     def disc_mouse_motion(self, event):
-        if (event.inaxes is None) or (self.mouse_pressed is False) or (self.current_key_is_shift) or self.time_check(): # make sure we are in the axes, that the mouse is pressed, and we're not holding shift
+        if (event.inaxes is None) or (self.mouse_pressed is False): # or (self.current_key_is_shift) or self.time_check(): # make sure we are in the axes, that the mouse is pressed, and we're not holding shift
             return
-        self.set_radius_helper(event, *self.x0y0, 2)
+        self.updater(event)
     
     def default_disc_pars(self):
         self.default_x0y0()
@@ -412,31 +406,30 @@ class BioinfImportPlotWindow(QWidget):
             self.assign_par(r, idx)
             
     def annulus_mouse_press(self, event):
-        if event.inaxes is None:
-            self.x0y0 = None
+        if event.inaxes is None or (event.key not in [None, "shift", "control"]):
             self.mouse_pressed = False
             return # then mouse is not over axes, move on
         self.mouse_pressed = True
         self.current_key = event.key
-        self.need_to_check_time = True
-        self.time_of_press = time.time()
+        self.annulus_mouse_setup(event)
+
+    def annulus_mouse_setup(self, event):
         if self.current_key is None:
+            self.updater = lambda e : self.set_x0y0(e)
             self.set_x0y0(event)
-        elif self.current_key == "shift":
-            self.x0y0 = self.get_x0y0()
-            self.r_start = self.compute_radius(event, *self.x0y0)
-            self.set_radius_helper(event, *self.x0y0, 3)
-        elif self.current_key == "control":
-            self.x0y0 = self.get_x0y0()
-            self.r_start = self.compute_radius(event, *self.x0y0)
-            self.set_radius_helper(event, *self.x0y0, 2)
-        if self.shape_started is False:
-            self.default_annulus_pars()
+        else:
+            x0y0 = self.get_x0y0()
+            if self.current_key == "shift":
+                r0 = float(self.par_text[2].text())
+            else:
+                r0 = float(self.par_text[3].text())
+            self.updater = lambda e : self.radii_motion_helper(e, *x0y0, r0)
+            self.radii_motion_helper(event, *x0y0, r0)
 
     def annulus_mouse_motion(self, event):
-        if (event.inaxes is None) or (self.mouse_pressed is False) or self.time_check() or (self.current_key not in [None,"shift","control"]) : # make sure we are in the axes, that the mouse is pressed, and we're not holding shift or control
+        if (event.inaxes is None) or (self.mouse_pressed is False): # or self.time_check() or (self.current_key not in [None,"shift","control"]) : # make sure we are in the axes, that the mouse is pressed, and we're not holding shift or control
             return
-        self.radii_motion_helper(event)
+        self.updater(event)
 
     def default_annulus_pars(self):
         self.default_x0y0()
@@ -449,7 +442,17 @@ class BioinfImportPlotWindow(QWidget):
         y1 = event.ydata
         return np.sqrt((x1-x0)**2 + (y1-y0)**2)
 
-    def radii_motion_helper(self, event):
+    def radii_motion_helper(self, event, x0, y0, r0):
+        # if self.current_key is None:
+        #     self.set_radius_helper(event, *self.x0y0, 3)
+        #     return
+        # if we're here, then we clicked (and continue to click) with the shift or control key pressed for at least a little time; we are setting the inner and outer radii by the start and current mouse position
+        r1 = self.compute_radius(event, x0, y0)
+        r0, r1 = [r0,r1] if r0 < r1 else [r1,r0]
+        self.assign_par(r0, 2)
+        self.assign_par(r1, 3)
+
+    def radii_motion_helper_old(self, event):
         if self.current_key is None:
             self.set_radius_helper(event, *self.x0y0, 3)
             return
@@ -467,47 +470,60 @@ class BioinfImportPlotWindow(QWidget):
         return r
 
     def wedge_mouse_press(self, event):
-        if event.inaxes is None:
-            self.x0y0 = None
+        if event.inaxes is None or (event.key not in [None,"shift","control","alt","alt+control","ctrl+alt","alt+shift","shift+alt"]):
+            # self.x0y0 = None
             self.mouse_pressed = False
             return # then mouse is not over axes, move on
         self.mouse_pressed = True
         self.current_key = event.key
-        self.need_to_check_time = True
-        self.time_of_press = time.time()
-        if self.current_key is None:
-            self.set_x0y0(event)
-        elif self.current_key == "shift":
-            self.x0y0 = self.get_x0y0()
-            self.r_start = self.compute_radius(event, *self.x0y0)
-            self.set_radius_helper(event, *self.x0y0, 3)
-        elif self.current_key == "control":
-            self.x0y0 = self.get_x0y0()
-            self.r_start = self.compute_radius(event, *self.x0y0)
-            self.set_radius_helper(event, *self.x0y0, 2)
-        elif "alt" in self.current_key: # then work with thetas somehow
-            self.x0y0 = self.get_x0y0()
+        if self.current_key is None or ("alt" not in self.current_key):
+            self.annulus_mouse_setup(event)
+        else: # "alt" in self.current_key:
+            x0y0 = self.get_x0y0()
             if "shift" in self.current_key:
-                self.assign_par(self.get_angle(event, *self.x0y0), 5) # set theta 2 because shift is above control on my keyboard
+                self.assign_par(self.get_angle(event, *x0y0), 5) # set theta 2 because shift is above control on my keyboard
+                self.updater = lambda e : self.assign_par(self.get_angle(e, *x0y0), 5)
             elif "control" in self.current_key or "ctrl" in self.current_key: # I cannot fathom why someone decided that control should show up in two different ways...
-                self.assign_par(self.get_angle(event, *self.x0y0), 4) # set theta 2 because shift is above control on my keyboard
-            elif self.current_key == "alt":
-                theta = self.get_angle(event, *self.x0y0)
+                self.assign_par(self.get_angle(event, *x0y0), 4) # set theta 2 because shift is above control on my keyboard
+                self.updater = lambda e : self.assign_par(self.get_angle(e, *x0y0), 4)
+            else: #  self.current_key == "alt"
+                theta = self.get_angle(event, *x0y0)
                 self.assign_par(theta, 4)
                 self.assign_par(theta, 5)
-        if self.shape_started is False:
-            self.default_wedge_pars()
+                self.updater = lambda e : self.assign_par(self.get_angle(e, *x0y0), 5)
+        # if self.current_key is None:
+        #     self.updater = lambda e : self.set_x0y0(e)
+        #     self.set_x0y0(event)
+        # elif self.current_key == "shift":
+        #     self.x0y0 = self.get_x0y0()
+        #     self.r_start = self.compute_radius(event, *self.x0y0)
+        #     self.set_radius_helper(event, *self.x0y0, 3)
+        # elif self.current_key == "control":
+        #     self.x0y0 = self.get_x0y0()
+        #     self.r_start = self.compute_radius(event, *self.x0y0)
+        #     self.set_radius_helper(event, *self.x0y0, 2)
+        # elif "alt" in self.current_key: # then work with thetas somehow
+        #     self.x0y0 = self.get_x0y0()
+        #     if "shift" in self.current_key:
+        #         self.assign_par(self.get_angle(event, *self.x0y0), 5) # set theta 2 because shift is above control on my keyboard
+        #     elif "control" in self.current_key or "ctrl" in self.current_key: # I cannot fathom why someone decided that control should show up in two different ways...
+        #         self.assign_par(self.get_angle(event, *self.x0y0), 4) # set theta 2 because shift is above control on my keyboard
+        #     elif self.current_key == "alt":
+        #         theta = self.get_angle(event, *self.x0y0)
+        #         self.assign_par(theta, 4)
+        #         self.assign_par(theta, 5)
 
     def wedge_mouse_motion(self, event):
-        if (event.inaxes is None) or (self.mouse_pressed is False) or self.time_check() or (self.current_key not in [None,"shift","control","alt","alt+control","ctrl+alt","alt+shift","shift+alt"]) : # make sure we are in the axes, that the mouse is pressed, and we're not holding shift or control or alt
+        if (event.inaxes is None) or (self.mouse_pressed is False): # or self.time_check() or (self.current_key not in [None,"shift","control","alt","alt+control","ctrl+alt","alt+shift","shift+alt"]) : # make sure we are in the axes, that the mouse is pressed, and we're not holding shift or control or alt
             return
-        if self.current_key == "alt" or self.current_key == "alt+shift" or self.current_key == "shift+alt":
-            self.assign_par(self.get_angle(event, *self.x0y0), 5)
-            return
-        if self.current_key == "alt+control" or self.current_key == "ctrl+alt":
-            self.assign_par(self.get_angle(event, *self.x0y0), 4)
-            return
-        self.radii_motion_helper(event)
+        self.updater(event)
+        # if self.current_key == "alt" or self.current_key == "alt+shift" or self.current_key == "shift+alt":
+        #     self.assign_par(self.get_angle(event, *self.x0y0), 5)
+        #     return
+        # if self.current_key == "alt+control" or self.current_key == "ctrl+alt":
+        #     self.assign_par(self.get_angle(event, *self.x0y0), 4)
+        #     return
+        # self.radii_motion_helper(event)
 
     def default_wedge_pars(self):
         self.default_annulus_pars()
@@ -919,10 +935,8 @@ class BioinfImportPlotWindow(QWidget):
 
     def plot_cell_pos(self):
         self.constrain_preview_to_axes = False
-        # print(f"self.main_window.checkbox_dict.keys() = {self.main_window.checkbox_dict.keys()}")
         for ctn in self.main_window.checkbox_dict.keys():
             if self.main_window.checkbox_dict[ctn].isChecked():
-                # print(f"writing for {ctn}")
                 self.plot_cell_pos_single(ctn)
         self.canvas.update()
         self.canvas.draw()
@@ -933,8 +947,8 @@ class BioinfImportPlotWindow(QWidget):
             if b.isEnabled() is True:
                 return
         # If control passes here, then all the buttons are disabled and the plotting is done
-        self.finish_write_button.setEnabled(True)
-        self.finish_append_button.setEnabled(True)
+        self.main_window.finish_write_button.setEnabled(True)
+        self.main_window.finish_append_button.setEnabled(True)
 
     def max_dist_to_domain(self,x0,y0):
         xL, xR, yL, yR = [self.plot_xmin, self.plot_xmax, self.plot_ymin, self.plot_ymax]
@@ -943,8 +957,6 @@ class BioinfImportPlotWindow(QWidget):
         return np.sqrt(dx*dx + dy*dy)
     
     def plot_cell_pos_single(self, cell_type):
-        # print(f"cell_type = {cell_type}")
-        # print(f"self.main_window.cell_counts.keys() = {self.main_window.cell_counts.keys()}")
         N = self.main_window.cell_counts[cell_type]
         if type(self.preview_patch) is Rectangle:
             # first make sure the rectangle is all in bounds
@@ -982,7 +994,6 @@ class BioinfImportPlotWindow(QWidget):
             if th2 == th1:
                 pass
             elif ((th2-th1) % 360) == 0:
-                # print(f"th1 = {th1}, th2 = {th2}, th2-th1 = {th2-th1}, (th2-th11) % 360 = {(th2-th1) % 360}")
                 th2 = th1 + 360
             else:
                 th2 -= 360 * ((th2-th1) // 360) # I promise this works if dth=th2-th1 < 0, 0<dth<360, and dth>360. 
@@ -1015,7 +1026,8 @@ class BioinfImportPlotWindow(QWidget):
             if len(xy)==0:
                 continue
             # z = np.zeros((len(xy),1))
-            self.new_pos[i_start:(i_start+xy.shape[0]),0:2] = xy
+            # self.new_pos[i_start:(i_start+xy.shape[0]),0:2] = xy
+            self.new_pos[range(i_start,i_start+xy.shape[0]),0:2] = xy
             # self.new_pos[range(i_start,i_start+xy.shape[0]),2] = z
             i_start += xy.shape[0]
 
@@ -1084,16 +1096,10 @@ class BioinfImportPlotWindow(QWidget):
             collection.set_array(c)
             collection.set_clim(vmin, vmax)
 
-        # ax = plt.gca()
-        # ax.add_collection(collection)
-        # ax.autoscale_view()
         self.ax0.add_collection(collection)
         self.ax0.autoscale_view()
-        # plt.draw_if_interactive()
         if c is not None:
-            # plt.sci(collection)
             self.ax0.sci(collection)
-        # return collection
 
     def cancel_cb(self):
         self.hide() # this will work for now, but maybe a better way to handle closing the window?
@@ -1125,7 +1131,6 @@ class BioinfImportPlotWindow(QWidget):
 
     def set_file_name(self):
         dir_name = self.main_window.csv_folder.text()
-        # print(f'dir_name={dir_name}<end>')
         if len(dir_name) > 0 and not os.path.isdir(dir_name):
             os.makedirs(dir_name)
             time.sleep(1)
@@ -1198,7 +1203,6 @@ class BioinfImport(QWidget):
         self.ics_tab = ics_tab
         self.default_time_units = "min"
 
-        # self.full_fname = f"{self.csv_folder.text()}/{self.csv_file.text()}"
         self.qlineedit_style_sheet = """
             QLineEdit:disabled {
                 background-color: rgb(200,200,200);
@@ -1288,7 +1292,6 @@ class BioinfImport(QWidget):
     def import_cb(self):
         full_file_path = QFileDialog.getOpenFileName(self,'',".")
         file_path = full_file_path[0]
-        # file_path = "./data/pbmc3k_clustered.h5ad"
 
         self.import_file(file_path)
 
@@ -1300,7 +1303,6 @@ class BioinfImport(QWidget):
             return
 
         print("------------anndata object loaded-------------")
-        # print(self.adata)
 
         self.editing_cell_type_names = True
         col_names = list(self.adata.obs.columns)
@@ -1338,13 +1340,11 @@ class BioinfImport(QWidget):
             self.current_column = self.column_line_edit.text()
             self.continue_to_cell_type_names_cb()
             return
-        # hack to bring to foreground
         self.window.hide()
         self.window.show()
 
     def column_combobox_changed_cb(self, idx):
         self.current_column = self.column_combobox.currentText()
-        # print(self.current_column)
 
     def continue_to_cell_type_names_cb(self):
         self.cell_types_original = self.adata.obs[self.current_column]
@@ -1356,26 +1356,15 @@ class BioinfImport(QWidget):
         self.check_cell_type_names()
 
     def check_cell_type_names(self):
-        # continue_button = self.list_remaining_with_checkboxes("Keep")
-        # label = self.list_current_cell_type_names() 
-
         keep_color = "lightgreen"
         merge_color = "yellow"
         delete_color = "#FFCCCB"
-        # label = QLabel(f"""The following cell types were found. \
-        #                 Choose which to <b style="color: {keep_color}; background-color: black">KEEP</b>, \
-        #                 <b style="color: {merge_color}; background-color: black">MERGE</b>, and \
-        #                 <b style="color: {delete_color}; background-color: black">DELETE</b>.
-        #                 By default, all are kept.\
-        #                 """)
         label = QLabel(f"""The following cell types were found.<br>\
                         Choose which to <b style="background-color: {keep_color};">KEEP</b>, \
                         <b style="background-color: {merge_color};">MERGE</b>, and \
                         <b style="background-color: {delete_color};">DELETE</b>.<br>\
                         By default, all are kept.\
                         """)
-        # label.setWordWrap(True)
-        # label.setM
         checkbox_style_template = lambda x : f"""
                 QCheckBox {{
                     color : black;
@@ -1406,7 +1395,6 @@ class BioinfImport(QWidget):
         self.cell_type_dict = {}
 
         vbox = QVBoxLayout()
-        # label = QLabel(f"Select cell types :")
         vbox.addWidget(label)
         self.checkbox_dict = {}
         self.keep_button = {}
@@ -1466,51 +1454,14 @@ class BioinfImport(QWidget):
         hbox = QHBoxLayout()
 
         go_back_button = GoBackButton(self)
-        # go_back_button = QPushButton("\u2190 Go back")
-        # go_back_button.setStyleSheet(f"QPushButton {{background-color: lightgreen; color: black;}}")
-        # go_back_button.clicked.connect(self.go_back_to_prev_window)
 
-        accept_button = QPushButton("Finish \u2192")
+        accept_button = QPushButton("Continue \u2192")
         accept_button.setStyleSheet(f"QPushButton {{background-color: lightgreen; color: black;}}")
         accept_button.clicked.connect(self.continue_to_rename)
 
         hbox.addWidget(go_back_button)
         hbox.addWidget(accept_button)
         vbox.addLayout(hbox)
-        # self.checkbox_dict = create_checkboxes_for_cell_types(vbox, self.remaining_cell_types_list_original)
-
-        # hbox = QHBoxLayout()
-        # continue_button = QPushButton("Continue")
-        # continue_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
-        # hbox.addWidget(continue_button)
-
-        # go_back = QPushButton("Go back")
-        # go_back.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
-        # go_back.clicked.connect(self.go_back_cb)
-        # hbox.addWidget(go_back)
-
-        # vbox.addLayout(hbox)
-
-
-        
-        # vbox = QVBoxLayout()
-        # vbox.addWidget(label)
-
-        # label = QLabel("Accept these as is or edit (merge and delete, and rename)?")
-        # vbox.addWidget(label)
-
-        # hbox = QHBoxLayout()
-        # accept_button = QPushButton("Accept")
-        # accept_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
-        # accept_button.clicked.connect(self.accept_as_is_cb)
-        # hbox.addWidget(accept_button)
-
-        # edit_button = QPushButton("Edit")
-        # edit_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
-        # edit_button.clicked.connect(self.edit_cell_types_cb)
-        # hbox.addWidget(edit_button)
-
-        # vbox.addLayout(hbox)
 
         self.previous_windows = [self.window]
         self.previous_windows[0].hide()
@@ -1518,7 +1469,6 @@ class BioinfImport(QWidget):
         self.window = BioinfImportWindow()
         self.window.setLayout(vbox)
 
-        # hack to bring to foreground
         self.window.hide()
         self.window.show()
 
@@ -1550,7 +1500,6 @@ class BioinfImport(QWidget):
 
         vbox_cols = [QVBoxLayout() for i in range(5)]
 
-        # hbox = QHBoxLayout()
         label = QLabel("Cell Type")
         label.setFixedWidth(names_width)
         vbox_cols[0].addWidget(label)
@@ -1587,8 +1536,6 @@ class BioinfImport(QWidget):
         vbox_cols[2].addWidget(self.use_props_radio_button)
         vbox_cols[3].addWidget(self.use_confluence_radio_button)
         vbox_cols[4].addWidget(self.use_manual_radio_button)
-
-        # vbox.addLayout(hbox)
 
         self.cell_counts = {}
         for cell_type in self.cell_types_list_final:
@@ -1648,9 +1595,6 @@ class BioinfImport(QWidget):
             vbox_cols[3].addWidget(self.type_confluence[cell_type])
             vbox_cols[4].addWidget(self.type_manual[cell_type])
 
-            # vbox.addLayout(hbox)
-        
-        # hbox = QHBoxLayout()
         label = QLabel("Total")
         label.setFixedWidth(names_width)
 
@@ -1679,7 +1623,9 @@ class BioinfImport(QWidget):
         self.total_conf.setValidator(QtGui.QDoubleValidator(bottom=0))
         self.total_conf.textChanged.connect(self.confluence_box_changed_cb)
         self.total_conf.setObjectName("total_conf")
-        self.total_conf.setText("100")
+        self.total_conf.setText("100") # this triggers the cb, which sets the manual column (see below) so force a toggle next
+        self.use_manual_radio_button.setChecked(True) 
+        self.use_counts_as_is_radio_button.setChecked(True) 
 
         vbox_cols[0].addWidget(label)
         vbox_cols[1].addWidget(type_count)
@@ -1698,9 +1644,6 @@ class BioinfImport(QWidget):
         hbox = QHBoxLayout()
 
         self.go_back_to_rename = GoBackButton(self)
-        # self.go_back_to_rename = QPushButton("\u2190 Go back")
-        # self.go_back_to_rename.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
-        # self.go_back_to_rename.clicked.connect(self.go_back_to_prev_window)
 
         self.continue_to_cell_pos = QPushButton("Continue \u2192")
         self.continue_to_cell_pos.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
@@ -1717,38 +1660,27 @@ class BioinfImport(QWidget):
         self.window = BioinfImportWindow()
         self.window.setLayout(vbox)
 
-        # hack to bring to foreground
         self.window.hide()
         self.window.show()
 
-        print(f"self.counts_button_group.checkedButton().text() = {self.counts_button_group.checkedButton().text()}")
-    
-    # def go_back_to_rename(self):
 
     def prop_box_changed_cb(self, text):
-        # print(f"self.prop_box_callback_paused = {self.prop_box_callback_paused}")
         if self.prop_box_callback_paused:
             return
         type_prop_sender = self.sender()
         if type_prop_sender.hasAcceptableInput() is False:
             return
-        # text = type_prop_sender.text()
-        # print(f"text = {text}")
         current_name = type_prop_sender.objectName()
-        # print(f"type_prop_sender.objectName() = {current_name}")
         self.prop_box_callback_paused = True
         if current_name=="total_prop":
             mult = int(text)
             self.total_manual.setText(text)
         else:
-            # print(f"int(text) = {int(text)}")
-            # print(f"self.cell_type_props[int(current_name)] = {self.cell_type_props[int(current_name)]}")
             mult = int(text) / self.cell_type_props[int(current_name)]
             self.total_prop.setText(str(round(mult)))
             self.total_manual.setText(str(round(mult)))
 
         for idx, cell_type in enumerate(self.cell_types_list_final):
-            # print(f"idx = {idx}, cell_type = {cell_type}")
             if current_name==str(idx):
                 continue
             self.type_prop[cell_type].setText(str(round(mult * self.cell_type_props[idx])))
@@ -1756,48 +1688,37 @@ class BioinfImport(QWidget):
         self.prop_box_callback_paused = False
 
     def confluence_box_changed_cb(self, text):
-        # print(f"self.conf_box_callback_paused = {self.conf_box_callback_paused}")
         if self.conf_box_callback_paused:
             return
         type_conf_sender = self.sender()
         if type_conf_sender.hasAcceptableInput() is False:
             return
-        # text = type_conf_sender.text()
-        # print(f"text = {text}")
         current_name = type_conf_sender.objectName()
-        # print(f"type_conf_sender.objectName() = {current_name}")
         self.conf_box_callback_paused = True
         current_conf = float(text)
         if current_name=="total_conf":
             mult = current_conf
             mult /= self.prop_dot_ratios
         else:
-            # print(f"int(text) = {int(text)}")
-            # print(f"self.cell_type_props[int(current_name)] = {self.cell_type_props[int(current_name)]}")
             current_idx = int(current_name)
             mult = current_conf
             mult /= self.prop_total_area_one[self.cell_types_list_final[current_idx]]
             mult /= self.cell_type_props[current_idx]
 
         total_conf = 0
-        total_n = 0
         for idx, cell_type in enumerate(self.cell_types_list_final):
-            # print(f"idx = {idx}, cell_type = {cell_type}")
             if current_name==str(idx):
-                n = round(0.01*current_conf/self.prop_total_area_one[cell_type])
-                self.type_manual[cell_type].setText(str(n))
                 total_conf += current_conf
-                total_n += n
                 continue
             new_conf = mult * self.cell_type_props[idx] * self.prop_total_area_one[cell_type]
-            n = round(0.01*new_conf/self.prop_total_area_one[cell_type])
             total_conf += new_conf
-            total_n += n
             self.type_confluence[cell_type].setText(str(new_conf))
-            self.type_manual[cell_type].setText(str(n))
         if current_name!="total_conf":
             self.total_conf.setText(str(total_conf))
-        self.total_manual.setText(str(total_n))
+        counts, total = self.convert_confluence_to_counts()
+        for cell_type, n in counts.items():
+            self.type_manual[cell_type].setText(str(n))
+        self.total_manual.setText(str(total))
         
         if total_conf > 100:
             self.total_conf.setStyleSheet("QLineEdit {background-color : red; color : black;}")
@@ -1811,21 +1732,47 @@ class BioinfImport(QWidget):
         enable_confluence = self.counts_button_group.checkedId()==2
         enable_manual = self.counts_button_group.checkedId()==3
 
-        for k in self.type_prop.keys():
-            self.type_prop[k].setEnabled(enable_props)
+        current_values = {}
+
+        if self.counts_button_group.checkedId()==0:
+            current_values = self.cell_counts
+            current_total = len(self.cell_types_final)
+
+        for qw in self.type_prop.values():
+            qw.setEnabled(enable_props)
         self.total_prop.setEnabled(enable_props)
+        if enable_props:
+            for k, qw in self.type_prop.items():
+                current_values[k] = qw.text()
+            current_total = self.total_prop.text()
         
-        for k in self.type_confluence.keys():
-            self.type_confluence[k].setEnabled(enable_confluence)
+        for qw in self.type_confluence.values():
+            qw.setEnabled(enable_confluence)
         self.total_conf.setEnabled(enable_confluence)
         if enable_confluence and float(self.total_conf.text()) > 100:
             self.total_conf.setStyleSheet("QLineEdit {background-color : red; color : black;}")
         else:
             self.total_conf.setStyleSheet(self.qlineedit_style_sheet)
+        if enable_confluence:
+            current_values, current_total = self.convert_confluence_to_counts()
         
-        for k in self.type_manual.keys():
-            self.type_manual[k].setEnabled(enable_manual)
+        for qw in self.type_manual.values():
+            qw.setEnabled(enable_manual)
         self.total_manual.setEnabled(enable_manual)
+        if not enable_manual:
+            for k, qw in self.type_manual.items():
+                # print(f"k = {k}, qw = {qw}")
+                qw.setText(str(current_values[k]))
+            self.total_manual.setText(str(current_total))
+
+    def convert_confluence_to_counts(self):
+        total = 0
+        counts = {}
+        for cell_type in self.cell_types_list_final:
+            n = round(0.01 * float(self.type_confluence[cell_type].text()) / self.prop_total_area_one[cell_type])
+            counts[cell_type] = n
+            total += n
+        return counts, total
 
     def continue_to_cell_pos_cb(self):
         if self.counts_button_group.checkedId()==0: # use counts found in data file
@@ -1834,8 +1781,7 @@ class BioinfImport(QWidget):
             for cell_type in self.cell_types_list_final:
                 self.cell_counts[cell_type] = int(self.type_prop[cell_type].text())
         elif self.counts_button_group.checkedId()==2: # set by confluence
-            for cell_type in self.cell_types_list_final:
-                self.cell_counts[cell_type] = round(0.01 * float(self.type_confluence[cell_type].text()) / self.prop_total_area_one[cell_type])
+            self.cell_counts = self.convert_confluence_to_counts()
         elif self.counts_button_group.checkedId()==3: # manually set
             for cell_type in self.cell_types_list_final:
                 self.cell_counts[cell_type] = int(self.type_manual[cell_type].text())
@@ -1854,20 +1800,53 @@ class BioinfImport(QWidget):
         vbox = QVBoxLayout()
         vbox.addWidget(splitter)
 
-        hbox = QHBoxLayout()
+
+        top_area = QWidget()
+        top_area.setLayout(vbox)
+
+        # self.cell_type_scroll_area = QScrollArea()
+        # self.cell_type_scroll_area.setWidget(cell_type_scroll_area_widget)
+
+        splitter = QSplitter(QtCore.Qt.Vertical)
+        splitter.addWidget(top_area)
+        self.ics_plot_area = BioinfImportPlotWindow(self, self.config_tab)
+        self.plot_scroll_area = QScrollArea()
+        self.plot_scroll_area.setWidget(self.ics_plot_area)
+        splitter.addWidget(self.plot_scroll_area)
+
+        vbox = QVBoxLayout()
+        vbox.addWidget(splitter)
+
+        # hbox = QHBoxLayout()
         go_back_button = GoBackButton(self)
         # go_back_button = QPushButton("\u2190 Go back")
         # go_back_button.setStyleSheet(self.qpushbutton_style_sheet)
         # go_back_button.clicked.connect(self.go_back_to_prev_window)
 
-        self.show_plot_button = QPushButton("Show plot window \u2193",enabled=False)
-        self.show_plot_button.setStyleSheet(self.qpushbutton_style_sheet)
-        self.show_plot_button.clicked.connect(self.show_plot_button_cb)
+        # self.show_plot_button = QPushButton("Show plot window \u2193",enabled=False)
+        # self.show_plot_button.setStyleSheet(self.qpushbutton_style_sheet)
+        # self.show_plot_button.clicked.connect(self.show_plot_button_cb)
 
-        hbox.addWidget(go_back_button)
-        hbox.addWidget(self.show_plot_button)
+        # hbox.addWidget(go_back_button)
+        # hbox.addWidget(self.show_plot_button)
 
-        vbox.addLayout(hbox)
+        # vbox.addLayout(hbox)
+
+
+        self.finish_write_button = QPushButton("Overwrite \u2192",enabled=False)
+        self.finish_write_button.setStyleSheet(self.qpushbutton_style_sheet)
+        self.finish_write_button.clicked.connect(self.ics_plot_area.finish_write_button_cb)
+
+        self.finish_append_button = QPushButton("Append \u2192",enabled=False)
+        self.finish_append_button.setStyleSheet(self.qpushbutton_style_sheet)
+        self.finish_append_button.clicked.connect(self.ics_plot_area.finish_append_button_cb)
+
+        hbox_write = QHBoxLayout()
+        hbox_write.addWidget(go_back_button)
+        hbox_write.addWidget(self.finish_write_button)
+        hbox_write.addWidget(self.finish_append_button)
+
+        vbox.addLayout(hbox_write)
 
         self.previous_windows.append(self.window)
         self.previous_windows[-1].hide()
@@ -1947,8 +1926,8 @@ class BioinfImport(QWidget):
 
     def cell_type_button_group_cb(self):
         bval = self.is_any_cell_type_button_group_checked()
-        if self.ics_plot_area is None:
-            return
+        # if self.ics_plot_area is None:
+        #     return
         if bval:
             # The plot is created and at least one is checked. See if the parameters are ready
             self.ics_plot_area.sync_par_area() # this call is overkill, I just want to see if the parameters call for the Plot button being enabled
@@ -1957,14 +1936,14 @@ class BioinfImport(QWidget):
 
     def is_any_cell_type_button_group_checked(self):
         bval = self.cell_type_button_group.checkedButton() is not None
-        self.show_plot_button.setEnabled(bval)
+        # self.show_plot_button.setEnabled(bval)
         return bval
 
     def cell_pos_button_group_cb(self):
         if self.ics_plot_area:
             # print("syncing...")
             self.ics_plot_area.sync_par_area()
-            self.ics_plot_area.shape_started = False # for helping with default parameters when using the mouse
+            # self.ics_plot_area.shape_started = False # for helping with default parameters when using the mouse
         
     def create_pos_scroll_area(self):
         self.cell_pos_button_group = QButtonGroup()
