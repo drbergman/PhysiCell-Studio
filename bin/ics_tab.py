@@ -182,7 +182,6 @@ class ICs(QWidget):
             }
             """
 
-
         self.tab_widget = QTabWidget()
         self.base_tab_id = self.tab_widget.addTab(self.create_base_ics_tab(),"Base")
         if self.bioinf_import_flag:
