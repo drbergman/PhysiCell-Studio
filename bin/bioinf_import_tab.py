@@ -123,7 +123,7 @@ class BioinfImportPlotWindow(QWidget):
         vbox_left = QVBoxLayout()
         vbox_left.addLayout(grid_layout)
         if self.biwt.use_spatial_data:
-            self.create_spot_num_box()
+            vbox_left.addLayout(self.create_spot_num_box())
         self.mouse_keyboard_label = QLabel(f"""
                         Draw with mouse and keyboard:\
                         <html><ul>\
@@ -164,16 +164,33 @@ class BioinfImportPlotWindow(QWidget):
         self.setFocus()
 
     def create_spot_num_box(self):
-        label = QLabel("Num cells per spot")
-        self.num_box
+        label = QLabel("Num cells per spot:")
+        self.num_box = QSpinBox(minimum=1, maximum=10000000, singleStep=1,value=1)
+        self.num_box.valueChanged.connect(self.num_box_cb)
+        self.num_box.setValue(1)
+        self.num_box.setStyleSheet("QSpinBox {color : black; background-color : white} QSpinBox:disabled {background-color : lightgray;}")
+        hbox = QHBoxLayout()
+        hbox.addStretch(1)
+        hbox.addWidget(label)
+        hbox.addWidget(self.num_box)
+        return hbox
+
+    def num_box_cb(self, v):
+        print("------num box changed-------")
+        print(f"\tv = {v}")
+        self.scatter_sizes = v * self.single_scatter_sizes
+        self.preview_patch.set_sizes(self.scatter_sizes)
+        
+        self.current_plotter()
+        pass
 
     def default_spatial_pars(self):
         if not self.biwt.use_spatial_data:
             return
-        # self.biwt.spatial_data[:,0] += self.biwt.spatial_data[:,1] # for testing
-        # self.biwt.spatial_data = np.array([0.5,0.5]).reshape((1,2)) # for testing
-        x = self.biwt.spatial_data[:,0]
-        y = self.biwt.spatial_data[:,1]
+        # self.biwt.spatial_data_final[:,0] += self.biwt.spatial_data_final[:,1] # for testing
+        # self.biwt.spatial_data_final = np.array([0.5,0.5]).reshape((1,2)) # for testing
+        x = self.biwt.spatial_data_final[:,0]
+        y = self.biwt.spatial_data_final[:,1]
         if len(x) > 1: # I know, right, what ST data set will have one spot??
             xL = np.min(x)
             xR = np.max(x)
@@ -193,7 +210,7 @@ class BioinfImportPlotWindow(QWidget):
         x0 = 0.5*(self.plot_xmin+self.plot_xmax - width)
         y0 = 0.5*(self.plot_ymin+self.plot_ymax - height)
 
-        self.spatial_base_coords = self.biwt.spatial_data - [xL,yL]
+        self.spatial_base_coords = self.biwt.spatial_data_final - [xL,yL]
         self.spatial_base_coords = self.spatial_base_coords / [xR-xL,yR-yL]
 
         # self.spatial_base_coords = np.array([0.5,0.5])
@@ -924,26 +941,36 @@ class BioinfImportPlotWindow(QWidget):
             return
         x0, y0, width, height = self.current_pars
         if self.preview_patch is None:
-            dx, dy = self.ax0.transData.transform((1,1))-self.ax0.transData.transform((0,0)) # # pixels/ micron
-            self.area_scale_factor = dx*dy
-            self.fudge_factor = 1.258199089131739 # empirically-defined value to multiply area (in pts) to represent true area in microns on plot
-            area_microns2 = [(((9*np.pi*V**2) / 16) ** (1./3)) for V in self.biwt.cell_volume.values()]
-            areas = [self.fudge_factor * self.area_scale_factor * 72*72/(self.figure.dpi**2)*A  for A in area_microns2] # area in pts
-            D = dict(zip(self.biwt.cell_volume.keys(),areas))
-            self.scatter_sizes = [D[ctn] for ctn in self.biwt.cell_types_final]
-            self.preview_patch = self.ax0.scatter([],[], 10, 'b')
-            offset = self.spatial_base_coords * [width, height] + [x0,y0]
-            self.preview_patch.set_offsets(offset)
-            self.preview_patch.set_sizes(self.scatter_sizes)#, dpi=self.figure.dpi)
+            print(f"----initializing spatial plotter-----")
+            # dx, dy = self.ax0.transData.transform((1,1))-self.ax0.transData.transform((0,0)) # # pixels/ micron
+            # self.area_scale_factor = dx*dy
+            # self.fudge_factor = 1.258199089131739 # empirically-defined value to multiply area (in pts) to represent true area in microns on plot
+            # area_microns2 = [(((9*np.pi*V**2) / 16) ** (1./3)) for V in self.biwt.cell_volume.values()]
+            # areas = [self.fudge_factor * self.area_scale_factor * 72*72/(self.figure.dpi**2)*A  for A in area_microns2] # area in pts
+            # self.cell_type_area_dict = dict(zip(self.biwt.cell_volume.keys(),areas))
+            # self.scatter_sizes = [self.cell_type_area_dict[ctn] for ctn in self.biwt.cell_types_final]
+            # self.preview_patch = self.ax0.scatter([],[], 10, 'b')
+            # offset = self.spatial_base_coords * [width, height] + [x0,y0]
+            # self.preview_patch.set_offsets(offset)
+            # self.preview_patch.set_sizes(self.scatter_sizes)#, dpi=self.figure.dpi)
+            self.initial_x0 = x0
+            self.initial_y0 = y0
+            self.initial_width = width
+            self.initial_height = height
+            initial_coords = self.spatial_base_coords * [width, height] + [x0,y0]
+            self.preview_patch = self.ax0.scatter(initial_coords[:,0],initial_coords[:,1], self.scatter_sizes, 'gray', alpha=0.5)
+            self.initial_offsets = self.preview_patch.get_offsets()
         else:
-            offset = self.spatial_base_coords * [width, height] + [x0,y0]
-            dx, dy = self.ax0.transData.transform((1,1))-self.ax0.transData.transform((0,0)) # # pixels/ micron
-            self.area_scale_factor = dx*dy
-            areas = [self.fudge_factor * self.area_scale_factor* 72*72/(self.figure.dpi**2)*(((9*np.pi*V**2) / 16) ** (1./3))  for V in self.biwt.cell_volume.values()] 
-            D = dict(zip(self.biwt.cell_volume.keys(),areas))
-            self.scatter_sizes = [D[ctn] for ctn in self.biwt.cell_types_final]
-            self.preview_patch.set_sizes(self.scatter_sizes)#, dpi=self.figure.dpi)
+            print(f"----updating spatial plotter-----")
+            offset = self.initial_offsets + (self.spatial_base_coords * [width-self.initial_width, height-self.initial_height] + [x0-self.initial_x0,y0-self.initial_y0])
+            # dx, dy = self.ax0.transData.transform((1,1))-self.ax0.transData.transform((0,0)) # # pixels/ micron
+            # self.area_scale_factor = dx*dy
+            # areas = [self.fudge_factor * self.area_scale_factor* 72*72/(self.figure.dpi**2)*(((9*np.pi*V**2) / 16) ** (1./3))  for V in self.biwt.cell_volume.values()] 
+            # self.cell_type_area_dict = dict(zip(self.biwt.cell_volume.keys(),areas))
+            # self.scatter_sizes = [self.cell_type_area_dict[ctn] for ctn in self.biwt.cell_types_final]
+            # self.preview_patch.set_sizes(self.scatter_sizes)#, dpi=self.figure.dpi)
             self.preview_patch.set_offsets(offset)
+            # self.preview_patch.set_alpha(self.alpha_value)
 
         # check left edge of rect is left of right edge of domain, right edge of rect is right of left edge of domain (similar in y direction)
         bval = (x0 < self.plot_xmax) and (x0+width > self.plot_xmin) and (y0 < self.plot_ymax) and (y0+height > self.plot_ymin) # make sure the rectangle intersects the domain with positive area
@@ -973,6 +1000,17 @@ class BioinfImportPlotWindow(QWidget):
         self.canvas.focusOutEvent = lambda e : self.canvas_out_focus(e)
         self.canvas.keyPressEvent = lambda e : self.canvas_key_press(e)
 
+        if self.biwt.use_spatial_data:
+            dx, dy = self.ax0.transData.transform((1,1))-self.ax0.transData.transform((0,0)) # # pixels/ micron
+            self.area_scale_factor = dx*dy
+            self.fudge_factor = 1.258199089131739 # empirically-defined value to multiply area (in pts) to represent true area in microns on plot
+            self.cell_type_micron2_area_dict = {cell_type: (((9*np.pi*V**2) / 16) ** (1./3)) for cell_type, V in self.biwt.cell_volume.items()}
+            self.cell_type_pt_area_dict = {cell_type: self.fudge_factor * self.area_scale_factor * 72*72/(self.figure.dpi**2)*A for cell_type, A in self.cell_type_micron2_area_dict.items()}
+            # self.single_scatter_sizes = {cell_type: np.array([self.cell_type_pt_area_dict[ctn] for ctn in self.biwt.cell_types_final]) for cell_type in self.biwt.cell_types_final.items()}
+            # self.scatter_sizes = {cell_type: int(self.num_box.value()) * sz for cell_type, sz in self.single_scatter_sizes.items()}
+
+            self.single_scatter_sizes = np.array([self.cell_type_pt_area_dict[ctn] for ctn in self.biwt.cell_types_final])
+            self.scatter_sizes = self.num_box.value() * self.single_scatter_sizes
         self.canvas.update()
         self.canvas.draw()
 
@@ -1008,14 +1046,27 @@ class BioinfImportPlotWindow(QWidget):
         self.preview_constrained_to_axes = False
         if self.biwt.cell_pos_button_group.checkedId()==self.biwt.spatial_plotter_id:
             x0, y0, width, height = self.current_pars
-            corners = [[x0,y0],[x0+width,y0+height]]
-            x0, y0, width, height = self.constrain_corners(corners)
+            # corners = [[x0,y0],[x0+width,y0+height]]
+            # x0, y0, width, height = self.constrain_corners(corners)
+            n_per_spot = self.num_box.value()
             for cell_type in self.biwt.checkbox_dict.keys():
                 if self.biwt.checkbox_dict[cell_type].isChecked():
-                    idx = [ctn==cell_type for ctn in self.biwt.cell_types_final]
-                    cell_coords = np.hstack((self.spatial_base_coords[idx] * [width, height] + [x0,y0],np.zeros((sum(idx),1))))
-                    self.csv_array[cell_type] = np.vstack((self.csv_array[cell_type],cell_coords))
-                    self.circles(cell_coords, s=8., color=self.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
+                    idx_cell_type = [ctn==cell_type for ctn in self.biwt.cell_types_final]
+                    cell_radius = np.sqrt(self.cell_type_micron2_area_dict[cell_type] / np.pi)
+                    cell_coords = np.hstack((self.spatial_base_coords[idx_cell_type] * [width, height] + [x0,y0],np.zeros((sum(idx_cell_type),1))))
+                    idx_inbounds = [(cc[0]>=self.plot_xmin and cc[0]<=self.plot_xmax and cc[1]>=self.plot_ymin and cc[1]<=self.plot_ymax) for cc in cell_coords]
+                    cell_coords = cell_coords[idx_inbounds,:]
+                    if n_per_spot==1:
+                        self.csv_array[cell_type] = np.vstack((self.csv_array[cell_type],cell_coords))
+                        self.circles(cell_coords, s=cell_radius, color=self.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
+                    else:
+                        r = cell_radius * np.sqrt(n_per_spot)
+                        all_new = np.empty((0,3))
+                        for cc in cell_coords:
+                            self.wedge_sample(n_per_spot, cc[0], cc[1], r)
+                            all_new = np.vstack((all_new,self.new_pos))
+                        self.csv_array[cell_type] = np.vstack((self.csv_array[cell_type],all_new))
+                        self.circles(all_new, s=cell_radius, color=self.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
                     self.biwt.checkbox_dict[cell_type].setEnabled(False)
                     self.biwt.checkbox_dict[cell_type].setChecked(False)
                     self.biwt.undo_button[cell_type].setEnabled(True)
@@ -1114,7 +1165,7 @@ class BioinfImportPlotWindow(QWidget):
         self.biwt.checkbox_dict[cell_type].setChecked(False)
         self.biwt.undo_button[cell_type].setEnabled(True)
 
-    def wedge_sample(self,N,x0,y0,r1, r0=0, th_lim=(0,2*np.pi)):
+    def wedge_sample(self,N,x0,y0,r1, r0=0.0, th_lim=(0,2*np.pi)):
         i_start = 0
         self.new_pos = np.empty((N,3))
         while i_start < N:
@@ -2115,7 +2166,8 @@ class BioinfImport(QWidget):
         self.ics_plot_area.ax0.cla()
         self.ics_plot_area.format_axis()
         for cell_type in self.ics_plot_area.csv_array.keys():
-            self.ics_plot_area.circles(self.ics_plot_area.csv_array[cell_type], s=8., color=self.ics_plot_area.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.ics_plot_area.alpha_value)
+            sz = np.sqrt(self.ics_plot_area.cell_type_micron2_area_dict[cell_type] / np.pi)
+            self.ics_plot_area.circles(self.ics_plot_area.csv_array[cell_type], s=sz, color=self.ics_plot_area.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.ics_plot_area.alpha_value)
 
         self.ics_plot_area.sync_par_area() # easy way to redraw the patch for current plotting
         
@@ -2140,6 +2192,9 @@ class BioinfImport(QWidget):
     def cell_pos_button_group_cb(self):
         if self.ics_plot_area:
             self.ics_plot_area.sync_par_area()
+        if self.use_spatial_data:
+            self.ics_plot_area.num_box.setEnabled(self.cell_pos_button_group.checkedId()==6) # only enable for spatial plotter
+            
         
     def create_pos_scroll_area(self):
         self.spatial_plotter_id = None
@@ -2366,7 +2421,13 @@ class BioinfImport(QWidget):
             for ctn in self.final_type_pre_image[final_type]:
                 self.cell_type_dict[ctn] = self.new_name_line_edit[final_type].text()
 
-        self.cell_types_final = [self.cell_type_dict[ctn] for ctn in self.cell_types_original if self.cell_type_dict[ctn] is not None]
+        if self.use_spatial_data:
+            self.cell_types_final, self.spatial_data_final = zip(*[(ctn, pos) for ctn, pos in zip(self.cell_types_original, self.spatial_data) if self.cell_type_dict[ctn] is not None])
+            self.spatial_data_final = np.vstack([*self.spatial_data_final])
+            print(f"\tself.spatial_data_final = {self.spatial_data_final}")
+        else:
+            self.cell_types_final = [self.cell_type_dict[ctn] for ctn in self.cell_types_original if self.cell_type_dict[ctn] is not None]
+
         self.count_final_cell_types()
         self.compute_cell_volumes() # used in confluence computations, and in spatial_plotter
         if self.use_spatial_data:
