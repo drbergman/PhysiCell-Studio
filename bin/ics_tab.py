@@ -66,7 +66,7 @@ class QCheckBox_custom(QCheckBox):  # it's insane to have to do this!
 
 class ICs(QWidget):
 
-    def __init__(self, config_tab, celldef_tab, bioinf_import_flag, bioinf_import_test):
+    def __init__(self, config_tab, celldef_tab, bioinf_import_flag, bioinf_import_test, bioinf_import_test_spatial):
         super().__init__()
         # global self.config_params
 
@@ -185,7 +185,7 @@ class ICs(QWidget):
         self.tab_widget = QTabWidget()
         self.base_tab_id = self.tab_widget.addTab(self.create_base_ics_tab(),"Base")
         if self.bioinf_import_flag:
-            self.bioinf_import_tab = BioinfImport(self.config_tab, self.celldef_tab, self, bioinf_import_test)
+            self.bioinf_import_tab = BioinfImport(self.config_tab, self.celldef_tab, self, bioinf_import_test, bioinf_import_test_spatial)
             self.tab_widget.addTab(self.bioinf_import_tab,"Bioinformatics Import")
 
         self.layout = QVBoxLayout(self)

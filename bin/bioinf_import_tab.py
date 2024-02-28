@@ -16,49 +16,94 @@ except:
 # import scanpy as sc
 import copy
 import numpy as np
+import pandas as pd
 import time
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Patch, Rectangle, Annulus, Wedge
 from matplotlib.collections import PatchCollection
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from matplotlib import transforms
 
 from pathlib import Path
 import xml.etree.ElementTree as ET  # https://docs.python.org/2/library/xml.etree.elementtree.html
 from PyQt5 import QtCore, QtGui
-from PyQt5.QtWidgets import QApplication,QWidget,QLineEdit,QHBoxLayout,QVBoxLayout,QRadioButton,QPushButton, QLabel,QCheckBox,QComboBox,QScrollArea,QGridLayout, QFileDialog, QButtonGroup, QSplitter
+from PyQt5.QtWidgets import QApplication,QWidget,QLineEdit,QHBoxLayout,QVBoxLayout,QRadioButton,QPushButton, QLabel,QCheckBox,QComboBox,QScrollArea,QGridLayout, QFileDialog, QButtonGroup, QSplitter, QSizePolicy
 from PyQt5.QtGui import QIcon
 
 from studio_classes import QHLine, QVLine
 
 class GoBackButton(QPushButton):
-    def __init__(self, parent):
-        super().__init__()
+    def __init__(self, parent, bioinf_walkthrough):
+        super().__init__(parent)
         self.setText("\u2190 Go back")
         self.setStyleSheet(f"QPushButton {{background-color: lightgreen; color: black;}}")
-        self.clicked.connect(parent.go_back_to_prev_window)
+        self.clicked.connect(bioinf_walkthrough.go_back_to_prev_window)
+
+class ContinueButton(QPushButton):
+    def __init__(self, parent, cb):
+        super().__init__(parent)
+        self.setText("Continue \u2192")
+        self.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
+        self.clicked.connect(cb)
 
 class BioinfImportWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Bioinformatics Import Walkthrough")
 
-class BioinfImportPlotWindow(QWidget):
-    def __init__(self, main_window, config_tab):
+class BioinfImportWindow_SpatialQuery(BioinfImportWindow):
+    def __init__(self, bioinf_walkthrough):
         super().__init__()
-        self.main_window = main_window
+
+        self.bioinf_walkthrough = bioinf_walkthrough
+
+        s = f"It seems this data may contain spatial information in adata.obsm['{bioinf_walkthrough.spatial_data_key}'].\n"
+        s += "Would you like to use this?"
+        label = QLabel(s)
+
+        self.yes_no_group = QButtonGroup()
+        self.yes = QRadioButton("Yes")
+        self.no = QRadioButton("No")
+        self.yes_no_group.addButton(self.yes,0)
+        self.yes_no_group.addButton(self.no,1)
+        self.yes_no_group.idToggled.connect(self.yn_toggled)
+        self.yes.setChecked(True)
+        hbox_yn = QHBoxLayout()
+        hbox_yn.addWidget(self.yes)
+        hbox_yn.addWidget(self.no)
+
+        self.go_back_button = GoBackButton(self, bioinf_walkthrough)
+        self.continue_button = ContinueButton(self, bioinf_walkthrough.continue_to_cell_type_names_cb)
+        hbox_gb_cont = QHBoxLayout()
+        hbox_gb_cont.addWidget(self.go_back_button)
+        hbox_gb_cont.addWidget(self.continue_button)
+
+        vbox = QVBoxLayout()
+        vbox.addWidget(label)
+        vbox.addLayout(hbox_yn)
+        vbox.addLayout(hbox_gb_cont)
+        self.setLayout(vbox)
+
+    def yn_toggled(self,id):
+        self.bioinf_walkthrough.use_spatial_data = id==0
+
+class BioinfImportPlotWindow(QWidget):
+    def __init__(self, bioinf_walkthrough, config_tab):
+        super().__init__()
+        self.biwt = bioinf_walkthrough
         self.config_tab = config_tab
 
         self.setup_system_keys()
 
         self.preview_patch = None
         self.csv_array = {}
-        for cell_type in self.main_window.cell_types_list_final:
+        for cell_type in self.biwt.cell_types_list_final:
             self.csv_array[cell_type] = np.empty((0,3))
 
         self.alpha_value = 1.0
         value = ['gray','red','yellow','green','blue','magenta','orange','lime','cyan','hotpink','peachpuff','darkseagreen','lightskyblue']
-        value = value[0:len(self.main_window.cell_types_list_final)]
-        self.color_by_celltype = dict(zip(self.main_window.cell_types_list_final, value))
+        value = value[0:len(self.biwt.cell_types_list_final)]
+        self.color_by_celltype = dict(zip(self.biwt.cell_types_list_final, value))
 
         self.plot_xmin = float(self.config_tab.xmin.text())
         self.plot_xmax = float(self.config_tab.xmax.text())
@@ -99,7 +144,7 @@ class BioinfImportPlotWindow(QWidget):
         vbox_left.addWidget(self.mouse_keyboard_label)
 
         self.plot_cells_button = QPushButton("Plot", enabled=True)
-        self.plot_cells_button.setStyleSheet(self.main_window.qpushbutton_style_sheet)
+        self.plot_cells_button.setStyleSheet(self.biwt.qpushbutton_style_sheet)
         self.plot_cells_button.clicked.connect(self.plot_cell_pos)
         vbox_left.addWidget(self.plot_cells_button)
         vbox_left.addStretch(1)
@@ -115,6 +160,33 @@ class BioinfImportPlotWindow(QWidget):
         self.setLayout(vbox)
         self.setFocusPolicy( QtCore.Qt.ClickFocus )
         self.setFocus()
+
+    def default_spatial_pars(self):
+        if not self.biwt.use_spatial_data:
+            return
+        # self.biwt.spatial_data[:,0] += self.biwt.spatial_data[:,1] # for testing
+        x = self.biwt.spatial_data[:,0]
+        y = self.biwt.spatial_data[:,1]
+        xL = np.min(x)
+        xR = np.max(x)
+        yL = np.min(y)
+        yR = np.max(y)
+
+        factor_w = self.plot_dx / (xR-xL)
+        factor_h = self.plot_dy / (yR-yL)
+
+        spatial_factor = min([factor_w,factor_h])
+        width = (xR-xL)*spatial_factor
+        height = (yR-yL)*spatial_factor
+        x0 = 0.5*(self.plot_xmin+self.plot_xmax - width)
+        y0 = 0.5*(self.plot_ymin+self.plot_ymax - height)
+
+        self.spatial_base_coords = self.biwt.spatial_data - [xL,yL]
+        self.spatial_base_coords = self.spatial_base_coords / [xR-xL,yR-yL]
+        
+        # self.spatial_base_coords = self.spatial_base_coords[200] # for testing
+        # self.spatial_base_coords = np.array([0.5,0.5]) # for testing
+        return [x0, y0, width, height]
 
     def setup_system_keys(self):
         is_windows_os = os.name == "nt"
@@ -147,8 +219,9 @@ class BioinfImportPlotWindow(QWidget):
         self.patch_history.append([self.default_disc_pars()])
         self.patch_history.append([self.default_annulus_pars()])
         self.patch_history.append([self.default_wedge_pars()])
-        for idx in enumerate(self.patch_history):
-            self.patch_history_idx.append(0)
+        self.patch_history.append([self.default_wedge_pars()]) # rainbow
+        self.patch_history.append([self.default_spatial_pars()]) # spatial
+        self.patch_history_idx = len(self.patch_history) * [0]
 
     def enterEvent(self, event):
         # set focus on this as soon as the cursor enters this region
@@ -170,7 +243,7 @@ class BioinfImportPlotWindow(QWidget):
             self.par_label[i].setFixedWidth(par_label_width)
             self.par_text.append(QLineEdit())
             self.par_text[i].setFixedWidth(par_text_width)
-            self.par_text[i].setStyleSheet(self.main_window.qlineedit_style_sheet)
+            self.par_text[i].setStyleSheet(self.biwt.qlineedit_style_sheet)
             self.par_text[i].editingFinished.connect(self.append_to_history)
 
             hbox.addWidget(self.par_label[i])
@@ -200,7 +273,7 @@ class BioinfImportPlotWindow(QWidget):
         return pars
     
     def append_to_history(self, reset_cursor = True):
-        id = self.main_window.cell_pos_button_group.checkedId()
+        id = self.biwt.cell_pos_button_group.checkedId()
         if self.patch_history_idx[id] < len(self.patch_history[id])-1:
             # then we are in the middle of the history, delete the future events from here on
             del self.patch_history[id][self.patch_history_idx[id]+1:]
@@ -221,7 +294,7 @@ class BioinfImportPlotWindow(QWidget):
             self.canvas.mpl_disconnect(cid) # might throw error if none exist...
         self.mpl_cid = []
 
-        if self.main_window.cell_pos_button_group.checkedId()==0:
+        if self.biwt.cell_pos_button_group.checkedId()==0:
             for pt in self.par_text:
                 pt.setEnabled(False)
             for pl in self.par_label:
@@ -230,7 +303,7 @@ class BioinfImportPlotWindow(QWidget):
         
         else: # set callbacks common to all
             self.mpl_cid.append(self.canvas.mpl_connect("button_release_event", self.mouse_released_cb)) 
-            id = self.main_window.cell_pos_button_group.checkedId()
+            id = self.biwt.cell_pos_button_group.checkedId()
             if id==1:
                 self.par_label[0].setText("x0")
                 self.par_label[1].setText("y0")
@@ -277,6 +350,15 @@ class BioinfImportPlotWindow(QWidget):
                 self.par_label[5].setText("\u03b82 (\u00b0)")
                 self.current_plotter = self.wedge_plotter
         
+            elif id==6:
+                self.par_label[0].setText("x0")
+                self.par_label[1].setText("y0")
+                self.par_label[2].setText("width")
+                self.par_label[3].setText("height")
+                self.mpl_cid.append(self.canvas.mpl_connect("button_press_event", self.rectangle_mouse_press))
+                self.mpl_cid.append(self.canvas.mpl_connect("motion_notify_event", self.rectangle_mouse_motion))
+                self.current_plotter = self.spatial_plotter
+
             self.activate_par_texts(id, self.current_plotter)
             self.current_plotter()
     
@@ -307,7 +389,7 @@ class BioinfImportPlotWindow(QWidget):
         else:
             self.preview_patch.set_bounds(self.plot_xmin,self.plot_ymin,self.plot_dx,self.plot_dy)
 
-        self.plot_cells_button.setEnabled(self.main_window.is_any_cell_type_button_group_checked())
+        self.plot_cells_button.setEnabled(self.biwt.is_any_cell_type_button_group_checked())
 
         self.canvas.update()
         self.canvas.draw()
@@ -362,7 +444,7 @@ class BioinfImportPlotWindow(QWidget):
     def default_rectangle_pars(self):
         x0y0 = self.default_x0y0()
         return [*x0y0,*self.default_wh(x0y0 = x0y0)]
-
+    
     def default_x0y0(self):
         return (0.5*(self.plot_xmin+self.plot_xmax),0.5*(self.plot_ymin+self.plot_ymax))
             
@@ -508,7 +590,7 @@ class BioinfImportPlotWindow(QWidget):
         # check left edge of rect is left of right edge of domain, right edge of rect is right of left edge of domain (similar in y direction)
         bval = (x0 < self.plot_xmax) and (x0+width > self.plot_xmin) and (y0 < self.plot_ymax) and (y0+height > self.plot_ymin) # make sure the rectangle intersects the domain with positive area
 
-        self.plot_cells_button.setEnabled(bval and self.main_window.is_any_cell_type_button_group_checked())
+        self.plot_cells_button.setEnabled(bval and self.biwt.is_any_cell_type_button_group_checked())
 
         self.canvas.update()
         self.canvas.draw()
@@ -532,7 +614,7 @@ class BioinfImportPlotWindow(QWidget):
         r2 = self.get_distance2_to_domain(x0, y0)[0]
         bval = r2 < r*r # make sure the distance from center of Circle to domain is less than radius of circle
         
-        self.plot_cells_button.setEnabled(bval and self.main_window.is_any_cell_type_button_group_checked())
+        self.plot_cells_button.setEnabled(bval and self.biwt.is_any_cell_type_button_group_checked())
         self.canvas.update()
         self.canvas.draw()
 
@@ -577,7 +659,7 @@ class BioinfImportPlotWindow(QWidget):
         # inner_radius_does_not_contain_entire_domain = cr2 > r0*r0
         bval = (r2 < r1*r1) and (cr2 > r0*r0)
 
-        self.plot_cells_button.setEnabled(bval and self.main_window.is_any_cell_type_button_group_checked())
+        self.plot_cells_button.setEnabled(bval and self.biwt.is_any_cell_type_button_group_checked())
 
         width = r1-r0
         try:
@@ -636,7 +718,7 @@ class BioinfImportPlotWindow(QWidget):
 
         bval = bval and self.wedge_in_domain(x0,y0,r0,r1,th1,th2,dx,dy,r2)
 
-        self.plot_cells_button.setEnabled(bval and self.main_window.is_any_cell_type_button_group_checked())
+        self.plot_cells_button.setEnabled(bval and self.biwt.is_any_cell_type_button_group_checked())
 
         if self.preview_patch is None:
             self.preview_patch = self.ax0.add_patch(Wedge((x0,y0),r1,th1,th2,width=r1-r0,alpha=0.2))
@@ -834,6 +916,97 @@ class BioinfImportPlotWindow(QWidget):
             r_y = np.inf
         return r_x if r_x <= r_y else r_y
 
+    def spatial_plotter(self):
+        pars = []
+        for idx, pt in enumerate(self.par_text):
+            if idx > 3:
+                break
+            if pt.hasAcceptableInput() is False:
+                self.plot_cells_button.setEnabled(False)
+                return # do not update unless all are ready
+            pars.append(float(pt.text()))
+        x0, y0, width, height = pars
+        # anyone who wants to dive into the gaping hole of matplotlib to figure out how offsets can make these transforms cheaper, be my guest...
+        # self.ax0.cla()
+        # self.format_axis()
+        # self.preview_patch = self.circles(self.spatial_base_coords * [width, height] + [x0,y0] , 10, 'b')
+        if self.preview_patch is None:
+            dx, dy = self.ax0.transData.transform((1,1))-self.ax0.transData.transform((0,0)) # # pixels/ micron
+            area_scale_factor = dx*dy
+            fudge_factor = 1.258199089131739 # empirically-defined value to multiply area (in pts) to represent true area in microns on plot
+            area_microns2 = [(((9*np.pi*V**2) / 16) ** (1./3)) for V in self.biwt.cell_volume.values()]
+            area_microns2 = [200 * r for r in np.random.uniform(size=len(area_microns2))]
+            areas = [fudge_factor * area_scale_factor * 72*72/(self.figure.dpi**2)*A  for A in area_microns2] # area in pts
+            D = dict(zip(self.biwt.cell_volume.keys(),areas))
+            self.scatter_sizes = [D[ctn] for ctn in self.biwt.cell_types_final]
+            # print(f"area_scale_fac r for r intor = {area_scale_factor}")
+            # print(f"self.figure.dpi = {self.figure.dpi}")
+            # print(f"area_microns2[0] = {area_microns2[0]}")
+            # fudge_factor = area_microns2[0] / (np.pi * (7.5**2))
+            # print(f"fudge_factor = {fudge_factor}")
+            # print(self.figure.dpi)
+            self.preview_patch = self.ax0.scatter([],[], 10, 'b')
+
+            # self.preview_patch = self.circles(self.spatial_base_coords * [width, height] + [x0,y0] , 10, 'b')
+            # self.preview_patch = self.
+            # self.initial_x0 = x0
+            # self.initial_y0 = y0
+            # self.initial_width = width
+            # self.initial_height = height
+            # offset = self.spatial_base_coords * [width-self.initial_width, height-self.initial_height] + [x0-self.initial_x0,y0-self.initial_y0]
+            offset = self.spatial_base_coords * [width, height] + [x0,y0]
+            self.preview_patch.set_offsets(offset)
+            self.preview_patch.set_sizes(self.scatter_sizes)#, dpi=self.figure.dpi)
+            # self.original_patch = self.circles(self.spatial_base_coords * [width, height] + [x0,y0] , 10, 'g')
+        #     # self.preview_patch.set_offset_transform(self.ax0.transData)
+        #     # self.preview_patch.set_offset_transform(self.ax0.transData)
+        else:
+        #     # print(f"self.preview_patch.get_transforms() = {self.preview_patch.get_transforms()}")
+        #     # print(f"self.preview_patch.get_offset_transform() = {self.preview_patch.get_offset_transform()}")
+        #     # self.preview_patch = self.circles(self.spatial_base_coords * [width, height] + [x0,y0] , 10, 'b')
+        #     # # self.preview_patch.set_bounds(x0,y0,width,height)
+        #     # print(f"width = {width}\theight = {height}")
+        #     # print(f"self.initial_width = {self.initial_width}\tself.initial_height = {self.initial_height}")
+        #     # print(f"self.spatial_base_coords[0:5] = {self.spatial_base_coords[0:5]}")
+        #     # print(f"np.min(self.spatial_base_coords,axis=0) = {np.min(self.spatial_base_coords,axis=0)}")
+        #     # print(f"np.max(self.spatial_base_coords,axis=0) = {np.max(self.spatial_base_coords,axis=0)}")
+        #     # idx = np.argmax(self.spatial_base_coords[:,0])
+        #     self.ax0.cla()
+        #     # self.preview_patch.remove()
+        #     # self.original_patch.remove()
+        #     # offset = transforms.ScaledTranslation(*(self.spatial_base_coords * [width-self.initial_width, height-self.initial_height] + [x0-self.initial_x0,y0-self.initial_y0]).T, self.figure.dpi_scale_trans)
+        #     # shadow_transform = self.ax0.transData + offset
+        #     self.preview_patch = self.circles(self.spatial_base_coords * [self.initial_width, self.initial_height] + [self.initial_x0,self.initial_y0] , 10, 'b')
+        #     self.original_patch = self.circles(self.spatial_base_coords * [width, height] + [x0,y0] , 10, 'g')
+            offset = self.spatial_base_coords * [width, height] + [x0,y0]
+            dx, dy = self.ax0.transData.transform((1,1))-self.ax0.transData.transform((0,0)) # # pixels/ micron
+            area_scale_factor = dx*dy
+            areas = [area_scale_factor* 72*72/(self.figure.dpi**2)*(((9*np.pi*V**2) / 16) ** (1./3))  for V in self.biwt.cell_volume.values()] 
+            D = dict(zip(self.biwt.cell_volume.keys(),areas))
+            self.scatter_sizes = [D[ctn] for ctn in self.biwt.cell_types_final]
+            self.preview_patch.set_sizes(self.scatter_sizes)#, dpi=self.figure.dpi)
+            # self.preview_patch.set_sizes(self.scatter_sizes)#, dpi=self.figure.dpi)
+        #     # offset = self.ax0.transData.transform(self.spatial_base_coords * [width-self.initial_width, height-self.initial_height] + [x0-self.initial_x0,y0-self.initial_y0])
+        #     # print(f"offset[idx] = {offset[idx]}")
+        #     # offset = -500 * self.spatial_base_coords
+        #     # print(f"offset = {offset}")
+        #     # print(f"t(offset) = {self.ax0.transData.transform(offset)}")
+        #     # self.original_patch = self.circles(self.spatial_base_coords * [width, height] + [x0,y0] , 10, 'g')
+        #     # print(self.preview_patch.get_transforms())
+        #     # print(self.preview_patch.get_paths())
+        #     # print(self.preview_patch.get_offsets())
+            self.preview_patch.set_offsets(offset)
+        #     # print(self.preview_patch.get_paths())
+        #     # print(self.preview_patch.get_offsets())
+
+        # check left edge of rect is left of right edge of domain, right edge of rect is right of left edge of domain (similar in y direction)
+        bval = (x0 < self.plot_xmax) and (x0+width > self.plot_xmin) and (y0 < self.plot_ymax) and (y0+height > self.plot_ymin) # make sure the rectangle intersects the domain with positive area
+
+        self.plot_cells_button.setEnabled(bval and self.biwt.is_any_cell_type_button_group_checked())
+
+        self.canvas.update()
+        self.canvas.draw()
+
     def create_figure(self):
         self.figure = plt.figure()
         self.canvas = FigureCanvasQTAgg(self.figure)
@@ -866,7 +1039,7 @@ class BioinfImportPlotWindow(QWidget):
     def canvas_key_press(self, event):
         modifiers = QApplication.keyboardModifiers()
             
-        id = self.main_window.cell_pos_button_group.checkedId()
+        id = self.biwt.cell_pos_button_group.checkedId()
         if id==0 or (event.key() != QtCore.Qt.Key_Z):
             return # nothing to do with everywhere plotter or if not z pressed
         elif modifiers == QtCore.Qt.ControlModifier:
@@ -887,20 +1060,20 @@ class BioinfImportPlotWindow(QWidget):
 
     def plot_cell_pos(self):
         self.constrain_preview_to_axes = False
-        for ctn in self.main_window.checkbox_dict.keys():
-            if self.main_window.checkbox_dict[ctn].isChecked():
+        for ctn in self.biwt.checkbox_dict.keys():
+            if self.biwt.checkbox_dict[ctn].isChecked():
                 self.plot_cell_pos_single(ctn)
         self.canvas.update()
         self.canvas.draw()
 
         self.plot_cells_button.setEnabled(False)
 
-        for b in self.main_window.checkbox_dict.values():
+        for b in self.biwt.checkbox_dict.values():
             if b.isEnabled() is True:
                 return
         # If control passes here, then all the buttons are disabled and the plotting is done
-        self.main_window.finish_write_button.setEnabled(True)
-        self.main_window.finish_append_button.setEnabled(True)
+        self.biwt.finish_write_button.setEnabled(True)
+        self.biwt.finish_append_button.setEnabled(True)
 
     def max_dist_to_domain(self,x0,y0):
         xL, xR, yL, yR = [self.plot_xmin, self.plot_xmax, self.plot_ymin, self.plot_ymax]
@@ -909,7 +1082,7 @@ class BioinfImportPlotWindow(QWidget):
         return np.sqrt(dx*dx + dy*dy)
     
     def plot_cell_pos_single(self, cell_type):
-        N = self.main_window.cell_counts[cell_type]
+        N = self.biwt.cell_counts[cell_type]
         if type(self.preview_patch) is Rectangle:
             # first make sure the rectangle is all in bounds
             if self.constrain_preview_to_axes is False:
@@ -959,9 +1132,9 @@ class BioinfImportPlotWindow(QWidget):
 
         self.circles(self.new_pos, s=8., color=self.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
 
-        self.main_window.checkbox_dict[cell_type].setEnabled(False)
-        self.main_window.checkbox_dict[cell_type].setChecked(False)
-        self.main_window.undo_button[cell_type].setEnabled(True)
+        self.biwt.checkbox_dict[cell_type].setEnabled(False)
+        self.biwt.checkbox_dict[cell_type].setChecked(False)
+        self.biwt.undo_button[cell_type].setEnabled(True)
 
     def wedge_sample(self,N,x0,y0,r1, r0=0, th_lim=(0,2*np.pi)):
         i_start = 0
@@ -1022,7 +1195,7 @@ class BioinfImportPlotWindow(QWidget):
         This code is under [The BSD 3-Clause License]
         (http://opensource.org/licenses/BSD-3-Clause)
         """
-        x, y, _ = pos.T
+        x, y = pos.T[0:2]
         if np.isscalar(c):
             kwargs.setdefault('color', c)
             c = None
@@ -1048,10 +1221,12 @@ class BioinfImportPlotWindow(QWidget):
             collection.set_clim(vmin, vmax)
 
         self.ax0.add_collection(collection)
-        self.ax0.autoscale_view()
+        # self.ax0.autoscale_view()
         if c is not None:
             self.ax0.sci(collection)
 
+        return collection
+    
     def cancel_cb(self):
         self.hide() # this will work for now, but maybe a better way to handle closing the window?
         pass
@@ -1074,18 +1249,18 @@ class BioinfImportPlotWindow(QWidget):
         self.add_cell_positions_to_file()
 
     def check_for_new_celldefs(self):
-        for cell_type in self.main_window.cell_types_list_final:
-            if cell_type in self.main_window.celldef_tab.celltypes_list:
+        for cell_type in self.biwt.cell_types_list_final:
+            if cell_type in self.biwt.celldef_tab.celltypes_list:
                 print(f"BioinfImportPlotWindow: {cell_type} found in current list of cell types. Not appending this...")
             else:
-                self.main_window.celldef_tab.new_cell_def_named(cell_type)
+                self.biwt.celldef_tab.new_cell_def_named(cell_type)
 
     def set_file_name(self):
-        dir_name = self.main_window.csv_folder.text()
+        dir_name = self.biwt.csv_folder.text()
         if len(dir_name) > 0 and not os.path.isdir(dir_name):
             os.makedirs(dir_name)
             time.sleep(1)
-        self.full_fname = os.path.join(dir_name,self.main_window.csv_file.text())
+        self.full_fname = os.path.join(dir_name,self.biwt.csv_file.text())
         Path(self.full_fname).touch() # make sure the file exists
         print("save_cb(): self.full_fname=",self.full_fname)
 
@@ -1095,13 +1270,13 @@ class BioinfImportPlotWindow(QWidget):
                 for pos in self.csv_array[cell_type]:
                     f.write(f'{pos[0]},{pos[1]},{pos[2]},{cell_type}\n')
         plt.style.use("default")
-        self.main_window.ics_tab.clear_cb()
-        self.main_window.ics_tab.import_from_file(self.full_fname)
-        self.main_window.ics_tab.tab_widget.setCurrentIndex(self.main_window.ics_tab.base_tab_id)
-        self.main_window.ics_tab.csv_folder.setText(self.main_window.csv_folder.text())
-        self.main_window.ics_tab.output_file.setText(self.main_window.csv_file.text())
+        self.biwt.ics_tab.clear_cb()
+        self.biwt.ics_tab.import_from_file(self.full_fname)
+        self.biwt.ics_tab.tab_widget.setCurrentIndex(self.biwt.ics_tab.base_tab_id)
+        self.biwt.ics_tab.csv_folder.setText(self.biwt.csv_folder.text())
+        self.biwt.ics_tab.output_file.setText(self.biwt.csv_file.text())
         self.close()
-        self.main_window.window.close()
+        self.biwt.window.close()
         print("BioinfImportWindow: Colors will likely change in the ICs tab due to previous cell types being present.")
 
 class QCheckBox_custom(QCheckBox):  # it's insane to have to do this!
@@ -1133,7 +1308,7 @@ class QCheckBox_custom(QCheckBox):  # it's insane to have to do this!
         self.setStyleSheet(checkbox_style)
 
 class BioinfImport(QWidget):
-    def __init__(self, config_tab, celldef_tab, ics_tab, bioinf_import_test):
+    def __init__(self, config_tab, celldef_tab, ics_tab, bioinf_import_test, bioinf_import_test_spatial):
         super().__init__()
         if HAVE_ANNDATA is False:
             vbox = QVBoxLayout()
@@ -1220,9 +1395,17 @@ class BioinfImport(QWidget):
 
         if bioinf_import_test:
             self.import_file("./data/pbmc3k_clustered.h5ad")
+            self.continue_to_cell_type_names_cb()
+            # self.continue_to_rename()
+            # self.continue_on_rename_cb()
+            # self.continue_to_cell_pos_cb()
+        elif bioinf_import_test_spatial:
+            self.column_line_edit.setText("cluster")
+            self.import_file("./data/visium_adata.h5ad")
+            self.continue_to_cell_type_names_cb()
             self.continue_to_rename()
             self.continue_on_rename_cb()
-            self.continue_to_cell_pos_cb()
+            # self.continue_to_cell_pos_cb()
 
 
     def select_all_button_cb(self):
@@ -1266,6 +1449,10 @@ class BioinfImport(QWidget):
         else:
             s = "Select column that contains cell type info:"
         
+        self.window = BioinfImportWindow()
+
+        self.spatial_data_found, self.spatial_data_key, self.spatial_data = self.search_adata_obsm_for("spatial")
+
         vbox = QVBoxLayout()
         label = QLabel(s)
         vbox.addWidget(label)
@@ -1277,25 +1464,41 @@ class BioinfImport(QWidget):
         vbox.addWidget(self.column_combobox)
 
         hbox = QHBoxLayout()
-        continue_button = QPushButton("Continue \u2192")
-        continue_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
-        continue_button.clicked.connect(self.continue_to_cell_type_names_cb)
+        continue_button = ContinueButton(self.window, self.continue_from_import)
+        # continue_button = QPushButton("Continue \u2192")
+        # continue_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
+        # continue_button.clicked.connect(self.continue_from_import)
         hbox.addWidget(continue_button)
 
         vbox.addLayout(hbox)
 
-        self.window = BioinfImportWindow()
         self.window.setLayout(vbox)
+
+        self.previous_windows = []
 
         if auto_continue:
             self.current_column = self.column_line_edit.text()
-            self.continue_to_cell_type_names_cb()
+            self.continue_from_import()
             return
         self.window.hide()
         self.window.show()
 
     def column_combobox_changed_cb(self, idx):
         self.current_column = self.column_combobox.currentText()
+
+    def continue_from_import(self):
+        if not self.spatial_data_found:
+            print("spatial data not found. continuing to editing cell types...")
+            self.use_spatial_data = False
+            self.continue_to_cell_type_names_cb()
+            return
+        print("spatial data found. asking you about it now...")
+        self.open_next_window(lambda : BioinfImportWindow_SpatialQuery(self))
+        self.window.hide()
+        self.window.show()
+        # self.window = BioinfImportWindow_SpatialQuery(self)
+        # self.window.hide()
+        # self.window.show()
 
     def continue_to_cell_type_names_cb(self):
         self.cell_types_original = self.adata.obs[self.current_column]
@@ -1307,6 +1510,9 @@ class BioinfImport(QWidget):
         self.check_cell_type_names()
 
     def check_cell_type_names(self):
+
+        self.open_next_window(BioinfImportWindow, show=False)
+
         keep_color = "lightgreen"
         merge_color = "yellow"
         delete_color = "#FFCCCB"
@@ -1404,51 +1610,116 @@ class BioinfImport(QWidget):
 
         hbox = QHBoxLayout()
 
-        go_back_button = GoBackButton(self)
+        go_back_button = GoBackButton(self.window, self)
 
-        accept_button = QPushButton("Continue \u2192")
-        accept_button.setStyleSheet(f"QPushButton {{background-color: lightgreen; color: black;}}")
-        accept_button.clicked.connect(self.continue_to_rename)
+        continue_button = ContinueButton(self.window, self.continue_to_rename)
+        # continue_button = QPushButton("Continue \u2192")
+        # continue_button.setStyleSheet(f"QPushButton {{background-color: lightgreen; color: black;}}")
+        # continue_button.clicked.connect(self.continue_to_rename)
 
         hbox.addWidget(go_back_button)
-        hbox.addWidget(accept_button)
+        hbox.addWidget(continue_button)
         vbox.addLayout(hbox)
 
-        hbox = QHBoxLayout()
-        hbox.addLayout(vbox)
-        self.try_to_plot_dim_red()
-        if self.dim_red_canvas:
-            hbox.addWidget(self.dim_red_canvas)
+        self.dim_red_fig = None
+        self.dim_red_canvas = None
+        for key_substring in ["umap","tsne","pca"]:
+            if self.try_to_plot_dim_red(key_substring=key_substring):
+                splitter = QSplitter()
+                left_side = QWidget()
+                left_side.setLayout(vbox)
+                splitter.addWidget(left_side)
 
-        self.previous_windows = [self.window]
-        self.previous_windows[0].hide()
+                right_side = QWidget()
+                vbox = QVBoxLayout()
+                self.obsm_keys_combobox = QComboBox()
+                for i, k in enumerate(self.adata.obsm.keys()):
+                    if key_substring in k:
+                        id = i
+                    self.obsm_keys_combobox.addItem(k)
+                self.obsm_keys_combobox.setCurrentIndex(id)
+                self.obsm_keys_combobox.currentIndexChanged.connect(self.obsm_keys_combobox_changed_cb)
 
-        self.window = BioinfImportWindow()
-        self.window.setLayout(hbox)
+                label = QLabel("Marker Size")
+                self.marker_size_edit = QLineEdit(str(self.marker_size))
+                self.marker_size_edit.setValidator(QtGui.QDoubleValidator(bottom=0))
+                self.marker_size_edit.textChanged.connect(self.marker_size_changed_cb)
+
+                hbox = QHBoxLayout()
+                hbox.addWidget(self.obsm_keys_combobox)
+                hbox.addWidget(label)
+                hbox.addWidget(self.marker_size_edit)
+
+                vbox.addLayout(hbox)
+                vbox.addWidget(self.dim_red_canvas)
+                right_side.setLayout(vbox)
+                splitter.addWidget(right_side)
+                vbox = QVBoxLayout()
+                vbox.addWidget(splitter)
+                break
+        
+        self.window.setLayout(vbox)
 
         self.window.hide()
         self.window.show()
 
-    def try_to_plot_dim_red(self):
-        found = False
-        for k, v in self.adata.obsm.items():
-            print(f"k = {k}")
-            if "umap" in k:
-                found = True
-                break
-        if not found:
-            self.dim_red_canvas = None
+    def marker_size_changed_cb(self, text):
+        if not self.marker_size_edit.hasAcceptableInput():
+            return
+        self.marker_size = float(text)
+        self.scatter.set_sizes(self.marker_size + np.zeros_like(self.scatter.get_sizes()))
+        # self.scatter.draw()
+        self.dim_red_canvas.update()
+        self.dim_red_canvas.draw()
+        # for scatter_plot in self.scatter[0]:
+        #     scatter_plot.set_sizes
+
+    def obsm_keys_combobox_changed_cb(self, idx):
+        key = self.obsm_keys_combobox.currentText()
+        self.dim_red_ax.cla()
+        self.try_to_plot_dim_red(key_substring=key)
+
+    def open_next_window(self, window_class, layout=None, show=True):
+        self.previous_windows.append(self.window)
+        self.previous_windows[-1].hide()
+
+        self.window = window_class()
+        if layout:
+            self.window.setLayout(layout)
+
+        if show:
+            self.window.hide()
+            self.window.show()
+
+    def create_dim_red_fig(self):
         self.dim_red_fig = plt.figure()
         self.dim_red_canvas = FigureCanvasQTAgg(self.dim_red_fig)
         self.dim_red_canvas.setStyleSheet("background-color:transparent;")
         plt.style.use('ggplot')
 
         self.dim_red_ax = self.dim_red_fig.add_subplot(111, adjustable='box')
+        self.marker_size = 0.18844459036110225*np.sqrt(self.n_points)
 
+    def try_to_plot_dim_red(self, key_substring="umap"):
+        found, k, _ = self.search_adata_obsm_for(key_substring) # (was this found?, the key in adata.obsm, the value of adata.obsm[k])
+        if not found:
+            return False
+        self.plot_dim_red(k)
+        return True
+
+    def plot_dim_red(self, k):
+        v = self.adata.obsm[k]
+        self.n_points = len(v)
+        if self.dim_red_fig is None:
+            self.create_dim_red_fig()
+        
+        temp = pd.CategoricalIndex(self.cell_types_original)
+        self.scatter = self.dim_red_ax.scatter(v[:,0],v[:,1],self.marker_size,c=temp.codes) # 0.18844459036110225 = 5/sqrt(704) where I found 5 to be a good size when working with 704 points
+        scatter_objects, _ = self.scatter.legend_elements()
+        self.dim_red_fig.legend(scatter_objects, temp.categories,
+                    loc=8, title="Clusters",ncol=3, mode="expand")
+        self.dim_red_ax.set_title(f"{k} plot")
         self.dim_red_ax.set_aspect(1.0)
-        plt.scatter(v[:,0],v[:,1])
-        # sc.tl.umap(self.adata) # got some warning about numba jit or something like that
-
         self.dim_red_canvas.update()
         self.dim_red_canvas.draw()
 
@@ -1467,6 +1738,8 @@ class BioinfImport(QWidget):
         self.merge_button.setEnabled(enable_merge_button)
 
     def continue_to_cell_counts(self):
+
+        self.open_next_window(BioinfImportWindow)
 
         names_width = 100
         counts_width = 120
@@ -1516,12 +1789,6 @@ class BioinfImport(QWidget):
         vbox_cols[2].addWidget(self.use_props_radio_button)
         vbox_cols[3].addWidget(self.use_confluence_radio_button)
         vbox_cols[4].addWidget(self.use_manual_radio_button)
-
-        self.cell_counts = {}
-        for cell_type in self.cell_types_list_final:
-            self.cell_counts[cell_type] = 0
-        for ctn in self.cell_types_final:
-            self.cell_counts[ctn] += 1
 
         self.cell_type_props = [self.cell_counts[cell_type]/len(self.cell_types_final) for cell_type in self.cell_types_list_final]
 
@@ -1623,26 +1890,27 @@ class BioinfImport(QWidget):
 
         hbox = QHBoxLayout()
 
-        self.go_back_to_rename = GoBackButton(self)
+        go_back_to_rename = GoBackButton(self.window, self)
 
-        self.continue_to_cell_pos = QPushButton("Continue \u2192")
-        self.continue_to_cell_pos.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
-        self.continue_to_cell_pos.clicked.connect(self.continue_to_cell_pos_cb)
+        continue_to_cell_pos = ContinueButton(self.window, self.continue_to_cell_pos_cb)
+        # continue_to_cell_pos = QPushButton("Continue \u2192")
+        # continue_to_cell_pos.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
+        # continue_to_cell_pos.clicked.connect(self.continue_to_cell_pos_cb)
 
-        hbox.addWidget(self.go_back_to_rename)
-        hbox.addWidget(self.continue_to_cell_pos)
+        hbox.addWidget(go_back_to_rename)
+        hbox.addWidget(continue_to_cell_pos)
         
         vbox.addLayout(hbox)
-
-        self.previous_windows.append(self.window)
-        self.previous_windows[-1].hide()
-
-        self.window = BioinfImportWindow()
-        self.window.setLayout(vbox)
 
         self.window.hide()
         self.window.show()
 
+    def count_final_cell_types(self):
+        self.cell_counts = {}
+        for cell_type in self.cell_types_list_final:
+            self.cell_counts[cell_type] = 0
+        for ctn in self.cell_types_final:
+            self.cell_counts[ctn] += 1
 
     def prop_box_changed_cb(self, text):
         if self.prop_box_callback_paused:
@@ -1707,14 +1975,18 @@ class BioinfImport(QWidget):
             
         self.conf_box_callback_paused = False
 
-    def counts_button_cb(self):
-        enable_props = self.counts_button_group.checkedId()==1
-        enable_confluence = self.counts_button_group.checkedId()==2
-        enable_manual = self.counts_button_group.checkedId()==3
+    def counts_button_cb(self, id):
+        # enable_props = self.counts_button_group.checkedId()==1
+        # enable_confluence = self.counts_button_group.checkedId()==2
+        # enable_manual = self.counts_button_group.checkedId()==3
+        enable_props = id==1
+        enable_confluence = id==2
+        enable_manual = id==3
 
         current_values = {}
 
-        if self.counts_button_group.checkedId()==0:
+        # if self.counts_button_group.checkedId()==0:
+        if id==0:
             current_values = self.cell_counts
             current_total = len(self.cell_types_final)
 
@@ -1754,7 +2026,10 @@ class BioinfImport(QWidget):
         return counts, total
 
     def continue_to_cell_pos_cb(self):
-        if self.counts_button_group.checkedId()==0: # use counts found in data file
+
+        self.open_next_window(BioinfImportWindow, show=False)
+
+        if self.use_spatial_data or self.counts_button_group.checkedId()==0: # use counts found in data file
             pass
         elif self.counts_button_group.checkedId()==1: # use props found in data file
             for cell_type in self.cell_types_list_final:
@@ -1777,7 +2052,6 @@ class BioinfImport(QWidget):
         vbox = QVBoxLayout()
         vbox.addWidget(splitter)
 
-
         top_area = QWidget()
         top_area.setLayout(vbox)
 
@@ -1791,7 +2065,7 @@ class BioinfImport(QWidget):
         vbox = QVBoxLayout()
         vbox.addWidget(splitter)
 
-        go_back_button = GoBackButton(self)
+        go_back_button = GoBackButton(self.window, self)
 
         self.finish_write_button = QPushButton("Overwrite \u2192",enabled=False)
         self.finish_write_button.setStyleSheet(self.qpushbutton_style_sheet)
@@ -1808,21 +2082,9 @@ class BioinfImport(QWidget):
 
         vbox.addLayout(hbox_write)
 
-        self.previous_windows.append(self.window)
-        self.previous_windows[-1].hide()
-
-        self.window = BioinfImportWindow()
         self.window.setLayout(vbox)
-
-        # hack to bring to foreground
         self.window.hide()
         self.window.show()
-        
-    def show_plot_button_cb(self):
-        if self.ics_plot_area is None:
-            self.create_ics_plot_area()
-        self.ics_plot_area.hide()
-        self.ics_plot_area.show()
 
     def create_cell_type_scroll_area(self):
         vbox_main = QVBoxLayout()
@@ -1932,11 +2194,12 @@ class BioinfImport(QWidget):
         rI = 0
         cI = 0
         cmax = 1
+        size = QtCore.QSize(icon_width, icon_height) 
             
         vbox = QVBoxLayout()
-        full_rectangle_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/scatter_square.svg"))
+        full_rectangle_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/scatter_square.svg"), size=size)
         full_rectangle_button.setFixedSize(button_width,button_height)
-        size = QtCore.QSize(icon_width, icon_height) 
+        # size = QtCore.QSize(icon_width, icon_height) 
         full_rectangle_button.setIconSize(size)
         full_rectangle_button.setCheckable(True)
         full_rectangle_button.setChecked(True)
@@ -2048,6 +2311,23 @@ class BioinfImport(QWidget):
         grid_layout.addLayout(vbox,rI,cI,1,1)
         rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
 
+        vbox = QVBoxLayout()
+        rainbow_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/spatial.svg"), enabled=self.use_spatial_data, checkable=True, size=size)
+        rainbow_button.setFixedSize(button_width,button_height)
+        rainbow_button.setIconSize(size)
+        rainbow_button.setCheckable(True)
+        rainbow_button.setStyleSheet(qpushbutton_style_sheet) 
+        self.cell_pos_button_group.addButton(rainbow_button,next_button_id)
+        next_button_id += 1
+        vbox.addWidget(rainbow_button)
+
+        label = QLabel("Rainbow\n(why not?!)\nWork in progess...")
+        label.setFixedWidth(button_width)
+        label.setAlignment(QtCore.Qt.AlignCenter)
+        vbox.addWidget(label)
+
+        grid_layout.addLayout(vbox,rI,cI,1,1)
+
         master_vbox.addLayout(grid_layout)
 
         pos_scroll_area_widget = QWidget()
@@ -2056,71 +2336,9 @@ class BioinfImport(QWidget):
         self.pos_scroll_area = QScrollArea()
         self.pos_scroll_area.setWidget(pos_scroll_area_widget)
 
-    def create_ics_plot_area(self):
-        self.ics_plot_area = BioinfImportPlotWindow(self, self.config_tab)
-
-    def accept_as_is_cb(self):
-        self.cell_types_final = self.cell_types_original
-        self.cell_types_list_final = self.cell_types_list_original
-        return self.continue_to_cell_counts()
-
-    def edit_cell_types_cb(self):
-        label = self.list_current_cell_type_names()
-        
-        vbox = QVBoxLayout()
-        vbox.addWidget(label)
-
-        label = QLabel("How would you like to proceed? <html><ul><li>Keep: select some types to keep as is</li><li>Delete: select some types to delete</li><li>Merge: select some types to merge</li><li>Accept: accept the remaining cell types as is, i.e. Keep them all</li></ul></html>")
-        vbox.addWidget(label)
-
-        hbox = QHBoxLayout()
-        keep_button = QPushButton("Keep")
-        keep_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
-        keep_button.clicked.connect(self.keep_cb)
-        hbox.addWidget(keep_button)
-
-        delete_button = QPushButton("Delete")
-        delete_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
-        delete_button.clicked.connect(self.delete_cb)
-        hbox.addWidget(delete_button)
-
-        merge_button = QPushButton("Merge")
-        merge_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
-        merge_button.clicked.connect(self.merge_cb)
-        hbox.addWidget(merge_button)
-
-        accept_button = QPushButton("Accept")
-        accept_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
-        accept_button.clicked.connect(self.accept_cb)
-        hbox.addWidget(accept_button)
-
-        vbox.addLayout(hbox)
-
-        self.window = BioinfImportWindow()
-        self.window.setLayout(vbox)
-
-        # hack to bring to foreground
-        self.window.hide()
-        self.window.show()
-
-    def keep_cb(self):
-        continue_button = self.list_remaining_with_checkboxes("Keep")
-        continue_button.clicked.connect(self.continue_on_keep_cb)
-
-    def delete_cb(self):
-        continue_button = self.list_remaining_with_checkboxes("Delete")
-        continue_button.clicked.connect(self.continue_on_delete_cb)
-
-    def merge_cb(self):
-        continue_button = self.list_remaining_with_checkboxes("Merge")
-        continue_button.clicked.connect(self.continue_on_merge_cb)
-
-    def accept_cb(self):
-        for ctn in self.remaining_cell_types_list_original:
-            self.cell_type_dict[ctn] = ctn
-        self.continue_to_rename()
-
     def continue_to_rename(self):
+
+        self.open_next_window(BioinfImportWindow)
         vbox = QVBoxLayout()
         label = QLabel("Rename your chosen cell types if you like:")
         vbox.addWidget(label)
@@ -2150,24 +2368,15 @@ class BioinfImport(QWidget):
             vbox.addLayout(hbox)
 
         hbox = QHBoxLayout()
-        go_back_button = GoBackButton(self)
-
-        continue_button = QPushButton("Continue \u2192")
-        continue_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
-        continue_button.clicked.connect(self.continue_on_rename_cb)
+        go_back_button = GoBackButton(self.window, self)
+        continue_button = ContinueButton(self.window, self.continue_on_rename_cb)
 
         hbox.addWidget(go_back_button)
         hbox.addWidget(continue_button)
 
         vbox.addLayout(hbox)
 
-        self.previous_windows.append(self.window)
-        self.previous_windows[-1].hide()
-
-        self.window = BioinfImportWindow()
         self.window.setLayout(vbox)
-
-        # hack to bring to foreground
         self.window.hide()
         self.window.show()
 
@@ -2185,7 +2394,12 @@ class BioinfImport(QWidget):
                 self.cell_type_dict[ctn] = self.new_name_line_edit[final_type].text()
 
         self.cell_types_final = [self.cell_type_dict[ctn] for ctn in self.cell_types_original if self.cell_type_dict[ctn] is not None]
-        return self.continue_to_cell_counts()
+        self.count_final_cell_types()
+        self.compute_cell_volumes() # used in confluence computations, and in spatial_plotter
+        if self.use_spatial_data:
+            self.continue_to_cell_pos_cb()
+        else:
+            self.continue_to_cell_counts()
 
     def continue_on_keep_cb(self):
         cell_type = self.sender().objectName()
@@ -2237,9 +2451,6 @@ class BioinfImport(QWidget):
 
                 self.keep_button[cell_type].setEnabled(True)
 
-    def go_back_cb(self):
-        self.edit_cell_types_cb()
-    
     def list_current_cell_type_names(self):
         if self.editing_cell_type_names:
             label_text = "The following cell types remain for editing"
@@ -2253,22 +2464,35 @@ class BioinfImport(QWidget):
         label_text += "</ul></html>"
         return QLabel(label_text)
     
+    def compute_cell_volumes(self):
+        self.cell_volume = {}
+        for cell_type in self.cell_types_list_final:
+            if cell_type in self.celldef_tab.param_d.keys():
+                self.cell_volume[cell_type] = float(self.celldef_tab.param_d[cell_type]['volume_total'])
+            else:
+                self.cell_volume[cell_type] = 2494 # use PhysiCell default
+
     def setup_confluence_info(self):
+        self.compute_cell_volumes()
         volume_env = (float(self.config_tab.xmax.text()) - float(self.config_tab.xmin.text())) * (float(self.config_tab.ymax.text()) - float(self.config_tab.ymin.text()))
         self.prop_total_area_one = {}
         self.prop_dot_ratios = 0
         for idx, cell_type in enumerate(self.cell_types_list_final):
-            if cell_type in self.celldef_tab.param_d.keys():
-                cell_volume = float(self.celldef_tab.param_d[cell_type]['volume_total'])
-            else:
-                cell_volume = 2494 # use PhysiCell default
-            self.prop_total_area_one[cell_type] = (((9*np.pi*cell_volume**2) / 16) ** (1./3)) / volume_env
+            self.prop_total_area_one[cell_type] = (((9*np.pi*self.cell_volume[cell_type]**2) / 16) ** (1./3)) / volume_env
             self.prop_dot_ratios += (self.cell_type_props[idx] * self.prop_total_area_one[cell_type])
-        pass
 
     def fill_gui(self):
         self.csv_folder.setText(self.config_tab.csv_folder.text())
         self.csv_file.setText(self.config_tab.csv_file.text())
+
+    def search_adata_obsm_for(self, substring):
+        print(f"search_adata_obsm_for {substring}")
+        print(f"self.adata.obsm.items() = {self.adata.obsm.items()}")
+        for k, v in self.adata.obsm.items():
+            if substring in k:
+                print(f"Found! substring = {substring} is in k = {k}, ")
+                return True, k, v
+        return False, None, None
 
 def create_checkboxes_for_cell_types(vbox, cell_types):
     checkbox_dict = {}
