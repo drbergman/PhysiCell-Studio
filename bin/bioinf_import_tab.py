@@ -27,7 +27,7 @@ from matplotlib import transforms
 from pathlib import Path
 import xml.etree.ElementTree as ET  # https://docs.python.org/2/library/xml.etree.elementtree.html
 from PyQt5 import QtCore, QtGui
-from PyQt5.QtWidgets import QApplication,QWidget,QLineEdit,QHBoxLayout,QVBoxLayout,QRadioButton,QPushButton, QLabel,QCheckBox,QComboBox,QScrollArea,QGridLayout, QFileDialog, QButtonGroup, QSplitter, QSizePolicy
+from PyQt5.QtWidgets import QApplication,QWidget,QLineEdit,QHBoxLayout,QVBoxLayout,QRadioButton,QPushButton, QLabel,QCheckBox,QComboBox,QScrollArea,QGridLayout, QFileDialog, QButtonGroup, QSplitter, QSizePolicy, QSpinBox
 from PyQt5.QtGui import QIcon
 
 from studio_classes import QHLine, QVLine
@@ -122,6 +122,8 @@ class BioinfImportPlotWindow(QWidget):
 
         vbox_left = QVBoxLayout()
         vbox_left.addLayout(grid_layout)
+        if self.biwt.use_spatial_data:
+            self.create_spot_num_box()
         self.mouse_keyboard_label = QLabel(f"""
                         Draw with mouse and keyboard:\
                         <html><ul>\
@@ -161,16 +163,26 @@ class BioinfImportPlotWindow(QWidget):
         self.setFocusPolicy( QtCore.Qt.ClickFocus )
         self.setFocus()
 
+    def create_spot_num_box(self):
+        label = QLabel("Num cells per spot")
+        self.num_box
+
     def default_spatial_pars(self):
         if not self.biwt.use_spatial_data:
             return
         # self.biwt.spatial_data[:,0] += self.biwt.spatial_data[:,1] # for testing
+        # self.biwt.spatial_data = np.array([0.5,0.5]).reshape((1,2)) # for testing
         x = self.biwt.spatial_data[:,0]
         y = self.biwt.spatial_data[:,1]
-        xL = np.min(x)
-        xR = np.max(x)
-        yL = np.min(y)
-        yR = np.max(y)
+        if len(x) > 1: # I know, right, what ST data set will have one spot??
+            xL = np.min(x)
+            xR = np.max(x)
+            yL = np.min(y)
+            yR = np.max(y)
+        else:
+            print("Single ST spot?")
+            xL, xR = x[0] + [-0.5,0.5]
+            yL, yR = y[0] + [-0.5,0.5]
 
         factor_w = self.plot_dx / (xR-xL)
         factor_h = self.plot_dy / (yR-yL)
@@ -183,9 +195,8 @@ class BioinfImportPlotWindow(QWidget):
 
         self.spatial_base_coords = self.biwt.spatial_data - [xL,yL]
         self.spatial_base_coords = self.spatial_base_coords / [xR-xL,yR-yL]
-        
-        # self.spatial_base_coords = self.spatial_base_coords[200] # for testing
-        # self.spatial_base_coords = np.array([0.5,0.5]) # for testing
+
+        # self.spatial_base_coords = np.array([0.5,0.5])
         return [x0, y0, width, height]
 
     def setup_system_keys(self):
@@ -244,7 +255,7 @@ class BioinfImportPlotWindow(QWidget):
             self.par_text.append(QLineEdit())
             self.par_text[i].setFixedWidth(par_text_width)
             self.par_text[i].setStyleSheet(self.biwt.qlineedit_style_sheet)
-            self.par_text[i].editingFinished.connect(self.append_to_history)
+            self.par_text[i].editingFinished.connect(self.par_editing_finished)
 
             hbox.addWidget(self.par_label[i])
             hbox.addWidget(self.par_text[i])
@@ -263,25 +274,23 @@ class BioinfImportPlotWindow(QWidget):
 
         return grid_layout
     
-    def current_pars(self):
-        pars = []
-        for pt in self.par_text:
-            if pt.isEnabled():
-                pars.append(float(pt.text()))
-            else:
-                break
-        return pars
+    def get_current_pars(self):
+        return self.current_pars
     
-    def append_to_history(self, reset_cursor = True):
+    def par_editing_finished(self, reset_cursor = True):
+        self.read_par_texts()
+        if self.current_pars_acceptable:
+            self.append_to_history()
+        if reset_cursor:
+            self.sender().setCursorPosition(0)
+
+    def append_to_history(self):
         id = self.biwt.cell_pos_button_group.checkedId()
         if self.patch_history_idx[id] < len(self.patch_history[id])-1:
             # then we are in the middle of the history, delete the future events from here on
             del self.patch_history[id][self.patch_history_idx[id]+1:]
-            pass
-        self.patch_history[id].append(self.current_pars())
+        self.patch_history[id].append(self.get_current_pars())
         self.patch_history_idx[id] += 1
-        if reset_cursor:
-            self.sender().setCursorPosition(0)
 
     def sync_par_area(self):
         if self.preview_patch is not None:
@@ -302,7 +311,7 @@ class BioinfImportPlotWindow(QWidget):
             self.everywhere_plotter()
         
         else: # set callbacks common to all
-            self.mpl_cid.append(self.canvas.mpl_connect("button_release_event", self.mouse_released_cb)) 
+            self.mpl_cid.append(self.canvas.mpl_connect("button_release_event", self.mouse_released_cb)) # only appending to history on release; the motion doesn't add to history because it holds focus and so editingFinished signal not emitted while canvas holds focus
             id = self.biwt.cell_pos_button_group.checkedId()
             if id==1:
                 self.par_label[0].setText("x0")
@@ -403,10 +412,11 @@ class BioinfImportPlotWindow(QWidget):
 
     def mouse_released_cb(self, event):
         if self.mouse_pressed:
-            self.append_to_history(reset_cursor=False)
+            self.par_editing_finished(reset_cursor=False)
         self.mouse_pressed = False
     
     def assign_par(self, value, idx):
+        # print(f"par text updated for {idx}")
         self.par_text[idx].setText(str(value))
         self.par_text[idx].setCursorPosition(0)
 
@@ -573,15 +583,10 @@ class BioinfImportPlotWindow(QWidget):
         return 57.295779513082323 * np.arctan2(y1-y0,x1-x0) # convert to degrees
 
     def rectangle_plotter(self):
-        pars = []
-        for idx, pt in enumerate(self.par_text):
-            if idx > 3:
-                break
-            if pt.hasAcceptableInput() is False:
-                self.plot_cells_button.setEnabled(False)
-                return # do not update unless all are ready
-            pars.append(float(pt.text()))
-        x0, y0, width, height = pars
+        self.read_par_texts()
+        if not self.current_pars_acceptable:
+            return
+        x0, y0, width, height = self.current_pars
         if self.preview_patch is None:
             self.preview_patch = self.ax0.add_patch(Rectangle((x0,y0),width,height,alpha=0.2))
         else:
@@ -596,15 +601,10 @@ class BioinfImportPlotWindow(QWidget):
         self.canvas.draw()
 
     def disc_plotter(self):
-        pars = []
-        for idx, pt in enumerate(self.par_text):
-            if idx > 2:
-                break
-            if pt.hasAcceptableInput() is False:
-                self.plot_cells_button.setEnabled(False)
-                return # do not update unless all are ready
-            pars.append(float(pt.text()))
-        x0, y0, r = pars
+        self.read_par_texts()
+        if not self.current_pars_acceptable:
+            return
+        x0, y0, r = self.current_pars
         if self.preview_patch is None:
             self.preview_patch = self.ax0.add_patch(Circle((x0,y0),r,alpha=0.2))
         else:
@@ -635,15 +635,10 @@ class BioinfImportPlotWindow(QWidget):
         return dx*dx + dy*dy, dx, dy
     
     def annulus_plotter(self):
-        pars = []
-        for idx, pt in enumerate(self.par_text):
-            if idx > 3:
-                break
-            if pt.hasAcceptableInput() is False:
-                self.plot_cells_button.setEnabled(False)
-                return # do not update unless all are ready
-            pars.append(float(pt.text()))
-        x0, y0, r0, r1 = pars
+        self.read_par_texts()
+        if not self.current_pars_acceptable:
+            return
+        x0, y0, r0, r1 = self.current_pars
         if r1==0 or (r1 < r0):
             if self.preview_patch: # probably a way to impose this using validators, but that would require dynamically updating the validators...
                 self.preview_patch.remove()
@@ -692,15 +687,10 @@ class BioinfImportPlotWindow(QWidget):
         return dx*dx + dy*dy
 
     def wedge_plotter(self):
-        pars = []
-        for idx, pt in enumerate(self.par_text):
-            if idx >= 6:
-                break
-            if pt.hasAcceptableInput() is False:
-                self.plot_cells_button.setEnabled(False)
-                return # do not update unless all are ready
-            pars.append(float(pt.text()))
-        x0, y0, r0, r1, th1, th2 = pars
+        self.read_par_texts()
+        if not self.current_pars_acceptable:
+            return
+        x0, y0, r0, r1, th1, th2 = self.current_pars
         if r1 < r0:
             if self.preview_patch: # probably a way to impose this using validators, but that would require dynamically updating the validators...
                 self.preview_patch.remove()
@@ -916,88 +906,44 @@ class BioinfImportPlotWindow(QWidget):
             r_y = np.inf
         return r_x if r_x <= r_y else r_y
 
-    def spatial_plotter(self):
-        pars = []
-        for idx, pt in enumerate(self.par_text):
-            if idx > 3:
+    def read_par_texts(self):
+        self.current_pars = []
+        for pt in self.par_text:
+            if not pt.isEnabled():
                 break
-            if pt.hasAcceptableInput() is False:
+            if not pt.hasAcceptableInput():
                 self.plot_cells_button.setEnabled(False)
+                self.current_pars_acceptable = False
                 return # do not update unless all are ready
-            pars.append(float(pt.text()))
-        x0, y0, width, height = pars
-        # anyone who wants to dive into the gaping hole of matplotlib to figure out how offsets can make these transforms cheaper, be my guest...
-        # self.ax0.cla()
-        # self.format_axis()
-        # self.preview_patch = self.circles(self.spatial_base_coords * [width, height] + [x0,y0] , 10, 'b')
+            self.current_pars.append(float(pt.text()))
+        self.current_pars_acceptable = True
+
+    def spatial_plotter(self):
+        self.read_par_texts()
+        if not self.current_pars_acceptable:
+            return
+        x0, y0, width, height = self.current_pars
         if self.preview_patch is None:
             dx, dy = self.ax0.transData.transform((1,1))-self.ax0.transData.transform((0,0)) # # pixels/ micron
-            area_scale_factor = dx*dy
-            fudge_factor = 1.258199089131739 # empirically-defined value to multiply area (in pts) to represent true area in microns on plot
+            self.area_scale_factor = dx*dy
+            self.fudge_factor = 1.258199089131739 # empirically-defined value to multiply area (in pts) to represent true area in microns on plot
             area_microns2 = [(((9*np.pi*V**2) / 16) ** (1./3)) for V in self.biwt.cell_volume.values()]
-            area_microns2 = [200 * r for r in np.random.uniform(size=len(area_microns2))]
-            areas = [fudge_factor * area_scale_factor * 72*72/(self.figure.dpi**2)*A  for A in area_microns2] # area in pts
+            areas = [self.fudge_factor * self.area_scale_factor * 72*72/(self.figure.dpi**2)*A  for A in area_microns2] # area in pts
             D = dict(zip(self.biwt.cell_volume.keys(),areas))
             self.scatter_sizes = [D[ctn] for ctn in self.biwt.cell_types_final]
-            # print(f"area_scale_fac r for r intor = {area_scale_factor}")
-            # print(f"self.figure.dpi = {self.figure.dpi}")
-            # print(f"area_microns2[0] = {area_microns2[0]}")
-            # fudge_factor = area_microns2[0] / (np.pi * (7.5**2))
-            # print(f"fudge_factor = {fudge_factor}")
-            # print(self.figure.dpi)
             self.preview_patch = self.ax0.scatter([],[], 10, 'b')
-
-            # self.preview_patch = self.circles(self.spatial_base_coords * [width, height] + [x0,y0] , 10, 'b')
-            # self.preview_patch = self.
-            # self.initial_x0 = x0
-            # self.initial_y0 = y0
-            # self.initial_width = width
-            # self.initial_height = height
-            # offset = self.spatial_base_coords * [width-self.initial_width, height-self.initial_height] + [x0-self.initial_x0,y0-self.initial_y0]
             offset = self.spatial_base_coords * [width, height] + [x0,y0]
             self.preview_patch.set_offsets(offset)
             self.preview_patch.set_sizes(self.scatter_sizes)#, dpi=self.figure.dpi)
-            # self.original_patch = self.circles(self.spatial_base_coords * [width, height] + [x0,y0] , 10, 'g')
-        #     # self.preview_patch.set_offset_transform(self.ax0.transData)
-        #     # self.preview_patch.set_offset_transform(self.ax0.transData)
         else:
-        #     # print(f"self.preview_patch.get_transforms() = {self.preview_patch.get_transforms()}")
-        #     # print(f"self.preview_patch.get_offset_transform() = {self.preview_patch.get_offset_transform()}")
-        #     # self.preview_patch = self.circles(self.spatial_base_coords * [width, height] + [x0,y0] , 10, 'b')
-        #     # # self.preview_patch.set_bounds(x0,y0,width,height)
-        #     # print(f"width = {width}\theight = {height}")
-        #     # print(f"self.initial_width = {self.initial_width}\tself.initial_height = {self.initial_height}")
-        #     # print(f"self.spatial_base_coords[0:5] = {self.spatial_base_coords[0:5]}")
-        #     # print(f"np.min(self.spatial_base_coords,axis=0) = {np.min(self.spatial_base_coords,axis=0)}")
-        #     # print(f"np.max(self.spatial_base_coords,axis=0) = {np.max(self.spatial_base_coords,axis=0)}")
-        #     # idx = np.argmax(self.spatial_base_coords[:,0])
-        #     self.ax0.cla()
-        #     # self.preview_patch.remove()
-        #     # self.original_patch.remove()
-        #     # offset = transforms.ScaledTranslation(*(self.spatial_base_coords * [width-self.initial_width, height-self.initial_height] + [x0-self.initial_x0,y0-self.initial_y0]).T, self.figure.dpi_scale_trans)
-        #     # shadow_transform = self.ax0.transData + offset
-        #     self.preview_patch = self.circles(self.spatial_base_coords * [self.initial_width, self.initial_height] + [self.initial_x0,self.initial_y0] , 10, 'b')
-        #     self.original_patch = self.circles(self.spatial_base_coords * [width, height] + [x0,y0] , 10, 'g')
             offset = self.spatial_base_coords * [width, height] + [x0,y0]
             dx, dy = self.ax0.transData.transform((1,1))-self.ax0.transData.transform((0,0)) # # pixels/ micron
-            area_scale_factor = dx*dy
-            areas = [area_scale_factor* 72*72/(self.figure.dpi**2)*(((9*np.pi*V**2) / 16) ** (1./3))  for V in self.biwt.cell_volume.values()] 
+            self.area_scale_factor = dx*dy
+            areas = [self.fudge_factor * self.area_scale_factor* 72*72/(self.figure.dpi**2)*(((9*np.pi*V**2) / 16) ** (1./3))  for V in self.biwt.cell_volume.values()] 
             D = dict(zip(self.biwt.cell_volume.keys(),areas))
             self.scatter_sizes = [D[ctn] for ctn in self.biwt.cell_types_final]
             self.preview_patch.set_sizes(self.scatter_sizes)#, dpi=self.figure.dpi)
-            # self.preview_patch.set_sizes(self.scatter_sizes)#, dpi=self.figure.dpi)
-        #     # offset = self.ax0.transData.transform(self.spatial_base_coords * [width-self.initial_width, height-self.initial_height] + [x0-self.initial_x0,y0-self.initial_y0])
-        #     # print(f"offset[idx] = {offset[idx]}")
-        #     # offset = -500 * self.spatial_base_coords
-        #     # print(f"offset = {offset}")
-        #     # print(f"t(offset) = {self.ax0.transData.transform(offset)}")
-        #     # self.original_patch = self.circles(self.spatial_base_coords * [width, height] + [x0,y0] , 10, 'g')
-        #     # print(self.preview_patch.get_transforms())
-        #     # print(self.preview_patch.get_paths())
-        #     # print(self.preview_patch.get_offsets())
             self.preview_patch.set_offsets(offset)
-        #     # print(self.preview_patch.get_paths())
-        #     # print(self.preview_patch.get_offsets())
 
         # check left edge of rect is left of right edge of domain, right edge of rect is right of left edge of domain (similar in y direction)
         bval = (x0 < self.plot_xmax) and (x0+width > self.plot_xmin) and (y0 < self.plot_ymax) and (y0+height > self.plot_ymin) # make sure the rectangle intersects the domain with positive area
@@ -1059,10 +1005,24 @@ class BioinfImportPlotWindow(QWidget):
         self.ax0.set_aspect(1.0)
 
     def plot_cell_pos(self):
-        self.constrain_preview_to_axes = False
-        for ctn in self.biwt.checkbox_dict.keys():
-            if self.biwt.checkbox_dict[ctn].isChecked():
-                self.plot_cell_pos_single(ctn)
+        self.preview_constrained_to_axes = False
+        if self.biwt.cell_pos_button_group.checkedId()==self.biwt.spatial_plotter_id:
+            x0, y0, width, height = self.current_pars
+            corners = [[x0,y0],[x0+width,y0+height]]
+            x0, y0, width, height = self.constrain_corners(corners)
+            for cell_type in self.biwt.checkbox_dict.keys():
+                if self.biwt.checkbox_dict[cell_type].isChecked():
+                    idx = [ctn==cell_type for ctn in self.biwt.cell_types_final]
+                    cell_coords = np.hstack((self.spatial_base_coords[idx] * [width, height] + [x0,y0],np.zeros((sum(idx),1))))
+                    self.csv_array[cell_type] = np.vstack((self.csv_array[cell_type],cell_coords))
+                    self.circles(cell_coords, s=8., color=self.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
+                    self.biwt.checkbox_dict[cell_type].setEnabled(False)
+                    self.biwt.checkbox_dict[cell_type].setChecked(False)
+                    self.biwt.undo_button[cell_type].setEnabled(True)
+        else:
+            for ctn in self.biwt.checkbox_dict.keys():
+                if self.biwt.checkbox_dict[ctn].isChecked():
+                    self.plot_cell_pos_single(ctn)
         self.canvas.update()
         self.canvas.draw()
 
@@ -1081,15 +1041,23 @@ class BioinfImportPlotWindow(QWidget):
         dy = yL-y0 if (2*y0 > yL+yR) else y0-yR # distance to furtherst horizontal edge
         return np.sqrt(dx*dx + dy*dy)
     
+    def constrain_rectangle_to_domain(self):
+        if self.preview_constrained_to_axes:
+            return
+        x0, y0, width, height = self.constrain_corners(self.preview_patch.get_corners()[[0,2]])
+        self.preview_patch.set_bounds(x0, y0, width, height)
+        # self.preview_patch.set_bounds(corners[0,0],corners[0,1],corners[1,0]-corners[0,0],corners[1,1]-corners[0,1])
+        self.preview_constrained_to_axes = True
+        
+    def constrain_corners(self, corners):
+        corners = np.array([[min(max(x,self.plot_xmin),self.plot_xmax),min(max(y,self.plot_ymin),self.plot_ymax)] for x,y in corners])
+        return [corners[0,0],corners[0,1],corners[1,0]-corners[0,0],corners[1,1]-corners[0,1]]
+    
     def plot_cell_pos_single(self, cell_type):
         N = self.biwt.cell_counts[cell_type]
         if type(self.preview_patch) is Rectangle:
             # first make sure the rectangle is all in bounds
-            if self.constrain_preview_to_axes is False:
-                corners = self.preview_patch.get_corners()
-                corners = np.array([[min(max(x,self.plot_xmin),self.plot_xmax),min(max(y,self.plot_ymin),self.plot_ymax)] for x,y in corners[[0,2]]])
-                self.preview_patch.set_bounds(corners[0,0],corners[0,1],corners[1,0]-corners[0,0],corners[1,1]-corners[0,1])
-                self.constrain_preview_to_axes = True
+            self.constrain_rectangle_to_domain()
             x0, y0 = self.preview_patch.get_xy()
             width = self.preview_patch.get_width()
             height = self.preview_patch.get_height()
@@ -1100,31 +1068,41 @@ class BioinfImportPlotWindow(QWidget):
         elif type(self.preview_patch) is Circle:
             x0, y0 = self.preview_patch.get_center()
             r = self.preview_patch.get_radius()
-            r = np.min([r,self.max_dist_to_domain(x0,y0)])
+            if not self.preview_constrained_to_axes:
+                r = np.min([r,self.max_dist_to_domain(x0,y0)])
+                self.preview_patch.set_radius(r)
+                self.preview_constrained_to_axes = True
             self.wedge_sample(N, x0, y0, r)
         elif type(self.preview_patch) is Annulus:
             x0, y0 = self.preview_patch.get_center()
             r1 = self.preview_patch.get_radii()[0] # annulus is technically an ellipse, get_radii returns (semi-major,semi-minor) axis lengths, since I'm using circles, these will be the same
-            r1 = np.min([r1,self.max_dist_to_domain(x0,y0)])
             width = self.preview_patch.get_width()
             r0 = r1 - width
-            r0 = np.max([r0,np.sqrt(self.get_distance2_to_domain(x0,y0)[0])])
+            if not self.preview_constrained_to_axes:
+                r1 = np.min([r1,self.max_dist_to_domain(x0,y0)])
+                r0 = np.max([r0,np.sqrt(self.get_distance2_to_domain(x0,y0)[0])])
+                self.preview_patch.set_radii(r1)
+                self.preview_patch.set_width(r1-r0)
+                self.preview_constrained_to_axes = True
             self.wedge_sample(N, x0, y0, r1, r0=r0)
         elif type(self.preview_patch) is Wedge:
             x0, y0 = self.preview_patch.center
             r1 = self.preview_patch.r
-            r1 = np.min([r1,self.max_dist_to_domain(x0,y0)])
-            th1 = self.preview_patch.theta1  
-            th2 = self.preview_patch.theta2
-            if th2 == th1:
-                pass
-            elif ((th2-th1) % 360) == 0:
-                th2 = th1 + 360
-            else:
-                th2 -= 360 * ((th2-th1) // 360) # I promise this works if dth=th2-th1 < 0, 0<dth<360, and dth>360. 
             width = self.preview_patch.width
             r0 = r1 - width
-            r0 = np.max([r0,np.sqrt(self.get_distance2_to_domain(x0,y0)[0])])
+            th1 = self.preview_patch.theta1  
+            th2 = self.preview_patch.theta2
+            if not self.preview_constrained_to_axes:
+                r1 = np.min([r1,self.max_dist_to_domain(x0,y0)])
+                if th2 == th1:
+                    pass
+                elif ((th2-th1) % 360) == 0:
+                    th2 = th1 + 360
+                else:
+                    th2 -= 360 * ((th2-th1) // 360) # I promise this works if dth=th2-th1 < 0, 0<dth<360, and dth>360. 
+                r0 = np.max([r0,np.sqrt(self.get_distance2_to_domain(x0,y0)[0])])
+                self.preview_patch.set(center=(x0,y0),radius=r1,theta1=th1,theta2=th2,width=r1-r0)
+                self.preview_constrained_to_axes = True
             self.wedge_sample(N, x0, y0, r1, r0=r0, th_lim=(th1*0.017453292519943,th2*0.017453292519943))
         else:
             print("unknown patch")
@@ -1739,6 +1717,8 @@ class BioinfImport(QWidget):
 
     def continue_to_cell_counts(self):
 
+        print("continuing to cell counts now...")
+
         self.open_next_window(BioinfImportWindow)
 
         names_width = 100
@@ -1901,6 +1881,8 @@ class BioinfImport(QWidget):
         hbox.addWidget(continue_to_cell_pos)
         
         vbox.addLayout(hbox)
+
+        self.window.setLayout(vbox)
 
         self.window.hide()
         self.window.show()
@@ -2160,6 +2142,7 @@ class BioinfImport(QWidget):
             self.ics_plot_area.sync_par_area()
         
     def create_pos_scroll_area(self):
+        self.spatial_plotter_id = None
         self.cell_pos_button_group = QButtonGroup()
         self.cell_pos_button_group.setExclusive(True)
         self.cell_pos_button_group.idToggled.connect(self.cell_pos_button_group_cb)
@@ -2194,15 +2177,11 @@ class BioinfImport(QWidget):
         rI = 0
         cI = 0
         cmax = 1
-        size = QtCore.QSize(icon_width, icon_height) 
+        icon_size = QtCore.QSize(icon_width, icon_height) 
             
         vbox = QVBoxLayout()
-        full_rectangle_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/scatter_square.svg"), size=size)
+        full_rectangle_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/scatter_square.svg"), iconSize=icon_size, checkable=True, checked=(not self.use_spatial_data))
         full_rectangle_button.setFixedSize(button_width,button_height)
-        # size = QtCore.QSize(icon_width, icon_height) 
-        full_rectangle_button.setIconSize(size)
-        full_rectangle_button.setCheckable(True)
-        full_rectangle_button.setChecked(True)
         full_rectangle_button.setStyleSheet(qpushbutton_style_sheet) 
         self.cell_pos_button_group.addButton(full_rectangle_button,next_button_id)
         next_button_id += 1
@@ -2217,11 +2196,8 @@ class BioinfImport(QWidget):
         rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
             
         vbox = QVBoxLayout()
-        partial_rectangle_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/rectangle.svg"))
+        partial_rectangle_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/rectangle.svg"), iconSize=icon_size, checkable=True, checked=False)
         partial_rectangle_button.setFixedSize(button_width,button_height)
-        size = QtCore.QSize(icon_width, icon_height) 
-        partial_rectangle_button.setIconSize(size)
-        partial_rectangle_button.setCheckable(True)
         partial_rectangle_button.setStyleSheet(qpushbutton_style_sheet) 
         self.cell_pos_button_group.addButton(partial_rectangle_button,next_button_id)
         next_button_id += 1
@@ -2236,11 +2212,8 @@ class BioinfImport(QWidget):
         rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
 
         vbox = QVBoxLayout()
-        disc_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/disc.svg"))
+        disc_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/disc.svg"), iconSize=icon_size, checkable=True, checked=False)
         disc_button.setFixedSize(button_width,button_height)
-        size = QtCore.QSize(icon_width, icon_height) 
-        disc_button.setIconSize(size)
-        disc_button.setCheckable(True)
         disc_button.setStyleSheet(qpushbutton_style_sheet) 
         self.cell_pos_button_group.addButton(disc_button,next_button_id)
         next_button_id += 1
@@ -2255,11 +2228,8 @@ class BioinfImport(QWidget):
         rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
 
         vbox = QVBoxLayout()
-        annulus_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/annulus.svg"))
+        annulus_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/annulus.svg"), iconSize=icon_size, checkable=True, checked=False)
         annulus_button.setFixedSize(button_width,button_height)
-        size = QtCore.QSize(icon_width, icon_height) 
-        annulus_button.setIconSize(size)
-        annulus_button.setCheckable(True)
         annulus_button.setStyleSheet(qpushbutton_style_sheet) 
         self.cell_pos_button_group.addButton(annulus_button,next_button_id)
         next_button_id += 1
@@ -2274,11 +2244,8 @@ class BioinfImport(QWidget):
         rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
 
         vbox = QVBoxLayout()
-        wedge_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/wedge.svg"))
+        wedge_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/wedge.svg"), iconSize=icon_size, checkable=True, checked=False)
         wedge_button.setFixedSize(button_width,button_height)
-        size = QtCore.QSize(icon_width, icon_height) 
-        wedge_button.setIconSize(size)
-        wedge_button.setCheckable(True)
         wedge_button.setStyleSheet(qpushbutton_style_sheet) 
         self.cell_pos_button_group.addButton(wedge_button,next_button_id)
         next_button_id += 1
@@ -2293,11 +2260,8 @@ class BioinfImport(QWidget):
         rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
 
         vbox = QVBoxLayout()
-        rainbow_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/rainbow.svg"),enabled=False) # not ready for this yet
+        rainbow_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/rainbow.svg"),enabled=False, iconSize=icon_size, checkable=True, checked=False) # not ready for this yet
         rainbow_button.setFixedSize(button_width,button_height)
-        size = QtCore.QSize(icon_width, icon_height) 
-        rainbow_button.setIconSize(size)
-        rainbow_button.setCheckable(True)
         rainbow_button.setStyleSheet(qpushbutton_style_sheet) 
         self.cell_pos_button_group.addButton(rainbow_button,next_button_id)
         next_button_id += 1
@@ -2310,23 +2274,25 @@ class BioinfImport(QWidget):
 
         grid_layout.addLayout(vbox,rI,cI,1,1)
         rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
+        if self.use_spatial_data:
+            self.spatial_plotter_id = next_button_id
+            vbox = QVBoxLayout()
+            spatial_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/spatial.png"), enabled=True, checkable=True, iconSize=icon_size)
+            spatial_button.setFixedSize(button_width,button_height)
+            spatial_button.setStyleSheet(qpushbutton_style_sheet) 
+            spatial_button.toggled.connect(self.spatial_button_cb)
+            spatial_button.setChecked(True)
+            self.cell_pos_button_group.addButton(spatial_button,next_button_id)
+            next_button_id += 1
+            vbox.addWidget(spatial_button)
 
-        vbox = QVBoxLayout()
-        rainbow_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/spatial.svg"), enabled=self.use_spatial_data, checkable=True, size=size)
-        rainbow_button.setFixedSize(button_width,button_height)
-        rainbow_button.setIconSize(size)
-        rainbow_button.setCheckable(True)
-        rainbow_button.setStyleSheet(qpushbutton_style_sheet) 
-        self.cell_pos_button_group.addButton(rainbow_button,next_button_id)
-        next_button_id += 1
-        vbox.addWidget(rainbow_button)
+            label = QLabel("Spatial Plotter")
+            label.setFixedWidth(button_width)
+            label.setAlignment(QtCore.Qt.AlignCenter)
+            vbox.addWidget(label)
 
-        label = QLabel("Rainbow\n(why not?!)\nWork in progess...")
-        label.setFixedWidth(button_width)
-        label.setAlignment(QtCore.Qt.AlignCenter)
-        vbox.addWidget(label)
-
-        grid_layout.addLayout(vbox,rI,cI,1,1)
+            grid_layout.addLayout(vbox,rI,cI,1,1)
+            rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
 
         master_vbox.addLayout(grid_layout)
 
@@ -2335,6 +2301,13 @@ class BioinfImport(QWidget):
 
         self.pos_scroll_area = QScrollArea()
         self.pos_scroll_area.setWidget(pos_scroll_area_widget)
+
+    def spatial_button_cb(self, checked):
+        if not checked:
+            return
+        for cbd in self.checkbox_dict.values():
+            if cbd.isEnabled():
+                cbd.setChecked(True)
 
     def continue_to_rename(self):
 
