@@ -102,7 +102,10 @@ class BioinfImportPlotWindow(QWidget):
 
         self.alpha_value = 1.0
         value = ['gray','red','yellow','green','blue','magenta','orange','lime','cyan','hotpink','peachpuff','darkseagreen','lightskyblue']
-        value = value[0:len(self.biwt.cell_types_list_final)]
+        if len(self.biwt.cell_types_list_final) <= len(value):
+            value = value[0:len(self.biwt.cell_types_list_final)]
+        else:
+            value = [value[idx % len(value)] for idx in range(len(self.biwt.cell_types_list_final))]
         self.color_by_celltype = dict(zip(self.biwt.cell_types_list_final, value))
 
         self.plot_xmin = float(self.config_tab.xmin.text())
@@ -1428,11 +1431,11 @@ class BioinfImport(QWidget):
             # self.continue_on_rename_cb()
             # self.continue_to_cell_pos_cb()
         elif bioinf_import_test_spatial:
-            self.column_line_edit.setText("cluster")
+            self.column_line_edit.setText("total_counts")
             self.import_file("./data/visium_adata.h5ad")
-            self.continue_to_cell_type_names_cb()
-            self.continue_to_rename()
-            self.continue_on_rename_cb()
+            # self.continue_to_cell_type_names_cb()
+            # self.continue_to_rename()
+            # self.continue_on_rename_cb()
             # self.continue_to_cell_pos_cb()
 
 
@@ -1532,13 +1535,15 @@ class BioinfImport(QWidget):
         self.cell_types_original = self.adata.obs[self.current_column]
         self.cell_types_list_original = self.cell_types_original.unique().tolist()
         self.cell_types_list_original.sort()
+        self.cell_types_original = [str(x) for x in self.cell_types_original] # make sure the names are strings
+        self.cell_types_list_original = [str(x) for x in self.cell_types_list_original] # make sure the names are strings
         self.remaining_cell_types_list_original = copy.deepcopy(self.cell_types_list_original)
 
-        self.cell_types_list_final = []
+        # self.cell_types_list_final = []
         self.edit_cell_types()
 
     def edit_cell_types(self):
-
+        print("------Editing cell types------")
         self.open_next_window(BioinfImportWindow, show=False)
 
         keep_color = "lightgreen"
@@ -1604,6 +1609,8 @@ class BioinfImport(QWidget):
         self.rename_button_style_sheet["delete"] = rename_button_style_sheet_template(delete_color)
         row_height = 30
         print(f"self.cell_types_list_original = {self.cell_types_list_original}")
+        self.cell_type_edit_scroll_area = QScrollArea()
+        vbox_cell_type_keep = QVBoxLayout()
         for cell_type in self.cell_types_list_original:
             hbox = QHBoxLayout()
             self.checkbox_dict_edit[cell_type] = QCheckBox(cell_type,styleSheet=self.checkbox_style["keep"])
@@ -1620,8 +1627,14 @@ class BioinfImport(QWidget):
             hbox.addWidget(self.checkbox_dict_edit[cell_type])
             hbox.addStretch(1)
             hbox.addWidget(self.keep_button[cell_type])
-            vbox.addLayout(hbox)
+            vbox_cell_type_keep.addLayout(hbox)
             self.cell_type_dict[cell_type] = cell_type
+
+        widget_for_scroll_area = QWidget()
+        widget_for_scroll_area.setLayout(vbox_cell_type_keep)
+        self.cell_type_edit_scroll_area.setWidget(widget_for_scroll_area)
+
+        vbox.addWidget(self.cell_type_edit_scroll_area)
 
         hbox = QHBoxLayout()
 
@@ -2062,7 +2075,6 @@ class BioinfImport(QWidget):
             for cell_type in self.cell_types_list_final:
                 self.cell_counts[cell_type] = int(self.type_manual[cell_type].text())
 
-        self.cell_types_to_place = self.cell_types_list_final
         self.ics_plot_area = None
         self.create_cell_type_scroll_area()
         self.create_pos_scroll_area()
@@ -2117,12 +2129,12 @@ class BioinfImport(QWidget):
         vbox_mid_checkboxes = QVBoxLayout()
         self.cell_type_button_group = QButtonGroup(exclusive=False)
         self.cell_type_button_group.buttonClicked.connect(self.cell_type_button_group_cb)
-        self.checkbox_dict = create_checkboxes_for_cell_types(vbox_mid_checkboxes, self.cell_types_to_place)
+        self.checkbox_dict = create_checkboxes_for_cell_types(vbox_mid_checkboxes, self.cell_types_list_final)
         self.undo_button = {}
         for cbd in self.checkbox_dict.values():
             self.cell_type_button_group.addButton(cbd)
         vbox_mid_undos = QVBoxLayout()
-        for cell_type in self.cell_types_to_place:
+        for cell_type in self.cell_types_list_final:
             self.undo_button[cell_type] = QPushButton("Undo",enabled=False,styleSheet=self.qpushbutton_style_sheet,objectName=cell_type)
             self.undo_button[cell_type].clicked.connect(self.undo_button_cb)
             vbox_mid_undos.addWidget(self.undo_button[cell_type])
@@ -2373,6 +2385,7 @@ class BioinfImport(QWidget):
                     self.intermediate_type_pre_image[intermediate_type].append(cell_type)
         labels = {}
         self.new_name_line_edit = {}
+        vbox_scroll_area = QVBoxLayout()
         for intermediate_type in self.intermediate_types:
             hbox = QHBoxLayout()
             label_text = ", ".join(self.intermediate_type_pre_image[intermediate_type])
@@ -2382,7 +2395,14 @@ class BioinfImport(QWidget):
             self.new_name_line_edit[intermediate_type].setText(self.intermediate_type_pre_image[intermediate_type][0])
             hbox.addWidget(labels[intermediate_type])
             hbox.addWidget(self.new_name_line_edit[intermediate_type])
-            vbox.addLayout(hbox)
+            vbox_scroll_area.addLayout(hbox)
+
+        widget_for_scroll_area = QWidget()
+        widget_for_scroll_area.setLayout(vbox_scroll_area)
+        self.cell_type_rename_scroll_area = QScrollArea()
+        self.cell_type_rename_scroll_area.setWidget(widget_for_scroll_area)
+
+        vbox.addWidget(self.cell_type_rename_scroll_area)
 
         hbox = QHBoxLayout()
         go_back_button = GoBackButton(self.window, self)
@@ -2403,6 +2423,7 @@ class BioinfImport(QWidget):
         self.window.show()
 
     def continue_on_rename_cb(self):
+        print("-------Continuing on to Rename-------")
         # keep editing here
         self.cell_types_list_final = []
         for intermediate_type in self.intermediate_types:
@@ -2411,10 +2432,9 @@ class BioinfImport(QWidget):
                 self.cell_type_dict[cell_type] = self.new_name_line_edit[intermediate_type].text()
 
         if self.use_spatial_data:
-            # self.cell_types_final, self.spatial_data_final = zip(*[(ctn, pos) for ctn, pos in zip(self.cell_types_original, self.spatial_data) if self.cell_type_dict[ctn] is not None])
+            print(f"self.cell_types_original = {self.cell_types_original}")
             self.cell_types_final, self.spatial_data_final = zip(*[(self.cell_type_dict[ctn], pos) for ctn, pos in zip(self.cell_types_original, self.spatial_data) if self.cell_type_dict[ctn] is not None])
             self.spatial_data_final = np.vstack([*self.spatial_data_final])
-            # print(f"\tself.spatial_data_final = {self.spatial_data_final}")
         else:
             self.cell_types_final = [self.cell_type_dict[ctn] for ctn in self.cell_types_original if self.cell_type_dict[ctn] is not None]
 
