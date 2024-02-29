@@ -1000,19 +1000,18 @@ class BioinfImportPlotWindow(QWidget):
         self.canvas.focusOutEvent = lambda e : self.canvas_out_focus(e)
         self.canvas.keyPressEvent = lambda e : self.canvas_key_press(e)
 
+        self.canvas.update()
+        self.canvas.draw()
+
         if self.biwt.use_spatial_data:
             dx, dy = self.ax0.transData.transform((1,1))-self.ax0.transData.transform((0,0)) # # pixels/ micron
             self.area_scale_factor = dx*dy
             self.fudge_factor = 1.258199089131739 # empirically-defined value to multiply area (in pts) to represent true area in microns on plot
             self.cell_type_micron2_area_dict = {cell_type: (((9*np.pi*V**2) / 16) ** (1./3)) for cell_type, V in self.biwt.cell_volume.items()}
             self.cell_type_pt_area_dict = {cell_type: self.fudge_factor * self.area_scale_factor * 72*72/(self.figure.dpi**2)*A for cell_type, A in self.cell_type_micron2_area_dict.items()}
-            # self.single_scatter_sizes = {cell_type: np.array([self.cell_type_pt_area_dict[ctn] for ctn in self.biwt.cell_types_final]) for cell_type in self.biwt.cell_types_final.items()}
-            # self.scatter_sizes = {cell_type: int(self.num_box.value()) * sz for cell_type, sz in self.single_scatter_sizes.items()}
 
             self.single_scatter_sizes = np.array([self.cell_type_pt_area_dict[ctn] for ctn in self.biwt.cell_types_final])
             self.scatter_sizes = self.num_box.value() * self.single_scatter_sizes
-        self.canvas.update()
-        self.canvas.draw()
 
     def canvas_in_focus(self, event):
         self.mouse_keyboard_label.setEnabled(True)
