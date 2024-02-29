@@ -1535,9 +1535,9 @@ class BioinfImport(QWidget):
         self.remaining_cell_types_list_original = copy.deepcopy(self.cell_types_list_original)
 
         self.cell_types_list_final = []
-        self.check_cell_type_names()
+        self.edit_cell_types()
 
-    def check_cell_type_names(self):
+    def edit_cell_types(self):
 
         self.open_next_window(BioinfImportWindow, show=False)
 
@@ -1577,7 +1577,7 @@ class BioinfImport(QWidget):
         self.checkbox_style["keep"] = checkbox_style_template(keep_color)
         self.checkbox_style["merge"] = checkbox_style_template(merge_color)
         self.checkbox_style["delete"] = checkbox_style_template(delete_color)
-        self.cell_type_dict = {}
+        self.cell_type_dict = {} # dictionary mapping original cell_type to intermediate/final cell type (depending on stage of walkthrough)
 
         vbox = QVBoxLayout()
         vbox.addWidget(label)
@@ -1615,7 +1615,7 @@ class BioinfImport(QWidget):
             self.keep_button[cell_type] = QPushButton("Keep",enabled=False,objectName=cell_type)
             self.keep_button[cell_type].setStyleSheet(rename_button_style_sheet_template(keep_color))
             self.keep_button[cell_type].setFixedHeight(row_height)
-            self.keep_button[cell_type].clicked.connect(self.continue_on_keep_cb)
+            self.keep_button[cell_type].clicked.connect(self.keep_cb)
 
             hbox.addWidget(self.checkbox_dict_edit[cell_type])
             hbox.addStretch(1)
@@ -1626,11 +1626,11 @@ class BioinfImport(QWidget):
         hbox = QHBoxLayout()
 
         self.merge_button = QPushButton("Merge",enabled=False,styleSheet=rename_button_style_sheet_template(merge_color))
-        self.merge_button.clicked.connect(self.continue_on_merge_cb)
+        self.merge_button.clicked.connect(self.merge_cb)
         hbox.addWidget(self.merge_button)
 
         self.delete_button = QPushButton("Delete",enabled=False,styleSheet=rename_button_style_sheet_template(delete_color))
-        self.delete_button.clicked.connect(self.continue_on_delete_cb)
+        self.delete_button.clicked.connect(self.delete_cb)
         hbox.addWidget(self.delete_button)
 
         vbox.addLayout(hbox)
@@ -1641,9 +1641,6 @@ class BioinfImport(QWidget):
         go_back_button = GoBackButton(self.window, self)
 
         continue_button = ContinueButton(self.window, self.continue_to_rename)
-        # continue_button = QPushButton("Continue \u2192")
-        # continue_button.setStyleSheet(f"QPushButton {{background-color: lightgreen; color: black;}}")
-        # continue_button.clicked.connect(self.continue_to_rename)
 
         hbox.addWidget(go_back_button)
         hbox.addWidget(continue_button)
@@ -1936,13 +1933,6 @@ class BioinfImport(QWidget):
 
         self.window.hide()
         self.window.show()
-
-    def count_final_cell_types(self):
-        self.cell_counts = {}
-        for cell_type in self.cell_types_list_final:
-            self.cell_counts[cell_type] = 0
-        for ctn in self.cell_types_final:
-            self.cell_counts[ctn] += 1
 
     def prop_box_changed_cb(self, text):
         if self.prop_box_callback_paused:
@@ -2369,29 +2359,29 @@ class BioinfImport(QWidget):
         vbox = QVBoxLayout()
         label = QLabel("Rename your chosen cell types if you like:")
         vbox.addWidget(label)
-        self.final_types = []
-        self.final_type_pre_image = {}
-        all_keys = list(self.cell_type_dict.keys())
-        all_keys.sort()
-        for ctn in all_keys:
-            final_type = self.cell_type_dict[ctn]
-            if final_type is not None:
-                if final_type not in self.final_types:
-                    self.final_types.append(self.cell_type_dict[ctn])
-                    self.final_type_pre_image[final_type] = [ctn]
+        self.intermediate_types = [] # types used after editing (keep, merge, delete) but before rename
+        self.intermediate_type_pre_image = {} # dictionary where keys are intermediate cell types and values are the original cell types that map to them
+        original_cell_type_list = list(self.cell_type_dict.keys())
+        original_cell_type_list.sort()
+        for cell_type in original_cell_type_list:
+            intermediate_type = self.cell_type_dict[cell_type]
+            if intermediate_type is not None:
+                if intermediate_type not in self.intermediate_types:
+                    self.intermediate_types.append(intermediate_type)
+                    self.intermediate_type_pre_image[intermediate_type] = [cell_type]
                 else:
-                    self.final_type_pre_image[final_type].append(ctn)
+                    self.intermediate_type_pre_image[intermediate_type].append(cell_type)
         labels = {}
         self.new_name_line_edit = {}
-        for final_type in self.final_types:
+        for intermediate_type in self.intermediate_types:
             hbox = QHBoxLayout()
-            label_text = ", ".join(self.final_type_pre_image[final_type])
+            label_text = ", ".join(self.intermediate_type_pre_image[intermediate_type])
             label_text += " \u21d2 "
-            labels[final_type] = QLabel(label_text)
-            self.new_name_line_edit[final_type] = QLineEdit()
-            self.new_name_line_edit[final_type].setText(self.final_type_pre_image[final_type][0])
-            hbox.addWidget(labels[final_type])
-            hbox.addWidget(self.new_name_line_edit[final_type])
+            labels[intermediate_type] = QLabel(label_text)
+            self.new_name_line_edit[intermediate_type] = QLineEdit()
+            self.new_name_line_edit[intermediate_type].setText(self.intermediate_type_pre_image[intermediate_type][0])
+            hbox.addWidget(labels[intermediate_type])
+            hbox.addWidget(self.new_name_line_edit[intermediate_type])
             vbox.addLayout(hbox)
 
         hbox = QHBoxLayout()
@@ -2415,15 +2405,16 @@ class BioinfImport(QWidget):
     def continue_on_rename_cb(self):
         # keep editing here
         self.cell_types_list_final = []
-        for final_type in self.final_types:
-            self.cell_types_list_final.append(self.new_name_line_edit[final_type].text())
-            for ctn in self.final_type_pre_image[final_type]:
-                self.cell_type_dict[ctn] = self.new_name_line_edit[final_type].text()
+        for intermediate_type in self.intermediate_types:
+            self.cell_types_list_final.append(self.new_name_line_edit[intermediate_type].text())
+            for cell_type in self.intermediate_type_pre_image[intermediate_type]:
+                self.cell_type_dict[cell_type] = self.new_name_line_edit[intermediate_type].text()
 
         if self.use_spatial_data:
-            self.cell_types_final, self.spatial_data_final = zip(*[(ctn, pos) for ctn, pos in zip(self.cell_types_original, self.spatial_data) if self.cell_type_dict[ctn] is not None])
+            # self.cell_types_final, self.spatial_data_final = zip(*[(ctn, pos) for ctn, pos in zip(self.cell_types_original, self.spatial_data) if self.cell_type_dict[ctn] is not None])
+            self.cell_types_final, self.spatial_data_final = zip(*[(self.cell_type_dict[ctn], pos) for ctn, pos in zip(self.cell_types_original, self.spatial_data) if self.cell_type_dict[ctn] is not None])
             self.spatial_data_final = np.vstack([*self.spatial_data_final])
-            print(f"\tself.spatial_data_final = {self.spatial_data_final}")
+            # print(f"\tself.spatial_data_final = {self.spatial_data_final}")
         else:
             self.cell_types_final = [self.cell_type_dict[ctn] for ctn in self.cell_types_original if self.cell_type_dict[ctn] is not None]
 
@@ -2434,7 +2425,14 @@ class BioinfImport(QWidget):
         else:
             self.continue_to_cell_counts()
 
-    def continue_on_keep_cb(self):
+    def count_final_cell_types(self):
+        self.cell_counts = {}
+        for cell_type in self.cell_types_list_final:
+            self.cell_counts[cell_type] = 0
+        for ctn in self.cell_types_final:
+            self.cell_counts[ctn] += 1
+
+    def keep_cb(self):
         cell_type = self.sender().objectName()
         self.set_cell_type_to_keep(cell_type)
 
@@ -2459,7 +2457,7 @@ class BioinfImport(QWidget):
         self.checkbox_dict_edit[cell_type].setText(cell_type)
         self.keep_button[cell_type].setEnabled(False)
 
-    def continue_on_delete_cb(self):
+    def delete_cb(self):
         for cell_type in self.checkbox_dict_edit.keys():
             if self.checkbox_dict_edit[cell_type].isChecked():
                 self.cell_type_dict[cell_type] = None
@@ -2469,7 +2467,7 @@ class BioinfImport(QWidget):
 
                 self.keep_button[cell_type].setEnabled(True)
 
-    def continue_on_merge_cb(self):
+    def merge_cb(self):
         self.merge_id += 1
         first_name = None
         for cell_type in self.checkbox_dict_edit.keys():
