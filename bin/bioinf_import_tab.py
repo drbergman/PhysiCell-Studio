@@ -86,7 +86,6 @@ class BioinfImportWindow_SpatialQuery(BioinfImportWindow):
 
     def yn_toggled(self,id):
         self.bioinf_walkthrough.use_spatial_data = id==0
-        self.bioinf_walkthrough.next_window_is_stale = True
 
 class BioinfImportPlotWindow(QWidget):
     def __init__(self, bioinf_walkthrough, config_tab):
@@ -151,7 +150,7 @@ class BioinfImportPlotWindow(QWidget):
         self.plot_cells_button = QPushButton("Plot", enabled=True)
         self.plot_cells_button.setStyleSheet(self.biwt.qpushbutton_style_sheet)
         self.plot_cells_button.clicked.connect(self.plot_cell_pos)
-        
+
         vbox_left.addWidget(self.plot_cells_button)
         vbox_left.addWidget(self.mouse_keyboard_label)
         vbox_left.addStretch(1)
@@ -1504,9 +1503,7 @@ class BioinfImport(QWidget):
 
         self.window.setLayout(vbox)
 
-        self.window_history = []
-        self.current_window_index = 0
-        self.next_window_is_stale = True # plot the next window, do not look for it in history
+        self.previous_windows = []
 
         if auto_continue:
             self.current_column = self.column_line_edit.text()
@@ -1517,7 +1514,6 @@ class BioinfImport(QWidget):
 
     def column_combobox_changed_cb(self, idx):
         self.current_column = self.column_combobox.currentText()
-        self.next_window_is_stale = True
 
     def continue_from_import(self):
         if not self.spatial_data_found:
@@ -1630,7 +1626,9 @@ class BioinfImport(QWidget):
 
         widget_for_scroll_area = QWidget()
         widget_for_scroll_area.setLayout(vbox_cell_type_keep)
+        self.cell_type_edit_scroll_area.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
         self.cell_type_edit_scroll_area.setWidget(widget_for_scroll_area)
+        self.cell_type_edit_scroll_area.setWidgetResizable(True)
 
         vbox.addWidget(self.cell_type_edit_scroll_area)
 
@@ -1716,18 +1714,12 @@ class BioinfImport(QWidget):
         self.try_to_plot_dim_red(key_substring=key)
 
     def open_next_window(self, window_class, layout=None, show=True):
-        self.current_window_index += 1
-        if self.next_window_is_stale:
-            del self.window_history[self.current_window_index:]
-            self.window_history.append(self.window)
-            self.window_history[-1].hide()
+        self.previous_windows.append(self.window)
+        self.previous_windows[-1].hide()
 
-            self.window = window_class()
-            if layout:
-                self.window.setLayout(layout)
-        else:
-            self.window = self.window_history[self.current_window_index]
-            self.next_window_is_stale = self.current_window_index >= self.window_history-1
+        self.window = window_class()
+        if layout:
+            self.window.setLayout(layout)
 
         if show:
             self.window.hide()
@@ -1909,13 +1901,12 @@ class BioinfImport(QWidget):
         self.total_conf.setValidator(QtGui.QDoubleValidator(bottom=0))
         self.total_conf.textChanged.connect(self.confluence_box_changed_cb)
         self.total_conf.setObjectName("total_conf")
-        
+
         self.total_manual = QLineEdit(enabled=False)
         self.total_manual.setText(str(len(self.cell_types_final)))
         self.total_manual.setFixedWidth(manual_width)
         self.total_manual.setStyleSheet(self.qlineedit_style_sheet)
         self.total_manual.setValidator(num_validator)
-
 
         self.total_conf.setText("100") # this triggers the cb, which sets the manual column (see below) so force a toggle next
         self.use_manual_radio_button.setChecked(True) 
@@ -1976,7 +1967,6 @@ class BioinfImport(QWidget):
             self.type_prop[cell_type].setText(str(round(mult * self.cell_type_props[idx])))
             self.type_manual[cell_type].setText(str(round(mult * self.cell_type_props[idx])))
         self.prop_box_callback_paused = False
-        self.next_window_is_stale = True
 
     def confluence_box_changed_cb(self, text):
         if self.conf_box_callback_paused:
@@ -2017,14 +2007,11 @@ class BioinfImport(QWidget):
             self.total_conf.setStyleSheet(self.qlineedit_style_sheet)
             
         self.conf_box_callback_paused = False
-        self.next_window_is_stale = True
-
     def manual_box_changed_cb(self, text):
         total_count = 0
         for qle in self.type_manual.values():
             total_count += int(qle.text())
         self.total_manual.setText(str(total_count))
-        self.next_window_is_stale = True
 
     def counts_button_cb(self, id):
         enable_props = id==1
@@ -2061,7 +2048,6 @@ class BioinfImport(QWidget):
             for k, qw in self.type_manual.items():
                 qw.setText(str(current_values[k]))
             self.total_manual.setText(str(current_total))
-        self.next_window_is_stale = True
 
     def convert_confluence_to_counts(self):
         total = 0
@@ -2378,8 +2364,7 @@ class BioinfImport(QWidget):
                 cbd.setChecked(True)
 
     def continue_to_rename(self):
-
-        self.open_next_window(BioinfImportWindow)
+        self.open_next_window(BioinfImportWindow, show=False)
         vbox = QVBoxLayout()
         label = QLabel("Rename your chosen cell types if you like:")
         vbox.addWidget(label)
@@ -2405,8 +2390,6 @@ class BioinfImport(QWidget):
             labels[intermediate_type] = QLabel(label_text)
             self.new_name_line_edit[intermediate_type] = QLineEdit()
             self.new_name_line_edit[intermediate_type].setText(self.intermediate_type_pre_image[intermediate_type][0])
-            if not self.next_window_is_stale:
-                self.new_name_line_edit[intermediate_type].textChanged.connect(self.cell_type_renamed_cb)
             hbox.addWidget(labels[intermediate_type])
             hbox.addWidget(self.new_name_line_edit[intermediate_type])
             vbox_scroll_area.addLayout(hbox)
@@ -2431,13 +2414,8 @@ class BioinfImport(QWidget):
         self.window.hide()
         self.window.show()
 
-    def cell_type_renamed_cb(self):
-        self.next_window_is_stale = True
-
     def go_back_to_prev_window(self):
-        self.current_window_index -= 1
-        self.window = self.window_history[self.current_window_index]
-        self.next_window_is_stale = False
+        self.window = self.previous_windows.pop()
         self.window.hide()
         self.window.show()
 
@@ -2474,7 +2452,6 @@ class BioinfImport(QWidget):
     def keep_cb(self):
         cell_type = self.sender().objectName()
         self.set_cell_type_to_keep(cell_type)
-        self.next_window_is_stale = True
 
     def set_cell_type_to_keep(self, cell_type, check_merge_gp=True):
         self.cell_type_dict[cell_type] = cell_type
@@ -2506,7 +2483,6 @@ class BioinfImport(QWidget):
                 self.checkbox_dict_edit[cell_type].setStyleSheet(self.checkbox_style["delete"])
 
                 self.keep_button[cell_type].setEnabled(True)
-        self.next_window_is_stale = True
 
     def merge_cb(self):
         self.merge_id += 1
@@ -2522,7 +2498,6 @@ class BioinfImport(QWidget):
                 self.checkbox_dict_edit[cell_type].setText(f"{cell_type} \u21d2 Merge Gp. #{self.merge_id}")
 
                 self.keep_button[cell_type].setEnabled(True)
-        self.next_window_is_stale = True
 
     def list_current_cell_type_names(self):
         if self.editing_cell_type_names:
