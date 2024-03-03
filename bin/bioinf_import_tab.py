@@ -51,6 +51,7 @@ class BioinfImportWindow(QWidget):
         super().__init__()
         self.setWindowTitle("Bioinformatics Import Walkthrough")
         self.biwt = bioinf_walkthrough
+        self.biwt.stale_futures = True # initializing a window means that any future windows are stale
 
 class BioinfImportWindow_ClusterColumn(BioinfImportWindow):
     def __init__(self, bioinf_walkthrough):
@@ -58,9 +59,13 @@ class BioinfImportWindow_ClusterColumn(BioinfImportWindow):
 
         col_names = list(self.biwt.adata.obs.columns)
         self.biwt.auto_continue = False
+        self.column_combobox = QComboBox()
+        for col_name in col_names:
+            self.column_combobox.addItem(col_name)
         if self.biwt.column_line_edit.text() in col_names:
             s = "Select column that contains cell type info:"
             self.biwt.auto_continue = True
+            self.column_combobox.setCurrentIndex(self.column_combobox.findText(self.biwt.column_line_edit.text()))
         elif self.biwt.column_line_edit.text() != "":
             s = f"{self.biwt.column_line_edit.text()} not found in the columns of the obs matrix.\nSelect from the following:"
         else:
@@ -70,10 +75,7 @@ class BioinfImportWindow_ClusterColumn(BioinfImportWindow):
         label = QLabel(s)
         vbox.addWidget(label)
 
-        self.column_combobox = QComboBox()
-        # self.column_combobox.currentIndexChanged.connect(self.column_combobox_changed_cb)
-        for col_name in col_names:
-            self.column_combobox.addItem(col_name)
+        self.column_combobox.currentIndexChanged.connect(self.column_combobox_changed_cb)
         vbox.addWidget(self.column_combobox)
 
         hbox = QHBoxLayout()
@@ -84,8 +86,8 @@ class BioinfImportWindow_ClusterColumn(BioinfImportWindow):
 
         self.setLayout(vbox)
 
-    # def column_combobox_changed_cb(self, idx):
-    #     self.biwt.current_column = self.column_combobox.currentText()
+    def column_combobox_changed_cb(self, idx):
+        self.biwt.stale_futures = True
 
     def process_window(self):
         self.biwt.current_column = self.column_combobox.currentText()
@@ -123,6 +125,7 @@ class BioinfImportWindow_SpatialQuery(BioinfImportWindow):
         self.setLayout(vbox)
 
     def yn_toggled(self,id):
+        self.biwt.stale_futures = True
         self.biwt.use_spatial_data = id==0
 
 class BioinfImportWindow_EditCellTypes(BioinfImportWindow):
@@ -167,7 +170,7 @@ class BioinfImportWindow_EditCellTypes(BioinfImportWindow):
         self.checkbox_style["keep"] = checkbox_style_template(keep_color)
         self.checkbox_style["merge"] = checkbox_style_template(merge_color)
         self.checkbox_style["delete"] = checkbox_style_template(delete_color)
-        self.biwt.cell_type_dict = {} # dictionary mapping original cell_type to intermediate/final cell type (depending on stage of walkthrough)
+        self.biwt.cell_type_dict_on_edit = {} # dictionary mapping original cell_type to intermediate/final cell type (depending on stage of walkthrough)
 
         vbox = QVBoxLayout()
         vbox.addWidget(label)
@@ -213,7 +216,7 @@ class BioinfImportWindow_EditCellTypes(BioinfImportWindow):
             hbox.addStretch(1)
             hbox.addWidget(self.keep_button[cell_type])
             vbox_cell_type_keep.addLayout(hbox)
-            self.biwt.cell_type_dict[cell_type] = cell_type
+            self.biwt.cell_type_dict_on_edit[cell_type] = cell_type
 
         widget_for_scroll_area = QWidget()
         widget_for_scroll_area.setLayout(vbox_cell_type_keep)
@@ -284,11 +287,6 @@ class BioinfImportWindow_EditCellTypes(BioinfImportWindow):
         
         self.setLayout(vbox)
 
-        print("about to show edit window...")
-
-        self.hide()
-        self.show()
-
     def create_dim_red_fig(self):
         self.dim_red_fig = plt.figure()
         self.dim_red_canvas = FigureCanvasQTAgg(self.dim_red_fig)
@@ -322,34 +320,35 @@ class BioinfImportWindow_EditCellTypes(BioinfImportWindow):
         self.dim_red_canvas.draw()
 
     def set_cell_type_to_keep(self, cell_type, check_merge_gp=True):
-        self.biwt.cell_type_dict[cell_type] = cell_type
+        self.biwt.cell_type_dict_on_edit[cell_type] = cell_type
         self.checkbox_dict_edit[cell_type].setEnabled(True)
         self.checkbox_dict_edit[cell_type].setStyleSheet(self.checkbox_style["keep"])
         if  check_merge_gp and ("\u21d2 Merge Gp. #" in self.checkbox_dict_edit[cell_type].text()):
             # check for merge group that is no longer merging
-            gp_preimage = [ctn for ctn, new_name in self.biwt.cell_type_dict.items() if (ctn != cell_type and new_name == self.biwt.cell_type_dict[cell_type])] # get cell types that map into this merge group
+            gp_preimage = [ctn for ctn, new_name in self.biwt.cell_type_dict_on_edit.items() if (ctn != cell_type and new_name == self.biwt.cell_type_dict_on_edit[cell_type])] # get cell types that map into this merge group
             if len(gp_preimage)==1: # then delete this merge gp:
-                # gp_preimage = [ctn for ctn in gp_preimage if ctn != cell_type]
                 self.set_cell_type_to_keep(gp_preimage[0], check_merge_gp=False)
-            elif cell_type == self.biwt.cell_type_dict[cell_type]: # make sure this current cell type did not set the merge group name
+            elif cell_type == self.biwt.cell_type_dict_on_edit[cell_type]: # make sure this current cell type did not set the merge group name
                 first_name = None
                 for ctn in gp_preimage:
                     if first_name is None:
                         first_name = ctn
-                    self.biwt.cell_type_dict[ctn] = first_name
+                    self.biwt.cell_type_dict_on_edit[ctn] = first_name
 
-        self.biwt.cell_type_dict[cell_type] = cell_type
+        self.biwt.cell_type_dict_on_edit[cell_type] = cell_type
         self.checkbox_dict_edit[cell_type].setText(cell_type)
         self.keep_button[cell_type].setEnabled(False)
 
     def keep_cb(self):
+        self.biwt.stale_futures = True
         cell_type = self.sender().objectName()
         self.set_cell_type_to_keep(cell_type)
 
     def delete_cb(self):
+        self.biwt.stale_futures = True
         for cell_type in self.checkbox_dict_edit.keys():
             if self.checkbox_dict_edit[cell_type].isChecked():
-                self.biwt.cell_type_dict[cell_type] = None
+                self.biwt.cell_type_dict_on_edit[cell_type] = None
                 self.checkbox_dict_edit[cell_type].setChecked(False)
                 self.checkbox_dict_edit[cell_type].setEnabled(False)
                 self.checkbox_dict_edit[cell_type].setStyleSheet(self.checkbox_style["delete"])
@@ -357,13 +356,14 @@ class BioinfImportWindow_EditCellTypes(BioinfImportWindow):
                 self.keep_button[cell_type].setEnabled(True)
 
     def merge_cb(self):
+        self.biwt.stale_futures = True
         self.merge_id += 1
         first_name = None
         for cell_type in self.checkbox_dict_edit.keys():
             if self.checkbox_dict_edit[cell_type].isChecked():
                 if first_name is None:
                     first_name = cell_type
-                self.biwt.cell_type_dict[cell_type] = first_name
+                self.biwt.cell_type_dict_on_edit[cell_type] = first_name
                 self.checkbox_dict_edit[cell_type].setChecked(False)
                 self.checkbox_dict_edit[cell_type].setEnabled(False)
                 self.checkbox_dict_edit[cell_type].setStyleSheet(self.checkbox_style["merge"])
@@ -422,6 +422,7 @@ class BioinfImportWindow_RenameCellTypes(BioinfImportWindow):
             labels[intermediate_type] = QLabel(label_text)
             self.new_name_line_edit[intermediate_type] = QLineEdit()
             self.new_name_line_edit[intermediate_type].setText(self.biwt.intermediate_type_pre_image[intermediate_type][0])
+            self.new_name_line_edit[intermediate_type].textChanged.connect(self.intermediate_type_renamed)
             hbox.addWidget(labels[intermediate_type])
             hbox.addWidget(self.new_name_line_edit[intermediate_type])
             vbox_scroll_area.addLayout(hbox)
@@ -441,15 +442,19 @@ class BioinfImportWindow_RenameCellTypes(BioinfImportWindow):
         hbox.addWidget(continue_button)
 
         vbox.addLayout(hbox)
-
         self.setLayout(vbox)
 
+    def intermediate_type_renamed(self):
+        self.biwt.stale_futures = True
+
     def process_window(self):
+        
         self.biwt.cell_types_list_final = []
+        self.biwt.cell_type_dict_on_rename = {}
         for intermediate_type in self.biwt.intermediate_types:
             self.biwt.cell_types_list_final.append(self.new_name_line_edit[intermediate_type].text())
             for cell_type in self.biwt.intermediate_type_pre_image[intermediate_type]:
-                self.biwt.cell_type_dict[cell_type] = self.new_name_line_edit[intermediate_type].text()
+                self.biwt.cell_type_dict_on_rename[cell_type] = self.new_name_line_edit[intermediate_type].text()
         self.biwt.continue_from_rename()
 
 class BioinfImportWindow_CellCounts(BioinfImportWindow):
@@ -627,6 +632,7 @@ class BioinfImportWindow_CellCounts(BioinfImportWindow):
             self.prop_dot_ratios += (self.cell_type_props[idx] * self.prop_total_area_one[cell_type])
 
     def prop_box_changed_cb(self, text):
+        self.biwt.stale_futures = True
         if self.prop_box_callback_paused:
             return
         type_prop_sender = self.sender()
@@ -650,6 +656,7 @@ class BioinfImportWindow_CellCounts(BioinfImportWindow):
         self.prop_box_callback_paused = False
 
     def confluence_box_changed_cb(self, text):
+        self.biwt.stale_futures = True
         if self.conf_box_callback_paused:
             return
         type_conf_sender = self.sender()
@@ -690,12 +697,14 @@ class BioinfImportWindow_CellCounts(BioinfImportWindow):
         self.conf_box_callback_paused = False
         
     def manual_box_changed_cb(self, text):
+        self.biwt.stale_futures = True
         total_count = 0
         for qle in self.type_manual.values():
             total_count += int(qle.text())
         self.total_manual.setText(str(total_count))
 
     def counts_button_cb(self, id):
+        self.biwt.stale_futures = True
         enable_props = id==1
         enable_confluence = id==2
         enable_manual = id==3
@@ -2292,7 +2301,6 @@ class BioinfImportPlotWindow(QWidget):
             collection.set_clim(vmin, vmax)
 
         self.ax0.add_collection(collection)
-        # self.ax0.autoscale_view()
         if c is not None:
             self.ax0.sci(collection)
 
@@ -2326,6 +2334,8 @@ class BioinfImport(QWidget):
 
         self.window = None
         self.previous_windows = []
+        self.stale_futures = True
+        self.current_window_idx = 0
 
         self.qlineedit_style_sheet = """
             QLineEdit:disabled {
@@ -2412,10 +2422,18 @@ class BioinfImport(QWidget):
 
     def open_next_window(self, window_class, layout=None, show=True):
         if self.window is not None:
-            self.previous_windows.append(self.window)
-            self.previous_windows[-1].hide()
+            if self.stale_futures:
+                del self.previous_windows[self.current_window_idx:]
+                self.previous_windows.append(self.window)
+                self.window = window_class(self)
+            else:
+                self.window = self.previous_windows[self.current_window_idx+1]
+                self.stale_futures = self.current_window_idx+1==len(self.previous_windows)-1 # if it's now the last one, mark it as stale
+            self.previous_windows[self.current_window_idx].hide()
+            self.current_window_idx += 1
+        else: # This is opening the very first window
+            self.window = window_class(self)
 
-        self.window = window_class(self)
         if layout:
             self.window.setLayout(layout)
 
@@ -2424,8 +2442,12 @@ class BioinfImport(QWidget):
             self.window.show()
 
     def go_back_to_prev_window(self):
-        self.window.deleteLater()
-        self.window = self.previous_windows.pop()
+        if len(self.previous_windows)==self.current_window_idx:
+            self.previous_windows.append(self.window)
+        self.window.hide()
+        self.current_window_idx -= 1
+        self.window = self.previous_windows[self.current_window_idx]
+        self.stale_futures = False # any remaining future windows are not stale
         self.window.hide()
         self.window.show()
 
@@ -2441,7 +2463,6 @@ class BioinfImport(QWidget):
         file_path = full_file_path[0]
 
         self.import_file(file_path)
-        print("finished import_cb")
 
     def import_file(self,file_path):
         try:
@@ -2470,7 +2491,6 @@ class BioinfImport(QWidget):
             self.use_spatial_data = False
             self.collect_cell_type_data()
             self.edit_cell_types()
-            print("finished continue_from_import")
         else:
             print("spatial data found. asking you about it now...")
             self.open_next_window(BioinfImportWindow_SpatialQuery, show=True)
@@ -2494,10 +2514,10 @@ class BioinfImport(QWidget):
     def continue_from_edit(self):
         self.intermediate_types = [] # types used after editing (keep, merge, delete) but before rename
         self.intermediate_type_pre_image = {} # dictionary where keys are intermediate cell types and values are the original cell types that map to them
-        original_cell_type_list = list(self.cell_type_dict.keys())
+        original_cell_type_list = list(self.cell_type_dict_on_edit.keys())
         original_cell_type_list.sort()
         for cell_type in original_cell_type_list:
-            intermediate_type = self.cell_type_dict[cell_type]
+            intermediate_type = self.cell_type_dict_on_edit[cell_type]
             if intermediate_type is not None:
                 if intermediate_type not in self.intermediate_types:
                     self.intermediate_types.append(intermediate_type)
@@ -2515,10 +2535,10 @@ class BioinfImport(QWidget):
 
         if self.use_spatial_data:
             print(f"self.cell_types_original = {self.cell_types_original}")
-            self.cell_types_final, self.spatial_data_final = zip(*[(self.cell_type_dict[ctn], pos) for ctn, pos in zip(self.cell_types_original, self.spatial_data) if self.cell_type_dict[ctn] is not None])
+            self.cell_types_final, self.spatial_data_final = zip(*[(self.cell_type_dict_on_rename[ctn], pos) for ctn, pos in zip(self.cell_types_original, self.spatial_data) if self.cell_type_dict_on_rename[ctn] is not None])
             self.spatial_data_final = np.vstack([*self.spatial_data_final])
         else:
-            self.cell_types_final = [self.cell_type_dict[ctn] for ctn in self.cell_types_original if self.cell_type_dict[ctn] is not None]
+            self.cell_types_final = [self.cell_type_dict_on_rename[ctn] for ctn in self.cell_types_original if self.cell_type_dict_on_rename[ctn] is not None]
 
         self.count_final_cell_types()
         self.compute_cell_volumes() # used in confluence computations, and in spatial_plotter
