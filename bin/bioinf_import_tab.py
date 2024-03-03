@@ -87,6 +87,94 @@ class BioinfImportWindow_SpatialQuery(BioinfImportWindow):
     def yn_toggled(self,id):
         self.bioinf_walkthrough.use_spatial_data = id==0
 
+class BioinfImportWindow_WritePositions(BioinfImportWindow):
+    def __init__(self, bioinf_walkthrough):
+        super().__init__()
+        self.biwt = bioinf_walkthrough
+
+        vbox = QVBoxLayout()
+        
+        label = QLabel("Confirm output file and then overwrite or append with these cell positions.")
+        vbox.addWidget(label)
+        
+        folder_label = QLabel("folder")
+        self.csv_folder = QLineEdit(self.biwt.csv_folder.text())
+        file_label = QLabel("file")
+        self.csv_file = QLineEdit(self.biwt.csv_file.text())
+
+        hbox = QHBoxLayout()
+        hbox.addWidget(folder_label)
+        hbox.addWidget(self.csv_folder)
+        hbox.addWidget(file_label)
+        hbox.addWidget(self.csv_file)
+
+        vbox.addLayout(hbox)
+
+        self.finish_write_button = QPushButton("Overwrite")
+        self.finish_write_button.setStyleSheet("QPushButton {background-color : lightgreen; font-weight : bold;}")
+        self.finish_write_button.clicked.connect(self.finish_write_button_cb)
+
+        self.finish_append_button = QPushButton("Append")
+        self.finish_append_button.setStyleSheet("QPushButton {background-color : lightgreen; font-weight : bold;}")
+        self.finish_append_button.clicked.connect(self.finish_append_button_cb)
+
+        hbox = QHBoxLayout()
+        hbox.addWidget(self.finish_write_button)
+        hbox.addWidget(self.finish_append_button)
+
+        vbox.addLayout(hbox)
+
+        vbox.addWidget(QHLine())
+
+        hbox = QHBoxLayout()
+        hbox.addWidget(GoBackButton(self, self.biwt))
+        hbox.addWidget(ContinueButton(self, self.biwt.close_up))
+
+        vbox.addLayout(hbox)
+        self.setLayout(vbox)
+
+    def finish_write_button_cb(self):
+        self.check_for_new_celldefs()
+        self.set_file_name()
+        with open(self.full_fname, 'w') as f:
+            f.write('x,y,z,type\n')
+        self.add_cell_positions_to_file()
+
+    def finish_append_button_cb(self):
+        self.check_for_new_celldefs()
+        self.set_file_name()
+        with open(self.full_fname, 'r') as f:
+            first_line = f.readline()
+            if "x,y,z,type" not in first_line:
+                print(f"{self.full_fname} is not properly formatted for appending.\nIt needs to start with 'x,y,z,type,...'")
+                return
+        self.add_cell_positions_to_file()
+
+    def check_for_new_celldefs(self):
+        for cell_type in self.biwt.cell_types_list_final:
+            if cell_type in self.biwt.celldef_tab.celltypes_list:
+                print(f"BioinfImportPlotWindow: {cell_type} found in current list of cell types. Not appending this...")
+            else:
+                self.biwt.celldef_tab.new_cell_def_named(cell_type)
+
+    def set_file_name(self):
+        dir_name = self.csv_folder.text()
+        if len(dir_name) > 0 and not os.path.isdir(dir_name):
+            os.makedirs(dir_name)
+            time.sleep(1)
+        self.full_fname = os.path.join(dir_name,self.csv_file.text())
+        Path(self.full_fname).touch() # make sure the file exists
+        print("save_cb(): self.full_fname=",self.full_fname)
+        self.biwt.csv_folder.setText(dir_name)
+        self.biwt.csv_file.setText(self.csv_file.text())
+        self.biwt.full_fname = self.full_fname
+
+    def add_cell_positions_to_file(self):
+        with open(self.full_fname, 'a') as f:
+            for cell_type in self.biwt.ics_plot_area.csv_array.keys():
+                for pos in self.biwt.ics_plot_area.csv_array[cell_type]:
+                    f.write(f'{pos[0]},{pos[1]},{pos[2]},{cell_type}\n')
+
 class BioinfImportPlotWindow(QWidget):
     def __init__(self, bioinf_walkthrough, config_tab):
         super().__init__()
@@ -1007,11 +1095,11 @@ class BioinfImportPlotWindow(QWidget):
         self.canvas.update()
         self.canvas.draw()
 
+        self.cell_type_micron2_area_dict = {cell_type: (((9*np.pi*V**2) / 16) ** (1./3)) for cell_type, V in self.biwt.cell_volume.items()}
         if self.biwt.use_spatial_data:
             dx, dy = self.ax0.transData.transform((1,1))-self.ax0.transData.transform((0,0)) # # pixels/ micron
             self.area_scale_factor = dx*dy
             self.fudge_factor = 1.258199089131739 # empirically-defined value to multiply area (in pts) to represent true area in microns on plot
-            self.cell_type_micron2_area_dict = {cell_type: (((9*np.pi*V**2) / 16) ** (1./3)) for cell_type, V in self.biwt.cell_volume.items()}
             self.cell_type_pt_area_dict = {cell_type: self.fudge_factor * self.area_scale_factor * 72*72/(self.figure.dpi**2)*A for cell_type, A in self.cell_type_micron2_area_dict.items()}
 
             self.single_scatter_sizes = np.array([self.cell_type_pt_area_dict[ctn] for ctn in self.biwt.cell_types_final])
@@ -1086,8 +1174,9 @@ class BioinfImportPlotWindow(QWidget):
             if b.isEnabled() is True:
                 return
         # If control passes here, then all the buttons are disabled and the plotting is done
-        self.biwt.finish_write_button.setEnabled(True)
-        self.biwt.finish_append_button.setEnabled(True)
+        # self.biwt.finish_write_button.setEnabled(True)
+        # self.biwt.finish_append_button.setEnabled(True)
+        self.biwt.continue_to_write_button.setEnabled(True)
 
     def max_dist_to_domain(self,x0,y0):
         xL, xR, yL, yR = [self.plot_xmin, self.plot_xmax, self.plot_ymin, self.plot_ymax]
@@ -1263,53 +1352,44 @@ class BioinfImportPlotWindow(QWidget):
         self.hide() # this will work for now, but maybe a better way to handle closing the window?
         pass
 
-    def finish_write_button_cb(self):
-        self.check_for_new_celldefs()
-        self.set_file_name()
-        with open(self.full_fname, 'w') as f:
-            f.write('x,y,z,type\n')
-        self.add_cell_positions_to_file()
+    # def finish_write_button_cb(self):
+    #     self.check_for_new_celldefs()
+    #     self.set_file_name()
+    #     with open(self.full_fname, 'w') as f:
+    #         f.write('x,y,z,type\n')
+    #     self.add_cell_positions_to_file()
 
-    def finish_append_button_cb(self):
-        self.check_for_new_celldefs()
-        self.set_file_name()
-        with open(self.full_fname, 'r') as f:
-            first_line = f.readline()
-            if "x,y,z,type" not in first_line:
-                print(f"{self.full_fname} is not properly formatted for appending.\nIt needs to start with 'x,y,z,type,...'")
-                return
-        self.add_cell_positions_to_file()
+    # def finish_append_button_cb(self):
+    #     self.check_for_new_celldefs()
+    #     self.set_file_name()
+    #     with open(self.full_fname, 'r') as f:
+    #         first_line = f.readline()
+    #         if "x,y,z,type" not in first_line:
+    #             print(f"{self.full_fname} is not properly formatted for appending.\nIt needs to start with 'x,y,z,type,...'")
+    #             return
+    #     self.add_cell_positions_to_file()
 
-    def check_for_new_celldefs(self):
-        for cell_type in self.biwt.cell_types_list_final:
-            if cell_type in self.biwt.celldef_tab.celltypes_list:
-                print(f"BioinfImportPlotWindow: {cell_type} found in current list of cell types. Not appending this...")
-            else:
-                self.biwt.celldef_tab.new_cell_def_named(cell_type)
+    # def check_for_new_celldefs(self):
+    #     for cell_type in self.biwt.cell_types_list_final:
+    #         if cell_type in self.biwt.celldef_tab.celltypes_list:
+    #             print(f"BioinfImportPlotWindow: {cell_type} found in current list of cell types. Not appending this...")
+    #         else:
+    #             self.biwt.celldef_tab.new_cell_def_named(cell_type)
 
-    def set_file_name(self):
-        dir_name = self.biwt.csv_folder.text()
-        if len(dir_name) > 0 and not os.path.isdir(dir_name):
-            os.makedirs(dir_name)
-            time.sleep(1)
-        self.full_fname = os.path.join(dir_name,self.biwt.csv_file.text())
-        Path(self.full_fname).touch() # make sure the file exists
-        print("save_cb(): self.full_fname=",self.full_fname)
+    # def set_file_name(self):
+    #     dir_name = self.biwt.csv_folder.text()
+    #     if len(dir_name) > 0 and not os.path.isdir(dir_name):
+    #         os.makedirs(dir_name)
+    #         time.sleep(1)
+    #     self.full_fname = os.path.join(dir_name,self.biwt.csv_file.text())
+    #     Path(self.full_fname).touch() # make sure the file exists
+    #     print("save_cb(): self.full_fname=",self.full_fname)
 
-    def add_cell_positions_to_file(self):
-        with open(self.full_fname, 'a') as f:
-            for cell_type in self.csv_array.keys():
-                for pos in self.csv_array[cell_type]:
-                    f.write(f'{pos[0]},{pos[1]},{pos[2]},{cell_type}\n')
-        plt.style.use("default")
-        self.biwt.ics_tab.clear_cb()
-        self.biwt.ics_tab.import_from_file(self.full_fname)
-        self.biwt.ics_tab.tab_widget.setCurrentIndex(self.biwt.ics_tab.base_tab_id)
-        self.biwt.ics_tab.csv_folder.setText(self.biwt.csv_folder.text())
-        self.biwt.ics_tab.output_file.setText(self.biwt.csv_file.text())
-        self.close()
-        self.biwt.window.close()
-        print("BioinfImportWindow: Colors will likely change in the ICs tab due to previous cell types being present.")
+    # def add_cell_positions_to_file(self):
+    #     with open(self.full_fname, 'a') as f:
+    #         for cell_type in self.csv_array.keys():
+    #             for pos in self.csv_array[cell_type]:
+    #                 f.write(f'{pos[0]},{pos[1]},{pos[2]},{cell_type}\n')
 
 class QCheckBox_custom(QCheckBox):  # it's insane to have to do this!
     def __init__(self,name):
@@ -1430,7 +1510,7 @@ class BioinfImport(QWidget):
             self.continue_to_cell_type_names_cb()
             self.continue_to_rename()
             self.continue_on_rename_cb()
-            # self.continue_to_cell_pos_cb()
+            self.continue_to_cell_pos_cb()
         elif bioinf_import_test_spatial:
             self.column_line_edit.setText("total_counts")
             self.import_file("./data/visium_adata.h5ad")
@@ -2098,19 +2178,23 @@ class BioinfImport(QWidget):
         vbox.addWidget(splitter)
 
         go_back_button = GoBackButton(self.window, self)
+        self.continue_to_write_button = ContinueButton(self, self.continue_from_cell_pos)
+        self.continue_to_write_button.setEnabled(False)
+        self.continue_to_write_button.setStyleSheet(self.qpushbutton_style_sheet)
 
-        self.finish_write_button = QPushButton("Overwrite \u2192",enabled=False)
-        self.finish_write_button.setStyleSheet(self.qpushbutton_style_sheet)
-        self.finish_write_button.clicked.connect(self.ics_plot_area.finish_write_button_cb)
+        # self.finish_write_button = QPushButton("Overwrite \u2192",enabled=False)
+        # self.finish_write_button.setStyleSheet(self.qpushbutton_style_sheet)
+        # self.finish_write_button.clicked.connect(self.ics_plot_area.finish_write_button_cb)
 
-        self.finish_append_button = QPushButton("Append \u2192",enabled=False)
-        self.finish_append_button.setStyleSheet(self.qpushbutton_style_sheet)
-        self.finish_append_button.clicked.connect(self.ics_plot_area.finish_append_button_cb)
+        # self.finish_append_button = QPushButton("Append \u2192",enabled=False)
+        # self.finish_append_button.setStyleSheet(self.qpushbutton_style_sheet)
+        # self.finish_append_button.clicked.connect(self.ics_plot_area.finish_append_button_cb)
 
         hbox_write = QHBoxLayout()
         hbox_write.addWidget(go_back_button)
-        hbox_write.addWidget(self.finish_write_button)
-        hbox_write.addWidget(self.finish_append_button)
+        hbox_write.addWidget(self.continue_to_write_button)
+        # hbox_write.addWidget(self.finish_write_button)
+        # hbox_write.addWidget(self.finish_append_button)
 
         vbox.addLayout(hbox_write)
 
@@ -2118,6 +2202,11 @@ class BioinfImport(QWidget):
         self.window.hide()
         self.window.show()
 
+    def continue_from_cell_pos(self):
+        self.open_next_window(lambda : BioinfImportWindow_WritePositions(self), show=False)
+        self.window.hide()
+        self.window.show()
+        
     def create_cell_type_scroll_area(self):
         vbox_main = QVBoxLayout()
         label = QLabel("Select cell type(s) to place.\nGreyed out cell types have already been placed.")
@@ -2173,8 +2262,9 @@ class BioinfImport(QWidget):
         self.checkbox_dict[undone_cell_type].setEnabled(True)
         self.checkbox_dict[undone_cell_type].setChecked(False)
         self.undo_button[undone_cell_type].setEnabled(False)
-        self.finish_write_button.setEnabled(False)
-        self.finish_append_button.setEnabled(False)
+        self.continue_to_write_button.setEnabled(False)
+        # self.finish_write_button.setEnabled(False)
+        # self.finish_append_button.setEnabled(False)
 
     def cell_type_button_group_cb(self):
         bval = self.is_any_cell_type_button_group_checked()
@@ -2542,6 +2632,17 @@ class BioinfImport(QWidget):
                 return True, k, v
         return False, None, None
 
+    def close_up(self):
+        plt.style.use("default")
+        self.ics_tab.clear_cb()
+        self.ics_tab.import_from_file(self.full_fname)
+        self.ics_tab.tab_widget.setCurrentIndex(self.ics_tab.base_tab_id)
+        self.ics_tab.csv_folder.setText(self.csv_folder.text())
+        self.ics_tab.output_file.setText(self.csv_file.text())
+        self.close()
+        self.window.close()
+        print("BioinfImportWindow: Colors will likely change in the ICs tab due to previous cell types being present.")
+        
 def create_checkboxes_for_cell_types(vbox, cell_types):
     checkbox_dict = {}
     for cell_type in cell_types:
