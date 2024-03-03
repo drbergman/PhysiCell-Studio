@@ -91,6 +91,11 @@ class BioinfImportWindow_WritePositions(BioinfImportWindow):
     def __init__(self, bioinf_walkthrough):
         super().__init__()
         self.biwt = bioinf_walkthrough
+
+        vbox = QVBoxLayout()
+        
+        label = QLabel("Confirm output file and then overwrite or append with these cell positions.")
+        vbox.addWidget(label)
         
         folder_label = QLabel("folder")
         self.csv_folder = QLineEdit(self.biwt.csv_folder.text())
@@ -103,7 +108,6 @@ class BioinfImportWindow_WritePositions(BioinfImportWindow):
         hbox.addWidget(file_label)
         hbox.addWidget(self.csv_file)
 
-        vbox = QVBoxLayout()
         vbox.addLayout(hbox)
 
         self.finish_write_button = QPushButton("Overwrite")
