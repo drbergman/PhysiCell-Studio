@@ -30,7 +30,7 @@ from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import QApplication,QWidget,QLineEdit,QHBoxLayout,QVBoxLayout,QRadioButton,QPushButton, QLabel,QCheckBox,QComboBox,QScrollArea,QGridLayout, QFileDialog, QButtonGroup, QSplitter, QSizePolicy, QSpinBox
 from PyQt5.QtGui import QIcon
 
-from studio_classes import QHLine, QVLine
+from studio_classes import QHLine, QVLine, QCheckBox_custom
 
 class GoBackButton(QPushButton):
     def __init__(self, parent, bioinf_walkthrough):
@@ -40,24 +40,62 @@ class GoBackButton(QPushButton):
         self.clicked.connect(bioinf_walkthrough.go_back_to_prev_window)
 
 class ContinueButton(QPushButton):
-    def __init__(self, parent, cb):
+    def __init__(self, parent, cb, text="Continue \u2192",styleSheet="QPushButton {background-color: lightgreen; color: black;}"):
         super().__init__(parent)
-        self.setText("Continue \u2192")
-        self.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
+        self.setText(text)
+        self.setStyleSheet(styleSheet)
         self.clicked.connect(cb)
 
 class BioinfImportWindow(QWidget):
-    def __init__(self):
+    def __init__(self, bioinf_walkthrough):
         super().__init__()
         self.setWindowTitle("Bioinformatics Import Walkthrough")
+        self.biwt = bioinf_walkthrough
+
+class BioinfImportWindow_ClusterColumn(BioinfImportWindow):
+    def __init__(self, bioinf_walkthrough):
+        super().__init__(bioinf_walkthrough)
+
+        col_names = list(self.biwt.adata.obs.columns)
+        self.biwt.auto_continue = False
+        if self.biwt.column_line_edit.text() in col_names:
+            s = "Select column that contains cell type info:"
+            self.biwt.auto_continue = True
+        elif self.biwt.column_line_edit.text() != "":
+            s = f"{self.biwt.column_line_edit.text()} not found in the columns of the obs matrix.\nSelect from the following:"
+        else:
+            s = "Select column that contains cell type info:"
+
+        vbox = QVBoxLayout()
+        label = QLabel(s)
+        vbox.addWidget(label)
+
+        self.column_combobox = QComboBox()
+        # self.column_combobox.currentIndexChanged.connect(self.column_combobox_changed_cb)
+        for col_name in col_names:
+            self.column_combobox.addItem(col_name)
+        vbox.addWidget(self.column_combobox)
+
+        hbox = QHBoxLayout()
+        continue_button = ContinueButton(self, self.process_window)
+        hbox.addWidget(continue_button)
+
+        vbox.addLayout(hbox)
+
+        self.setLayout(vbox)
+
+    # def column_combobox_changed_cb(self, idx):
+    #     self.biwt.current_column = self.column_combobox.currentText()
+
+    def process_window(self):
+        self.biwt.current_column = self.column_combobox.currentText()
+        self.biwt.continue_from_import()
 
 class BioinfImportWindow_SpatialQuery(BioinfImportWindow):
     def __init__(self, bioinf_walkthrough):
-        super().__init__()
+        super().__init__(bioinf_walkthrough)
 
-        self.bioinf_walkthrough = bioinf_walkthrough
-
-        s = f"It seems this data may contain spatial information in adata.obsm['{bioinf_walkthrough.spatial_data_key}'].\n"
+        s = f"It seems this data may contain spatial information in adata.obsm['{self.biwt.spatial_data_key}'].\n"
         s += "Would you like to use this?"
         label = QLabel(s)
 
@@ -72,8 +110,8 @@ class BioinfImportWindow_SpatialQuery(BioinfImportWindow):
         hbox_yn.addWidget(self.yes)
         hbox_yn.addWidget(self.no)
 
-        self.go_back_button = GoBackButton(self, bioinf_walkthrough)
-        self.continue_button = ContinueButton(self, bioinf_walkthrough.continue_to_cell_type_names_cb)
+        self.go_back_button = GoBackButton(self, self.biwt)
+        self.continue_button = ContinueButton(self, self.biwt.continue_from_spatial_query)
         hbox_gb_cont = QHBoxLayout()
         hbox_gb_cont.addWidget(self.go_back_button)
         hbox_gb_cont.addWidget(self.continue_button)
@@ -85,12 +123,942 @@ class BioinfImportWindow_SpatialQuery(BioinfImportWindow):
         self.setLayout(vbox)
 
     def yn_toggled(self,id):
-        self.bioinf_walkthrough.use_spatial_data = id==0
+        self.biwt.use_spatial_data = id==0
 
+class BioinfImportWindow_EditCellTypes(BioinfImportWindow):
+    def __init__(self, bioinf_walkthrough):
+        super().__init__(bioinf_walkthrough)
+
+        print("------Editing cell types------")
+
+        keep_color = "lightgreen"
+        merge_color = "yellow"
+        delete_color = "#FFCCCB"
+        label = QLabel(f"""The following cell types were found.<br>\
+                        Choose which to <b style="background-color: {keep_color};">KEEP</b>, \
+                        <b style="background-color: {merge_color};">MERGE</b>, and \
+                        <b style="background-color: {delete_color};">DELETE</b>.<br>\
+                        By default, all are kept.\
+                        """)
+        checkbox_style_template = lambda x : f"""
+                QCheckBox {{
+                    color : black;
+                    font-weight: bold;
+                    background-color: {x};
+                }}
+                QCheckBox::indicator:checked {{
+                    background-color: rgb(255,255,255);
+                    border: 1px solid #5A5A5A;
+                    width : 15px;
+                    height : 15px;
+                    border-radius : 3px;
+                    image: url(images:checkmark.png);
+                }}
+                QCheckBox::indicator:unchecked
+                {{
+                    background-color: {"rgb(255,255,255)" if x==keep_color else "rgb(0,0,0)"};
+                    border: 1px solid #5A5A5A;
+                    width : 15px;
+                    height : 15px;
+                    border-radius : 3px;
+                }}
+                """
+        self.checkbox_style = {}
+        self.checkbox_style["keep"] = checkbox_style_template(keep_color)
+        self.checkbox_style["merge"] = checkbox_style_template(merge_color)
+        self.checkbox_style["delete"] = checkbox_style_template(delete_color)
+        self.biwt.cell_type_dict = {} # dictionary mapping original cell_type to intermediate/final cell type (depending on stage of walkthrough)
+
+        vbox = QVBoxLayout()
+        vbox.addWidget(label)
+        self.checkbox_dict_edit = {}
+        self.keep_button = {}
+        self.checkbox_group = QButtonGroup(exclusive=False)
+        self.checkbox_group.buttonToggled.connect(self.cell_type_toggled_cb)
+        self.merge_id = 0
+        rename_button_style_sheet_template = lambda x : f"""
+            QPushButton {{
+                color : black;
+                font-weight : bold;
+            }}
+            QPushButton:enabled {{
+                background-color: {x};
+            }}
+            QPushButton:disabled {{
+                background-color : grey;
+            }}
+            """
+        self.rename_button_style_sheet = {}
+        self.rename_button_style_sheet["keep"] = rename_button_style_sheet_template(keep_color)
+        self.rename_button_style_sheet["merge"] = rename_button_style_sheet_template(merge_color)
+        self.rename_button_style_sheet["delete"] = rename_button_style_sheet_template(delete_color)
+        row_height = 30
+        print(f"self.biwt.cell_types_list_original = {self.biwt.cell_types_list_original}")
+        self.cell_type_edit_scroll_area = QScrollArea()
+        vbox_cell_type_keep = QVBoxLayout()
+        for cell_type in self.biwt.cell_types_list_original:
+            hbox = QHBoxLayout()
+            self.checkbox_dict_edit[cell_type] = QCheckBox(cell_type,styleSheet=self.checkbox_style["keep"])
+            self.checkbox_dict_edit[cell_type].setChecked(False)
+            self.checkbox_dict_edit[cell_type].setEnabled(True)
+            self.checkbox_dict_edit[cell_type].setFixedHeight(row_height)
+            self.checkbox_group.addButton(self.checkbox_dict_edit[cell_type])
+            
+            self.keep_button[cell_type] = QPushButton("Keep",enabled=False,objectName=cell_type)
+            self.keep_button[cell_type].setStyleSheet(rename_button_style_sheet_template(keep_color))
+            self.keep_button[cell_type].setFixedHeight(row_height)
+            self.keep_button[cell_type].clicked.connect(self.keep_cb)
+
+            hbox.addWidget(self.checkbox_dict_edit[cell_type])
+            hbox.addStretch(1)
+            hbox.addWidget(self.keep_button[cell_type])
+            vbox_cell_type_keep.addLayout(hbox)
+            self.biwt.cell_type_dict[cell_type] = cell_type
+
+        widget_for_scroll_area = QWidget()
+        widget_for_scroll_area.setLayout(vbox_cell_type_keep)
+        self.cell_type_edit_scroll_area.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
+        self.cell_type_edit_scroll_area.setWidget(widget_for_scroll_area)
+        self.cell_type_edit_scroll_area.setWidgetResizable(True)
+
+        vbox.addWidget(self.cell_type_edit_scroll_area)
+
+        hbox = QHBoxLayout()
+
+        self.merge_button = QPushButton("Merge",enabled=False,styleSheet=rename_button_style_sheet_template(merge_color))
+        self.merge_button.clicked.connect(self.merge_cb)
+        hbox.addWidget(self.merge_button)
+
+        self.delete_button = QPushButton("Delete",enabled=False,styleSheet=rename_button_style_sheet_template(delete_color))
+        self.delete_button.clicked.connect(self.delete_cb)
+        hbox.addWidget(self.delete_button)
+
+        vbox.addLayout(hbox)
+        vbox.addWidget(QHLine())
+
+        hbox = QHBoxLayout()
+
+        go_back_button = GoBackButton(self, self.biwt)
+        continue_button = ContinueButton(self, self.process_window)
+
+        hbox.addWidget(go_back_button)
+        hbox.addWidget(continue_button)
+        vbox.addLayout(hbox)
+
+        self.dim_red_fig = None
+        self.dim_red_canvas = None
+        for key_substring in ["umap","tsne","pca"]:
+            if self.try_to_plot_dim_red(key_substring=key_substring):
+                splitter = QSplitter()
+                left_side = QWidget()
+                left_side.setLayout(vbox)
+                splitter.addWidget(left_side)
+
+                right_side = QWidget()
+                vbox = QVBoxLayout()
+                self.obsm_keys_combobox = QComboBox()
+                for i, k in enumerate(self.biwt.adata.obsm.keys()):
+                    if key_substring in k:
+                        id = i
+                    self.obsm_keys_combobox.addItem(k)
+                self.obsm_keys_combobox.setCurrentIndex(id)
+                self.obsm_keys_combobox.currentIndexChanged.connect(self.obsm_keys_combobox_changed_cb)
+
+                label = QLabel("Marker Size")
+                self.marker_size_edit = QLineEdit(str(self.marker_size))
+                self.marker_size_edit.setValidator(QtGui.QDoubleValidator(bottom=0))
+                self.marker_size_edit.textChanged.connect(self.marker_size_changed_cb)
+
+                hbox = QHBoxLayout()
+                hbox.addWidget(self.obsm_keys_combobox)
+                hbox.addWidget(label)
+                hbox.addWidget(self.marker_size_edit)
+
+                vbox.addLayout(hbox)
+                vbox.addWidget(self.dim_red_canvas)
+                right_side.setLayout(vbox)
+                splitter.addWidget(right_side)
+                vbox = QVBoxLayout()
+                vbox.addWidget(splitter)
+                break
+        
+        self.setLayout(vbox)
+
+        print("about to show edit window...")
+
+        self.hide()
+        self.show()
+
+    def create_dim_red_fig(self):
+        self.dim_red_fig = plt.figure()
+        self.dim_red_canvas = FigureCanvasQTAgg(self.dim_red_fig)
+        self.dim_red_canvas.setStyleSheet("background-color:transparent;")
+        plt.style.use('ggplot')
+
+        self.dim_red_ax = self.dim_red_fig.add_subplot(111, adjustable='box')
+        self.marker_size = 0.18844459036110225*np.sqrt(self.n_points)
+
+    def try_to_plot_dim_red(self, key_substring="umap"):
+        found, k, _ = self.biwt.search_adata_obsm_for(key_substring) # (was this found?, the key in adata.obsm, the value of adata.obsm[k])
+        if not found:
+            return False
+        self.plot_dim_red(k)
+        return True
+
+    def plot_dim_red(self, k):
+        v = self.biwt.adata.obsm[k]
+        self.n_points = len(v)
+        if self.dim_red_fig is None:
+            self.create_dim_red_fig()
+        
+        temp = pd.CategoricalIndex(self.biwt.cell_types_original)
+        self.scatter = self.dim_red_ax.scatter(v[:,0],v[:,1],self.marker_size,c=temp.codes) # 0.18844459036110225 = 5/sqrt(704) where I found 5 to be a good size when working with 704 points
+        scatter_objects, _ = self.scatter.legend_elements()
+        self.dim_red_fig.legend(scatter_objects, temp.categories,
+                    loc=8, title="Clusters",ncol=3, mode="expand")
+        self.dim_red_ax.set_title(f"{k} plot")
+        self.dim_red_ax.set_aspect(1.0)
+        self.dim_red_canvas.update()
+        self.dim_red_canvas.draw()
+
+    def set_cell_type_to_keep(self, cell_type, check_merge_gp=True):
+        self.biwt.cell_type_dict[cell_type] = cell_type
+        self.checkbox_dict_edit[cell_type].setEnabled(True)
+        self.checkbox_dict_edit[cell_type].setStyleSheet(self.checkbox_style["keep"])
+        if  check_merge_gp and ("\u21d2 Merge Gp. #" in self.checkbox_dict_edit[cell_type].text()):
+            # check for merge group that is no longer merging
+            gp_preimage = [ctn for ctn, new_name in self.biwt.cell_type_dict.items() if (ctn != cell_type and new_name == self.biwt.cell_type_dict[cell_type])] # get cell types that map into this merge group
+            if len(gp_preimage)==1: # then delete this merge gp:
+                # gp_preimage = [ctn for ctn in gp_preimage if ctn != cell_type]
+                self.set_cell_type_to_keep(gp_preimage[0], check_merge_gp=False)
+            elif cell_type == self.biwt.cell_type_dict[cell_type]: # make sure this current cell type did not set the merge group name
+                first_name = None
+                for ctn in gp_preimage:
+                    if first_name is None:
+                        first_name = ctn
+                    self.biwt.cell_type_dict[ctn] = first_name
+
+        self.biwt.cell_type_dict[cell_type] = cell_type
+        self.checkbox_dict_edit[cell_type].setText(cell_type)
+        self.keep_button[cell_type].setEnabled(False)
+
+    def keep_cb(self):
+        cell_type = self.sender().objectName()
+        self.set_cell_type_to_keep(cell_type)
+
+    def delete_cb(self):
+        for cell_type in self.checkbox_dict_edit.keys():
+            if self.checkbox_dict_edit[cell_type].isChecked():
+                self.biwt.cell_type_dict[cell_type] = None
+                self.checkbox_dict_edit[cell_type].setChecked(False)
+                self.checkbox_dict_edit[cell_type].setEnabled(False)
+                self.checkbox_dict_edit[cell_type].setStyleSheet(self.checkbox_style["delete"])
+
+                self.keep_button[cell_type].setEnabled(True)
+
+    def merge_cb(self):
+        self.merge_id += 1
+        first_name = None
+        for cell_type in self.checkbox_dict_edit.keys():
+            if self.checkbox_dict_edit[cell_type].isChecked():
+                if first_name is None:
+                    first_name = cell_type
+                self.biwt.cell_type_dict[cell_type] = first_name
+                self.checkbox_dict_edit[cell_type].setChecked(False)
+                self.checkbox_dict_edit[cell_type].setEnabled(False)
+                self.checkbox_dict_edit[cell_type].setStyleSheet(self.checkbox_style["merge"])
+                self.checkbox_dict_edit[cell_type].setText(f"{cell_type} \u21d2 Merge Gp. #{self.merge_id}")
+
+                self.keep_button[cell_type].setEnabled(True)
+
+    def marker_size_changed_cb(self, text):
+        if not self.marker_size_edit.hasAcceptableInput():
+            return
+        self.marker_size = float(text)
+        self.scatter.set_sizes(self.marker_size + np.zeros_like(self.scatter.get_sizes()))
+        # self.scatter.draw()
+        self.dim_red_canvas.update()
+        self.dim_red_canvas.draw()
+        # for scatter_plot in self.scatter[0]:
+        #     scatter_plot.set_sizes
+
+    def obsm_keys_combobox_changed_cb(self, idx):
+        key = self.obsm_keys_combobox.currentText()
+        self.dim_red_ax.cla()
+        self.try_to_plot_dim_red(key_substring=key)
+
+    def cell_type_toggled_cb(self):
+        checked_count = 0
+        enable_delete_button = False
+        enable_merge_button = False
+        for checkbox in self.checkbox_dict_edit.values():
+            checked_count += checkbox.isChecked()
+            if checked_count == 1:
+                enable_delete_button = True
+            if checked_count == 2:
+                enable_merge_button = True
+                break
+        self.delete_button.setEnabled(enable_delete_button)
+        self.merge_button.setEnabled(enable_merge_button)
+
+    def process_window(self):
+        self.biwt.continue_from_edit()
+
+class BioinfImportWindow_RenameCellTypes(BioinfImportWindow):
+    def __init__(self, bioinf_walkthrough):
+        super().__init__(bioinf_walkthrough)
+
+        print("------Renaming cell types------")
+        vbox = QVBoxLayout()
+        label = QLabel("Rename your chosen cell types if you like:")
+        vbox.addWidget(label)
+        labels = {}
+        self.new_name_line_edit = {}
+        vbox_scroll_area = QVBoxLayout()
+        for intermediate_type in self.biwt.intermediate_types:
+            hbox = QHBoxLayout()
+            label_text = ", ".join(self.biwt.intermediate_type_pre_image[intermediate_type])
+            label_text += " \u21d2 "
+            labels[intermediate_type] = QLabel(label_text)
+            self.new_name_line_edit[intermediate_type] = QLineEdit()
+            self.new_name_line_edit[intermediate_type].setText(self.biwt.intermediate_type_pre_image[intermediate_type][0])
+            hbox.addWidget(labels[intermediate_type])
+            hbox.addWidget(self.new_name_line_edit[intermediate_type])
+            vbox_scroll_area.addLayout(hbox)
+
+        widget_for_scroll_area = QWidget()
+        widget_for_scroll_area.setLayout(vbox_scroll_area)
+        self.cell_type_rename_scroll_area = QScrollArea()
+        self.cell_type_rename_scroll_area.setWidget(widget_for_scroll_area)
+
+        vbox.addWidget(self.cell_type_rename_scroll_area)
+
+        hbox = QHBoxLayout()
+        go_back_button = GoBackButton(self, self.biwt)
+        continue_button = ContinueButton(self, self.process_window)
+
+        hbox.addWidget(go_back_button)
+        hbox.addWidget(continue_button)
+
+        vbox.addLayout(hbox)
+
+        self.setLayout(vbox)
+
+    def process_window(self):
+        self.biwt.cell_types_list_final = []
+        for intermediate_type in self.biwt.intermediate_types:
+            self.biwt.cell_types_list_final.append(self.new_name_line_edit[intermediate_type].text())
+            for cell_type in self.biwt.intermediate_type_pre_image[intermediate_type]:
+                self.biwt.cell_type_dict[cell_type] = self.new_name_line_edit[intermediate_type].text()
+        self.biwt.continue_from_rename()
+
+class BioinfImportWindow_CellCounts(BioinfImportWindow):
+    def __init__(self, bioinf_walkthrough):
+        super().__init__(bioinf_walkthrough)
+        print("------Setting cell type counts------")
+        names_width = 100
+        counts_width = 120
+        props_width = 120
+        manual_width = 120
+        confluence_width = 150
+        
+        vbox = QVBoxLayout()
+
+        vbox.addWidget(QLabel("Set how many of each cell type to place. You may use the counts found in your data, or use proportions or confluence to scale these counts.\nYou may also set the counts manually; these values will track the others, allowing you to adjust from those baselines."))
+
+        vbox_cols = [QVBoxLayout() for i in range(5)]
+
+        label = QLabel("Cell Type")
+        label.setFixedWidth(names_width)
+        vbox_cols[0].addWidget(label)
+
+        self.counts_button_group = QButtonGroup()
+        self.counts_button_group.idToggled.connect(self.counts_button_cb)
+        counts_button_group_next_id = 0
+
+        self.use_counts_as_is_radio_button = QRadioButton("Use counts")
+        self.use_counts_as_is_radio_button.setFixedWidth(counts_width)
+        self.use_counts_as_is_radio_button.setChecked(True)
+        self.counts_button_group.addButton(self.use_counts_as_is_radio_button,counts_button_group_next_id)
+        counts_button_group_next_id += 1
+
+        self.use_props_radio_button = QRadioButton("Use proportions")
+        self.use_props_radio_button.setFixedWidth(props_width)
+        self.use_props_radio_button.setChecked(False)
+        self.counts_button_group.addButton(self.use_props_radio_button,counts_button_group_next_id)
+        counts_button_group_next_id += 1
+
+        self.use_confluence_radio_button = QRadioButton("Set confluence (%)")
+        self.use_confluence_radio_button.setFixedWidth(confluence_width)
+        self.use_confluence_radio_button.setChecked(False)
+        self.counts_button_group.addButton(self.use_confluence_radio_button,counts_button_group_next_id)
+        counts_button_group_next_id += 1
+
+        self.use_manual_radio_button = QRadioButton("Set manually")
+        self.use_manual_radio_button.setFixedWidth(manual_width)
+        self.use_manual_radio_button.setChecked(False)
+        self.counts_button_group.addButton(self.use_manual_radio_button,counts_button_group_next_id)
+        counts_button_group_next_id += 1
+
+        vbox_cols[1].addWidget(self.use_counts_as_is_radio_button)
+        vbox_cols[2].addWidget(self.use_props_radio_button)
+        vbox_cols[3].addWidget(self.use_confluence_radio_button)
+        vbox_cols[4].addWidget(self.use_manual_radio_button)
+
+        self.cell_type_props = [self.biwt.cell_counts[cell_type]/len(self.biwt.cell_types_final) for cell_type in self.biwt.cell_types_list_final]
+
+        self.type_prop = {}
+        self.type_manual = {}
+        self.type_confluence = {}
+
+        self.prop_box_callback_paused = False
+        self.conf_box_callback_paused = False
+
+        num_validator = QtGui.QIntValidator()
+        num_validator.setBottom(0)
+
+        self.setup_confluence_info()
+
+        for idx, cell_type in enumerate(self.biwt.cell_types_list_final):
+            hbox = QHBoxLayout()
+            label = QLabel(cell_type)
+            label.setFixedWidth(names_width)
+
+            type_count = QLineEdit(enabled=False)
+            type_count.setText(str(self.biwt.cell_counts[cell_type]))
+            type_count.setFixedWidth(counts_width)
+            type_count.setStyleSheet(self.biwt.qlineedit_style_sheet)
+
+            self.type_prop[cell_type] = QLineEdit(enabled=False)
+            self.type_prop[cell_type].setText(str(self.biwt.cell_counts[cell_type]))
+            self.type_prop[cell_type].setFixedWidth(props_width)
+            self.type_prop[cell_type].setStyleSheet(self.biwt.qlineedit_style_sheet)
+            self.type_prop[cell_type].setValidator(num_validator)
+            self.type_prop[cell_type].setObjectName(str(idx))
+            self.type_prop[cell_type].textChanged.connect(self.prop_box_changed_cb)
+
+            self.type_confluence[cell_type] = QLineEdit(enabled=False)
+            self.type_confluence[cell_type].setFixedWidth(confluence_width)
+            self.type_confluence[cell_type].setStyleSheet(self.biwt.qlineedit_style_sheet)
+            self.type_confluence[cell_type].setValidator(QtGui.QDoubleValidator(bottom=0))
+            self.type_confluence[cell_type].setObjectName(str(idx))
+            self.type_confluence[cell_type].textChanged.connect(self.confluence_box_changed_cb)
+
+            self.type_manual[cell_type] = QLineEdit(enabled=False)
+            self.type_manual[cell_type].setText(str(self.biwt.cell_counts[cell_type]))
+            self.type_manual[cell_type].setFixedWidth(manual_width)
+            self.type_manual[cell_type].setStyleSheet(self.biwt.qlineedit_style_sheet)
+            self.type_manual[cell_type].setValidator(num_validator)
+            self.type_manual[cell_type].setObjectName(str(idx))
+            self.type_manual[cell_type].textChanged.connect(self.manual_box_changed_cb)
+            
+            vbox_cols[0].addWidget(label)
+            vbox_cols[1].addWidget(type_count)
+            vbox_cols[2].addWidget(self.type_prop[cell_type])
+            vbox_cols[3].addWidget(self.type_confluence[cell_type])
+            vbox_cols[4].addWidget(self.type_manual[cell_type])
+
+        label = QLabel("Total")
+        label.setFixedWidth(names_width)
+
+        type_count = QLineEdit(enabled=False)
+        type_count.setText(str(len(self.biwt.cell_types_final)))
+        type_count.setFixedWidth(counts_width)
+        type_count.setStyleSheet(self.biwt.qlineedit_style_sheet)
+
+        self.total_prop = QLineEdit(enabled=False)
+        self.total_prop.setText(str(len(self.biwt.cell_types_final)))
+        self.total_prop.setFixedWidth(props_width)
+        self.total_prop.setStyleSheet(self.biwt.qlineedit_style_sheet)
+        self.total_prop.setValidator(num_validator)
+        self.total_prop.textChanged.connect(self.prop_box_changed_cb)
+        self.total_prop.setObjectName("total_prop")
+
+        self.total_conf = QLineEdit(enabled=False)
+        self.total_conf.setFixedWidth(confluence_width)
+        self.total_conf.setStyleSheet(self.biwt.qlineedit_style_sheet)
+        self.total_conf.setValidator(QtGui.QDoubleValidator(bottom=0))
+        self.total_conf.textChanged.connect(self.confluence_box_changed_cb)
+        self.total_conf.setObjectName("total_conf")
+
+        self.total_manual = QLineEdit(enabled=False)
+        self.total_manual.setText(str(len(self.biwt.cell_types_final)))
+        self.total_manual.setFixedWidth(manual_width)
+        self.total_manual.setStyleSheet(self.biwt.qlineedit_style_sheet)
+        self.total_manual.setValidator(num_validator)
+
+        self.total_conf.setText("100") # this triggers the cb, which sets the manual column (see below) so force a toggle next
+        self.use_manual_radio_button.setChecked(True) 
+        self.use_counts_as_is_radio_button.setChecked(True) 
+
+        vbox_cols[0].addWidget(label)
+        vbox_cols[1].addWidget(type_count)
+        vbox_cols[2].addWidget(self.total_prop)
+        vbox_cols[3].addWidget(self.total_conf)
+        vbox_cols[4].addWidget(self.total_manual)
+
+
+        hbox = QHBoxLayout()
+        for idx, vb in enumerate(vbox_cols):
+            hbox.addLayout(vb)
+            if idx != (len(vbox_cols)-1):
+                hbox.addWidget(QVLine())
+        vbox.addLayout(hbox)
+
+        hbox = QHBoxLayout()
+
+        go_back_to_rename = GoBackButton(self, self.biwt)
+        continue_to_cell_pos = ContinueButton(self, self.process_window)
+
+        hbox.addWidget(go_back_to_rename)
+        hbox.addWidget(continue_to_cell_pos)
+        
+        vbox.addLayout(hbox)
+
+        self.setLayout(vbox)
+
+    def setup_confluence_info(self):
+        # self.compute_cell_volumes()
+        volume_env = (float(self.biwt.config_tab.xmax.text()) - float(self.biwt.config_tab.xmin.text())) * (float(self.biwt.config_tab.ymax.text()) - float(self.biwt.config_tab.ymin.text()))
+        self.prop_total_area_one = {}
+        self.prop_dot_ratios = 0
+        for idx, cell_type in enumerate(self.biwt.cell_types_list_final):
+            self.prop_total_area_one[cell_type] = (((9*np.pi*self.biwt.cell_volume[cell_type]**2) / 16) ** (1./3)) / volume_env
+            self.prop_dot_ratios += (self.cell_type_props[idx] * self.prop_total_area_one[cell_type])
+
+    def prop_box_changed_cb(self, text):
+        if self.prop_box_callback_paused:
+            return
+        type_prop_sender = self.sender()
+        if type_prop_sender.hasAcceptableInput() is False:
+            return
+        current_name = type_prop_sender.objectName()
+        self.prop_box_callback_paused = True
+        if current_name=="total_prop":
+            mult = int(text)
+            self.total_manual.setText(text)
+        else:
+            mult = int(text) / self.cell_type_props[int(current_name)]
+            self.total_prop.setText(str(round(mult)))
+            self.total_manual.setText(str(round(mult)))
+
+        for idx, cell_type in enumerate(self.biwt.cell_types_list_final):
+            if current_name==str(idx):
+                continue
+            self.type_prop[cell_type].setText(str(round(mult * self.cell_type_props[idx])))
+            self.type_manual[cell_type].setText(str(round(mult * self.cell_type_props[idx])))
+        self.prop_box_callback_paused = False
+
+    def confluence_box_changed_cb(self, text):
+        if self.conf_box_callback_paused:
+            return
+        type_conf_sender = self.sender()
+        if type_conf_sender.hasAcceptableInput() is False:
+            return
+        current_name = type_conf_sender.objectName()
+        self.conf_box_callback_paused = True
+        current_conf = float(text)
+        if current_name=="total_conf":
+            mult = current_conf
+            mult /= self.prop_dot_ratios
+        else:
+            current_idx = int(current_name)
+            mult = current_conf
+            mult /= self.prop_total_area_one[self.biwt.cell_types_list_final[current_idx]]
+            mult /= self.cell_type_props[current_idx]
+
+        total_conf = 0
+        for idx, cell_type in enumerate(self.biwt.cell_types_list_final):
+            if current_name==str(idx):
+                total_conf += current_conf
+                continue
+            new_conf = mult * self.cell_type_props[idx] * self.prop_total_area_one[cell_type]
+            total_conf += new_conf
+            self.type_confluence[cell_type].setText(str(new_conf))
+        if current_name!="total_conf":
+            self.total_conf.setText(str(total_conf))
+        counts, total = self.convert_confluence_to_counts()
+        for cell_type, n in counts.items():
+            self.type_manual[cell_type].setText(str(n))
+        self.total_manual.setText(str(total))
+        
+        if total_conf > 100:
+            self.total_conf.setStyleSheet("QLineEdit {background-color : red; color : black;}")
+        else:
+            self.total_conf.setStyleSheet(self.biwt.qlineedit_style_sheet)
+            
+        self.conf_box_callback_paused = False
+        
+    def manual_box_changed_cb(self, text):
+        total_count = 0
+        for qle in self.type_manual.values():
+            total_count += int(qle.text())
+        self.total_manual.setText(str(total_count))
+
+    def counts_button_cb(self, id):
+        enable_props = id==1
+        enable_confluence = id==2
+        enable_manual = id==3
+
+        current_values = {}
+
+        if id==0:
+            current_values = self.biwt.cell_counts
+            current_total = len(self.biwt.cell_types_final)
+
+        for qw in self.type_prop.values():
+            qw.setEnabled(enable_props)
+        self.total_prop.setEnabled(enable_props)
+        if enable_props:
+            for k, qw in self.type_prop.items():
+                current_values[k] = qw.text()
+            current_total = self.total_prop.text()
+        
+        for qw in self.type_confluence.values():
+            qw.setEnabled(enable_confluence)
+        self.total_conf.setEnabled(enable_confluence)
+        if enable_confluence and float(self.total_conf.text()) > 100:
+            self.total_conf.setStyleSheet("QLineEdit {background-color : red; color : black;}")
+        else:
+            self.total_conf.setStyleSheet(self.biwt.qlineedit_style_sheet)
+        if enable_confluence:
+            current_values, current_total = self.convert_confluence_to_counts()
+        
+        for qw in self.type_manual.values():
+            qw.setEnabled(enable_manual)
+        if not enable_manual:
+            for k, qw in self.type_manual.items():
+                qw.setText(str(current_values[k]))
+            self.total_manual.setText(str(current_total))
+
+    def convert_confluence_to_counts(self):
+        total = 0
+        counts = {}
+        for cell_type in self.biwt.cell_types_list_final:
+            n = round(0.01 * float(self.type_confluence[cell_type].text()) / self.prop_total_area_one[cell_type])
+            counts[cell_type] = n
+            total += n
+        return counts, total
+
+    def process_window(self):
+        id = self.counts_button_group.checkedId()
+        if id==1: # use props found in data file
+            for cell_type in self.biwt.cell_types_list_final:
+                self.biwt.cell_counts[cell_type] = int(self.type_prop[cell_type].text())
+        elif id==2: # set by confluence
+            self.biwt.cell_counts = self.convert_confluence_to_counts()
+        elif id==3: # manually set
+            for cell_type in self.biwt.cell_types_list_final:
+                self.biwt.cell_counts[cell_type] = int(self.type_manual[cell_type].text())
+        self.biwt.continue_from_counts()
+
+class BioinfImportWindow_PositionsWindow(BioinfImportWindow):
+    def __init__(self, bioinf_walkthrough):
+        super().__init__(bioinf_walkthrough)
+        print("------Setting cell type positions------")
+
+        self.ics_plot_area = None
+        self.create_cell_type_scroll_area()
+        self.create_pos_scroll_area()
+
+        splitter = QSplitter()
+        splitter.addWidget(self.cell_type_scroll_area)
+        splitter.addWidget(self.pos_scroll_area)
+
+        vbox = QVBoxLayout()
+        vbox.addWidget(splitter)
+
+        top_area = QWidget()
+        top_area.setLayout(vbox)
+
+        splitter = QSplitter(QtCore.Qt.Vertical)
+        splitter.addWidget(top_area)
+        self.ics_plot_area = BioinfImportPlotWindow(self, self.biwt, self.biwt.config_tab)
+        self.plot_scroll_area = QScrollArea()
+        self.plot_scroll_area.setWidget(self.ics_plot_area)
+        splitter.addWidget(self.plot_scroll_area)
+
+        vbox = QVBoxLayout()
+        vbox.addWidget(splitter)
+
+        go_back_button = GoBackButton(self, self.biwt)
+        self.continue_to_write_button = ContinueButton(self, self.process_window, styleSheet=self.biwt.qpushbutton_style_sheet)
+        self.continue_to_write_button.setEnabled(False)
+
+        hbox_write = QHBoxLayout()
+        hbox_write.addWidget(go_back_button)
+        hbox_write.addWidget(self.continue_to_write_button)
+
+        vbox.addLayout(hbox_write)
+
+        self.setLayout(vbox)
+     
+    def create_cell_type_scroll_area(self):
+        vbox_main = QVBoxLayout()
+        label = QLabel("Select cell type(s) to place.\nGreyed out cell types have already been placed.")
+        vbox_main.addWidget(label)
+
+        hbox_mid = QHBoxLayout()
+        vbox_mid_checkboxes = QVBoxLayout()
+        self.cell_type_button_group = QButtonGroup(exclusive=False)
+        self.cell_type_button_group.buttonClicked.connect(self.cell_type_button_group_cb)
+        self.checkbox_dict = create_checkboxes_for_cell_types(vbox_mid_checkboxes, self.biwt.cell_types_list_final)
+        self.undo_button = {}
+        for cbd in self.checkbox_dict.values():
+            self.cell_type_button_group.addButton(cbd)
+        vbox_mid_undos = QVBoxLayout()
+        for cell_type in self.biwt.cell_types_list_final:
+            self.undo_button[cell_type] = QPushButton("Undo",enabled=False,styleSheet=self.biwt.qpushbutton_style_sheet,objectName=cell_type)
+            self.undo_button[cell_type].clicked.connect(self.undo_button_cb)
+            vbox_mid_undos.addWidget(self.undo_button[cell_type])
+        
+        hbox_mid.addLayout(vbox_mid_checkboxes)
+        hbox_mid.addLayout(vbox_mid_undos)
+
+        vbox_main.addLayout(hbox_mid)
+
+        self.select_all_button = QPushButton("Select remaining",styleSheet=self.biwt.qpushbutton_style_sheet)
+        self.select_all_button.clicked.connect(self.select_all_button_cb)
+        
+        self.deselect_all_button = QPushButton("Unselect all",styleSheet=self.biwt.qpushbutton_style_sheet)
+        self.deselect_all_button.clicked.connect(self.deselect_all_button_cb)
+        hbox = QHBoxLayout()
+        hbox.addWidget(self.select_all_button)
+        hbox.addWidget(self.deselect_all_button)
+        
+        vbox_main.addLayout(hbox)
+
+        cell_type_scroll_area_widget = QWidget()
+        cell_type_scroll_area_widget.setLayout(vbox_main)
+
+        self.cell_type_scroll_area = QScrollArea()
+        self.cell_type_scroll_area.setWidget(cell_type_scroll_area_widget)
+ 
+    def create_pos_scroll_area(self):
+        self.spatial_plotter_id = None
+        self.cell_pos_button_group = QButtonGroup()
+        self.cell_pos_button_group.setExclusive(True)
+        self.cell_pos_button_group.idToggled.connect(self.cell_pos_button_group_cb)
+        next_button_id = 0
+        
+        button_width = 250
+        button_height = 250
+        icon_width = round(0.8 * button_width)
+        icon_height = round(0.8 * button_height)
+        master_vbox = QVBoxLayout()
+
+        qpushbutton_style_sheet = """
+            QPushButton {
+                background-color : lightblue;
+                color : black;
+            }
+            QPushButton::unchecked {
+                background-color : lightblue;
+            }
+            QPushButton::checked {
+                background-color : black;
+            }
+            """
+
+        label = QLabel("Select an plotter to place the selected cell types:")
+        label.setAlignment(QtCore.Qt.AlignLeft)
+
+        master_vbox.addWidget(label)
+
+        # grid_layout = QHBoxLayout()
+        grid_layout = QGridLayout()
+        rI = 0
+        cI = 0
+        cmax = 1
+        icon_size = QtCore.QSize(icon_width, icon_height) 
+            
+        vbox = QVBoxLayout()
+        full_rectangle_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/scatter_square.svg"), iconSize=icon_size, checkable=True, checked=(not self.biwt.use_spatial_data))
+        full_rectangle_button.setFixedSize(button_width,button_height)
+        full_rectangle_button.setStyleSheet(qpushbutton_style_sheet) 
+        self.cell_pos_button_group.addButton(full_rectangle_button,next_button_id)
+        next_button_id += 1
+        vbox.addWidget(full_rectangle_button)
+
+        label = QLabel("Everywhere")
+        label.setFixedWidth(button_width)
+        label.setAlignment(QtCore.Qt.AlignCenter)
+        vbox.addWidget(label)
+
+        grid_layout.addLayout(vbox,rI,cI,1,1)
+        rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
+            
+        vbox = QVBoxLayout()
+        partial_rectangle_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/rectangle.svg"), iconSize=icon_size, checkable=True, checked=False)
+        partial_rectangle_button.setFixedSize(button_width,button_height)
+        partial_rectangle_button.setStyleSheet(qpushbutton_style_sheet) 
+        self.cell_pos_button_group.addButton(partial_rectangle_button,next_button_id)
+        next_button_id += 1
+        vbox.addWidget(partial_rectangle_button)
+
+        label = QLabel("Rectangle")
+        label.setFixedWidth(button_width)
+        label.setAlignment(QtCore.Qt.AlignCenter)
+        vbox.addWidget(label)
+
+        grid_layout.addLayout(vbox,rI,cI,1,1)
+        rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
+
+        vbox = QVBoxLayout()
+        disc_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/disc.svg"), iconSize=icon_size, checkable=True, checked=False)
+        disc_button.setFixedSize(button_width,button_height)
+        disc_button.setStyleSheet(qpushbutton_style_sheet) 
+        self.cell_pos_button_group.addButton(disc_button,next_button_id)
+        next_button_id += 1
+        vbox.addWidget(disc_button)
+
+        label = QLabel("Disc")
+        label.setFixedWidth(button_width)
+        label.setAlignment(QtCore.Qt.AlignCenter)
+        vbox.addWidget(label)
+
+        grid_layout.addLayout(vbox,rI,cI,1,1)
+        rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
+
+        vbox = QVBoxLayout()
+        annulus_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/annulus.svg"), iconSize=icon_size, checkable=True, checked=False)
+        annulus_button.setFixedSize(button_width,button_height)
+        annulus_button.setStyleSheet(qpushbutton_style_sheet) 
+        self.cell_pos_button_group.addButton(annulus_button,next_button_id)
+        next_button_id += 1
+        vbox.addWidget(annulus_button)
+
+        label = QLabel("Annulus")
+        label.setFixedWidth(button_width)
+        label.setAlignment(QtCore.Qt.AlignCenter)
+        vbox.addWidget(label)
+
+        grid_layout.addLayout(vbox,rI,cI,1,1)
+        rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
+
+        vbox = QVBoxLayout()
+        wedge_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/wedge.svg"), iconSize=icon_size, checkable=True, checked=False)
+        wedge_button.setFixedSize(button_width,button_height)
+        wedge_button.setStyleSheet(qpushbutton_style_sheet) 
+        self.cell_pos_button_group.addButton(wedge_button,next_button_id)
+        next_button_id += 1
+        vbox.addWidget(wedge_button)
+
+        label = QLabel("Wedge")
+        label.setFixedWidth(button_width)
+        label.setAlignment(QtCore.Qt.AlignCenter)
+        vbox.addWidget(label)
+
+        grid_layout.addLayout(vbox,rI,cI,1,1)
+        rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
+
+        vbox = QVBoxLayout()
+        rainbow_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/rainbow.svg"),enabled=False, iconSize=icon_size, checkable=True, checked=False) # not ready for this yet
+        rainbow_button.setFixedSize(button_width,button_height)
+        rainbow_button.setStyleSheet(qpushbutton_style_sheet) 
+        self.cell_pos_button_group.addButton(rainbow_button,next_button_id)
+        next_button_id += 1
+        vbox.addWidget(rainbow_button)
+
+        label = QLabel("Rainbow\n(why not?!)\nWork in progess...")
+        label.setFixedWidth(button_width)
+        label.setAlignment(QtCore.Qt.AlignCenter)
+        vbox.addWidget(label)
+
+        grid_layout.addLayout(vbox,rI,cI,1,1)
+        rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
+        if self.biwt.use_spatial_data:
+            self.spatial_plotter_id = next_button_id
+            vbox = QVBoxLayout()
+            spatial_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/spatial.png"), enabled=True, checkable=True, iconSize=icon_size)
+            spatial_button.setFixedSize(button_width,button_height)
+            spatial_button.setStyleSheet(qpushbutton_style_sheet) 
+            spatial_button.toggled.connect(self.spatial_button_cb)
+            spatial_button.setChecked(True)
+            self.cell_pos_button_group.addButton(spatial_button,next_button_id)
+            next_button_id += 1
+            vbox.addWidget(spatial_button)
+
+            label = QLabel("Spatial Plotter")
+            label.setFixedWidth(button_width)
+            label.setAlignment(QtCore.Qt.AlignCenter)
+            vbox.addWidget(label)
+
+            grid_layout.addLayout(vbox,rI,cI,1,1)
+            rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
+
+        master_vbox.addLayout(grid_layout)
+
+        pos_scroll_area_widget = QWidget()
+        pos_scroll_area_widget.setLayout(master_vbox)
+
+        self.pos_scroll_area = QScrollArea()
+        self.pos_scroll_area.setWidget(pos_scroll_area_widget)
+
+    def cell_pos_button_group_cb(self):
+        if self.ics_plot_area:
+            self.ics_plot_area.sync_par_area()
+        if self.biwt.use_spatial_data:
+            self.ics_plot_area.num_box.setEnabled(self.cell_pos_button_group.checkedId()==6) # only enable for spatial plotter
+         
+    def spatial_button_cb(self, checked):
+        if not checked:
+            return
+        for cbd in self.checkbox_dict.values():
+            if cbd.isEnabled():
+                cbd.setChecked(True)
+
+    def is_any_cell_type_button_group_checked(self):
+        bval = self.cell_type_button_group.checkedButton() is not None
+        return bval
+
+    def cell_type_button_group_cb(self):
+        bval = self.is_any_cell_type_button_group_checked()
+        if bval:
+            # The plot is created and at least one is checked. See if the parameters are ready
+            self.ics_plot_area.sync_par_area() # this call is overkill, I just want to see if the parameters call for the Plot button being enabled
+        else:
+            self.ics_plot_area.plot_cells_button.setEnabled(False)
+
+    def select_all_button_cb(self):
+        for cbd in self.checkbox_dict.values():
+            if cbd.isEnabled():
+                cbd.setChecked(True)
+        bval = self.is_any_cell_type_button_group_checked()
+        if self.ics_plot_area:
+            self.ics_plot_area.plot_cells_button.setEnabled(bval)
+    
+    def deselect_all_button_cb(self):
+        for cbd in self.checkbox_dict.values():
+            if cbd.isEnabled():
+                cbd.setChecked(False)
+        if self.ics_plot_area:
+            self.ics_plot_area.plot_cells_button.setEnabled(False)
+
+    def undo_button_cb(self):
+        undone_cell_type = self.sender().objectName()
+        self.biwt.csv_array[undone_cell_type] = np.empty((0,3))
+        self.ics_plot_area.ax0.cla()
+        self.ics_plot_area.format_axis()
+        for cell_type in self.biwt.csv_array.keys():
+            sz = np.sqrt(self.ics_plot_area.cell_type_micron2_area_dict[cell_type] / np.pi)
+            self.ics_plot_area.circles(self.biwt.csv_array[cell_type], s=sz, color=self.ics_plot_area.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.ics_plot_area.alpha_value)
+
+        self.ics_plot_area.sync_par_area() # easy way to redraw the patch for current plotting
+        
+        self.checkbox_dict[undone_cell_type].setEnabled(True)
+        self.checkbox_dict[undone_cell_type].setChecked(False)
+        self.undo_button[undone_cell_type].setEnabled(False)
+        self.continue_to_write_button.setEnabled(False)
+        # self.finish_write_button.setEnabled(False)
+        # self.finish_append_button.setEnabled(False)
+
+    def process_window(self):
+        self.biwt.continue_from_positions()
+        
 class BioinfImportWindow_WritePositions(BioinfImportWindow):
     def __init__(self, bioinf_walkthrough):
-        super().__init__()
-        self.biwt = bioinf_walkthrough
+        super().__init__(bioinf_walkthrough)
 
         vbox = QVBoxLayout()
         
@@ -128,7 +1096,7 @@ class BioinfImportWindow_WritePositions(BioinfImportWindow):
 
         hbox = QHBoxLayout()
         hbox.addWidget(GoBackButton(self, self.biwt))
-        hbox.addWidget(ContinueButton(self, self.biwt.close_up))
+        hbox.addWidget(ContinueButton(self, self.process_window, text="Finish"))
 
         vbox.addLayout(hbox)
         self.setLayout(vbox)
@@ -171,22 +1139,27 @@ class BioinfImportWindow_WritePositions(BioinfImportWindow):
 
     def add_cell_positions_to_file(self):
         with open(self.full_fname, 'a') as f:
-            for cell_type in self.biwt.ics_plot_area.csv_array.keys():
-                for pos in self.biwt.ics_plot_area.csv_array[cell_type]:
+            for cell_type in self.biwt.csv_array.keys():
+                for pos in self.biwt.csv_array[cell_type]:
                     f.write(f'{pos[0]},{pos[1]},{pos[2]},{cell_type}\n')
 
+    def process_window(self):
+        self.biwt.full_fname = self.full_fname
+        self.biwt.close_up()
+
 class BioinfImportPlotWindow(QWidget):
-    def __init__(self, bioinf_walkthrough, config_tab):
+    def __init__(self, positions_window, bioinf_walkthrough, config_tab):
         super().__init__()
+        self.pw = positions_window
         self.biwt = bioinf_walkthrough
         self.config_tab = config_tab
 
         self.setup_system_keys()
 
         self.preview_patch = None
-        self.csv_array = {}
+        self.biwt.csv_array = {}
         for cell_type in self.biwt.cell_types_list_final:
-            self.csv_array[cell_type] = np.empty((0,3))
+            self.biwt.csv_array[cell_type] = np.empty((0,3))
 
         self.alpha_value = 1.0
         value = ['gray','red','yellow','green','blue','magenta','orange','lime','cyan','hotpink','peachpuff','darkseagreen','lightskyblue']
@@ -394,7 +1367,7 @@ class BioinfImportPlotWindow(QWidget):
             self.sender().setCursorPosition(0)
 
     def append_to_history(self):
-        id = self.biwt.cell_pos_button_group.checkedId()
+        id = self.pw.cell_pos_button_group.checkedId()
         if self.patch_history_idx[id] < len(self.patch_history[id])-1:
             # then we are in the middle of the history, delete the future events from here on
             del self.patch_history[id][self.patch_history_idx[id]+1:]
@@ -412,7 +1385,8 @@ class BioinfImportPlotWindow(QWidget):
             self.canvas.mpl_disconnect(cid) # might throw error if none exist...
         self.mpl_cid = []
 
-        if self.biwt.cell_pos_button_group.checkedId()==0:
+        id = self.pw.cell_pos_button_group.checkedId()
+        if id==0:
             for pt in self.par_text:
                 pt.setEnabled(False)
             for pl in self.par_label:
@@ -421,7 +1395,6 @@ class BioinfImportPlotWindow(QWidget):
         
         else: # set callbacks common to all
             self.mpl_cid.append(self.canvas.mpl_connect("button_release_event", self.mouse_released_cb)) # only appending to history on release; the motion doesn't add to history because it holds focus and so editingFinished signal not emitted while canvas holds focus
-            id = self.biwt.cell_pos_button_group.checkedId()
             if id==1:
                 self.par_label[0].setText("x0")
                 self.par_label[1].setText("y0")
@@ -507,7 +1480,7 @@ class BioinfImportPlotWindow(QWidget):
         else:
             self.preview_patch.set_bounds(self.plot_xmin,self.plot_ymin,self.plot_dx,self.plot_dy)
 
-        self.plot_cells_button.setEnabled(self.biwt.is_any_cell_type_button_group_checked())
+        self.plot_cells_button.setEnabled(self.pw.is_any_cell_type_button_group_checked())
 
         self.canvas.update()
         self.canvas.draw()
@@ -704,7 +1677,7 @@ class BioinfImportPlotWindow(QWidget):
         # check left edge of rect is left of right edge of domain, right edge of rect is right of left edge of domain (similar in y direction)
         bval = (x0 < self.plot_xmax) and (x0+width > self.plot_xmin) and (y0 < self.plot_ymax) and (y0+height > self.plot_ymin) # make sure the rectangle intersects the domain with positive area
 
-        self.plot_cells_button.setEnabled(bval and self.biwt.is_any_cell_type_button_group_checked())
+        self.plot_cells_button.setEnabled(bval and self.pw.is_any_cell_type_button_group_checked())
 
         self.canvas.update()
         self.canvas.draw()
@@ -723,7 +1696,7 @@ class BioinfImportPlotWindow(QWidget):
         r2 = self.get_distance2_to_domain(x0, y0)[0]
         bval = r2 < r*r # make sure the distance from center of Circle to domain is less than radius of circle
         
-        self.plot_cells_button.setEnabled(bval and self.biwt.is_any_cell_type_button_group_checked())
+        self.plot_cells_button.setEnabled(bval and self.pw.is_any_cell_type_button_group_checked())
         self.canvas.update()
         self.canvas.draw()
 
@@ -763,7 +1736,7 @@ class BioinfImportPlotWindow(QWidget):
         # inner_radius_does_not_contain_entire_domain = cr2 > r0*r0
         bval = (r2 < r1*r1) and (cr2 > r0*r0)
 
-        self.plot_cells_button.setEnabled(bval and self.biwt.is_any_cell_type_button_group_checked())
+        self.plot_cells_button.setEnabled(bval and self.pw.is_any_cell_type_button_group_checked())
 
         width = r1-r0
         try:
@@ -817,7 +1790,7 @@ class BioinfImportPlotWindow(QWidget):
 
         bval = bval and self.wedge_in_domain(x0,y0,r0,r1,th1,th2,dx,dy,r2)
 
-        self.plot_cells_button.setEnabled(bval and self.biwt.is_any_cell_type_button_group_checked())
+        self.plot_cells_button.setEnabled(bval and self.pw.is_any_cell_type_button_group_checked())
 
         if self.preview_patch is None:
             self.preview_patch = self.ax0.add_patch(Wedge((x0,y0),r1,th1,th2,width=r1-r0,alpha=0.2))
@@ -1034,17 +2007,6 @@ class BioinfImportPlotWindow(QWidget):
         x0, y0, width, height = self.current_pars
         if self.preview_patch is None:
             print(f"----initializing spatial plotter-----")
-            # dx, dy = self.ax0.transData.transform((1,1))-self.ax0.transData.transform((0,0)) # # pixels/ micron
-            # self.area_scale_factor = dx*dy
-            # self.fudge_factor = 1.258199089131739 # empirically-defined value to multiply area (in pts) to represent true area in microns on plot
-            # area_microns2 = [(((9*np.pi*V**2) / 16) ** (1./3)) for V in self.biwt.cell_volume.values()]
-            # areas = [self.fudge_factor * self.area_scale_factor * 72*72/(self.figure.dpi**2)*A  for A in area_microns2] # area in pts
-            # self.cell_type_area_dict = dict(zip(self.biwt.cell_volume.keys(),areas))
-            # self.scatter_sizes = [self.cell_type_area_dict[ctn] for ctn in self.biwt.cell_types_final]
-            # self.preview_patch = self.ax0.scatter([],[], 10, 'b')
-            # offset = self.spatial_base_coords * [width, height] + [x0,y0]
-            # self.preview_patch.set_offsets(offset)
-            # self.preview_patch.set_sizes(self.scatter_sizes)#, dpi=self.figure.dpi)
             self.initial_x0 = x0
             self.initial_y0 = y0
             self.initial_width = width
@@ -1055,19 +2017,12 @@ class BioinfImportPlotWindow(QWidget):
         else:
             print(f"----updating spatial plotter-----")
             offset = self.initial_offsets + (self.spatial_base_coords * [width-self.initial_width, height-self.initial_height] + [x0-self.initial_x0,y0-self.initial_y0])
-            # dx, dy = self.ax0.transData.transform((1,1))-self.ax0.transData.transform((0,0)) # # pixels/ micron
-            # self.area_scale_factor = dx*dy
-            # areas = [self.fudge_factor * self.area_scale_factor* 72*72/(self.figure.dpi**2)*(((9*np.pi*V**2) / 16) ** (1./3))  for V in self.biwt.cell_volume.values()] 
-            # self.cell_type_area_dict = dict(zip(self.biwt.cell_volume.keys(),areas))
-            # self.scatter_sizes = [self.cell_type_area_dict[ctn] for ctn in self.biwt.cell_types_final]
-            # self.preview_patch.set_sizes(self.scatter_sizes)#, dpi=self.figure.dpi)
             self.preview_patch.set_offsets(offset)
-            # self.preview_patch.set_alpha(self.alpha_value)
 
         # check left edge of rect is left of right edge of domain, right edge of rect is right of left edge of domain (similar in y direction)
         bval = (x0 < self.plot_xmax) and (x0+width > self.plot_xmin) and (y0 < self.plot_ymax) and (y0+height > self.plot_ymin) # make sure the rectangle intersects the domain with positive area
 
-        self.plot_cells_button.setEnabled(bval and self.biwt.is_any_cell_type_button_group_checked())
+        self.plot_cells_button.setEnabled(bval and self.pw.is_any_cell_type_button_group_checked())
 
         self.canvas.update()
         self.canvas.draw()
@@ -1114,7 +2069,7 @@ class BioinfImportPlotWindow(QWidget):
     def canvas_key_press(self, event):
         modifiers = QApplication.keyboardModifiers()
             
-        id = self.biwt.cell_pos_button_group.checkedId()
+        id = self.pw.cell_pos_button_group.checkedId()
         if id==0 or (event.key() != QtCore.Qt.Key_Z):
             return # nothing to do with everywhere plotter or if not z pressed
         elif modifiers == QtCore.Qt.ControlModifier:
@@ -1135,20 +2090,18 @@ class BioinfImportPlotWindow(QWidget):
 
     def plot_cell_pos(self):
         self.preview_constrained_to_axes = False
-        if self.biwt.cell_pos_button_group.checkedId()==self.biwt.spatial_plotter_id:
+        if self.pw.cell_pos_button_group.checkedId()==self.pw.spatial_plotter_id:
             x0, y0, width, height = self.current_pars
-            # corners = [[x0,y0],[x0+width,y0+height]]
-            # x0, y0, width, height = self.constrain_corners(corners)
             n_per_spot = self.num_box.value()
-            for cell_type in self.biwt.checkbox_dict.keys():
-                if self.biwt.checkbox_dict[cell_type].isChecked():
+            for cell_type in self.pw.checkbox_dict.keys():
+                if self.pw.checkbox_dict[cell_type].isChecked():
                     idx_cell_type = [ctn==cell_type for ctn in self.biwt.cell_types_final]
                     cell_radius = np.sqrt(self.cell_type_micron2_area_dict[cell_type] / np.pi)
                     cell_coords = np.hstack((self.spatial_base_coords[idx_cell_type] * [width, height] + [x0,y0],np.zeros((sum(idx_cell_type),1))))
                     idx_inbounds = [(cc[0]>=self.plot_xmin and cc[0]<=self.plot_xmax and cc[1]>=self.plot_ymin and cc[1]<=self.plot_ymax) for cc in cell_coords]
                     cell_coords = cell_coords[idx_inbounds,:]
                     if n_per_spot==1:
-                        self.csv_array[cell_type] = np.vstack((self.csv_array[cell_type],cell_coords))
+                        self.biwt.csv_array[cell_type] = np.vstack((self.biwt.csv_array[cell_type],cell_coords))
                         self.circles(cell_coords, s=cell_radius, color=self.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
                     else:
                         r = cell_radius * np.sqrt(n_per_spot)
@@ -1156,27 +2109,25 @@ class BioinfImportPlotWindow(QWidget):
                         for cc in cell_coords:
                             self.wedge_sample(n_per_spot, cc[0], cc[1], r)
                             all_new = np.vstack((all_new,self.new_pos))
-                        self.csv_array[cell_type] = np.vstack((self.csv_array[cell_type],all_new))
+                        self.biwt.csv_array[cell_type] = np.vstack((self.biwt.csv_array[cell_type],all_new))
                         self.circles(all_new, s=cell_radius, color=self.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
-                    self.biwt.checkbox_dict[cell_type].setEnabled(False)
-                    self.biwt.checkbox_dict[cell_type].setChecked(False)
-                    self.biwt.undo_button[cell_type].setEnabled(True)
+                    self.pw.checkbox_dict[cell_type].setEnabled(False)
+                    self.pw.checkbox_dict[cell_type].setChecked(False)
+                    self.pw.undo_button[cell_type].setEnabled(True)
         else:
-            for ctn in self.biwt.checkbox_dict.keys():
-                if self.biwt.checkbox_dict[ctn].isChecked():
+            for ctn in self.pw.checkbox_dict.keys():
+                if self.pw.checkbox_dict[ctn].isChecked():
                     self.plot_cell_pos_single(ctn)
         self.canvas.update()
         self.canvas.draw()
 
         self.plot_cells_button.setEnabled(False)
 
-        for b in self.biwt.checkbox_dict.values():
+        for b in self.pw.checkbox_dict.values():
             if b.isEnabled() is True:
                 return
         # If control passes here, then all the buttons are disabled and the plotting is done
-        # self.biwt.finish_write_button.setEnabled(True)
-        # self.biwt.finish_append_button.setEnabled(True)
-        self.biwt.continue_to_write_button.setEnabled(True)
+        self.pw.continue_to_write_button.setEnabled(True)
 
     def max_dist_to_domain(self,x0,y0):
         xL, xR, yL, yR = [self.plot_xmin, self.plot_xmax, self.plot_ymin, self.plot_ymax]
@@ -1189,7 +2140,6 @@ class BioinfImportPlotWindow(QWidget):
             return
         x0, y0, width, height = self.constrain_corners(self.preview_patch.get_corners()[[0,2]])
         self.preview_patch.set_bounds(x0, y0, width, height)
-        # self.preview_patch.set_bounds(corners[0,0],corners[0,1],corners[1,0]-corners[0,0],corners[1,1]-corners[0,1])
         self.preview_constrained_to_axes = True
         
     def constrain_corners(self, corners):
@@ -1249,13 +2199,13 @@ class BioinfImportPlotWindow(QWidget):
             self.wedge_sample(N, x0, y0, r1, r0=r0, th_lim=(th1*0.017453292519943,th2*0.017453292519943))
         else:
             print("unknown patch")
-        self.csv_array[cell_type] = np.append(self.csv_array[cell_type],self.new_pos,axis=0)
+        self.biwt.csv_array[cell_type] = np.append(self.biwt.csv_array[cell_type],self.new_pos,axis=0)
 
         self.circles(self.new_pos, s=8., color=self.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
 
-        self.biwt.checkbox_dict[cell_type].setEnabled(False)
-        self.biwt.checkbox_dict[cell_type].setChecked(False)
-        self.biwt.undo_button[cell_type].setEnabled(True)
+        self.pw.checkbox_dict[cell_type].setEnabled(False)
+        self.pw.checkbox_dict[cell_type].setChecked(False)
+        self.pw.undo_button[cell_type].setEnabled(True)
 
     def wedge_sample(self,N,x0,y0,r1, r0=0.0, th_lim=(0,2*np.pi)):
         i_start = 0
@@ -1352,73 +2302,6 @@ class BioinfImportPlotWindow(QWidget):
         self.hide() # this will work for now, but maybe a better way to handle closing the window?
         pass
 
-    # def finish_write_button_cb(self):
-    #     self.check_for_new_celldefs()
-    #     self.set_file_name()
-    #     with open(self.full_fname, 'w') as f:
-    #         f.write('x,y,z,type\n')
-    #     self.add_cell_positions_to_file()
-
-    # def finish_append_button_cb(self):
-    #     self.check_for_new_celldefs()
-    #     self.set_file_name()
-    #     with open(self.full_fname, 'r') as f:
-    #         first_line = f.readline()
-    #         if "x,y,z,type" not in first_line:
-    #             print(f"{self.full_fname} is not properly formatted for appending.\nIt needs to start with 'x,y,z,type,...'")
-    #             return
-    #     self.add_cell_positions_to_file()
-
-    # def check_for_new_celldefs(self):
-    #     for cell_type in self.biwt.cell_types_list_final:
-    #         if cell_type in self.biwt.celldef_tab.celltypes_list:
-    #             print(f"BioinfImportPlotWindow: {cell_type} found in current list of cell types. Not appending this...")
-    #         else:
-    #             self.biwt.celldef_tab.new_cell_def_named(cell_type)
-
-    # def set_file_name(self):
-    #     dir_name = self.biwt.csv_folder.text()
-    #     if len(dir_name) > 0 and not os.path.isdir(dir_name):
-    #         os.makedirs(dir_name)
-    #         time.sleep(1)
-    #     self.full_fname = os.path.join(dir_name,self.biwt.csv_file.text())
-    #     Path(self.full_fname).touch() # make sure the file exists
-    #     print("save_cb(): self.full_fname=",self.full_fname)
-
-    # def add_cell_positions_to_file(self):
-    #     with open(self.full_fname, 'a') as f:
-    #         for cell_type in self.csv_array.keys():
-    #             for pos in self.csv_array[cell_type]:
-    #                 f.write(f'{pos[0]},{pos[1]},{pos[2]},{cell_type}\n')
-
-class QCheckBox_custom(QCheckBox):  # it's insane to have to do this!
-    def __init__(self,name):
-        super(QCheckBox, self).__init__(name)
-
-        checkbox_style = """
-                QCheckBox::indicator:checked {
-                    background-color: rgb(255,255,255);
-                    border: 1px solid #5A5A5A;
-                    width : 15px;
-                    height : 15px;
-                    border-radius : 3px;
-                    image: url(images:checkmark.png);
-                }
-                QCheckBox::indicator:unchecked
-                {
-                    background-color: rgb(255,255,255);
-                    border: 1px solid #5A5A5A;
-                    width : 15px;
-                    height : 15px;
-                    border-radius : 3px;
-                }
-                QCheckBox:disabled
-                {
-                    background-color:lightgray;
-                }
-                """
-        self.setStyleSheet(checkbox_style)
-
 class BioinfImport(QWidget):
     def __init__(self, config_tab, celldef_tab, ics_tab, bioinf_import_test, bioinf_import_test_spatial):
         super().__init__()
@@ -1440,7 +2323,9 @@ class BioinfImport(QWidget):
         self.config_tab = config_tab
         self.celldef_tab = celldef_tab
         self.ics_tab = ics_tab
-        self.default_time_units = "min"
+
+        self.window = None
+        self.previous_windows = []
 
         self.qlineedit_style_sheet = """
             QLineEdit:disabled {
@@ -1507,39 +2392,56 @@ class BioinfImport(QWidget):
 
         if bioinf_import_test:
             self.import_file("./data/pbmc3k_clustered.h5ad")
-            self.continue_to_cell_type_names_cb()
-            self.continue_to_rename()
-            self.continue_on_rename_cb()
-            self.continue_to_cell_pos_cb()
+            self.continue_from_edit()
+            self.window.process_window() # process rename window
+            self.window.process_window() # process cell count window
+            # self.continue_from_rename()
+            # self.set_cell_positions()
         elif bioinf_import_test_spatial:
-            self.column_line_edit.setText("total_counts")
+            self.column_line_edit.setText("cluster")
             self.import_file("./data/visium_adata.h5ad")
-            # self.continue_to_cell_type_names_cb()
-            # self.continue_to_rename()
-            # self.continue_on_rename_cb()
-            # self.continue_to_cell_pos_cb()
+            # self.continue_from_import()
+            self.continue_from_spatial_query()
+            self.continue_from_edit()
+            self.window.process_window() # process rename window
+            # self.set_cell_positions()
 
+    def fill_gui(self):
+        self.csv_folder.setText(self.config_tab.csv_folder.text())
+        self.csv_file.setText(self.config_tab.csv_file.text())
 
-    def select_all_button_cb(self):
-        for cbd in self.checkbox_dict.values():
-            if cbd.isEnabled():
-                cbd.setChecked(True)
-        bval = self.is_any_cell_type_button_group_checked()
-        if self.ics_plot_area:
-            self.ics_plot_area.plot_cells_button.setEnabled(bval)
-    
-    def deselect_all_button_cb(self):
-        for cbd in self.checkbox_dict.values():
-            if cbd.isEnabled():
-                cbd.setChecked(False)
-        if self.ics_plot_area:
-            self.ics_plot_area.plot_cells_button.setEnabled(False)
+    def open_next_window(self, window_class, layout=None, show=True):
+        if self.window is not None:
+            self.previous_windows.append(self.window)
+            self.previous_windows[-1].hide()
 
+        self.window = window_class(self)
+        if layout:
+            self.window.setLayout(layout)
+
+        if show:
+            self.window.hide()
+            self.window.show()
+
+    def go_back_to_prev_window(self):
+        self.window.deleteLater()
+        self.window = self.previous_windows.pop()
+        self.window.hide()
+        self.window.show()
+
+    def search_adata_obsm_for(self, substring):
+        for k, v in self.adata.obsm.items():
+            if substring in k:
+                return True, k, v
+        return False, None, None
+
+    ### Import data
     def import_cb(self):
         full_file_path = QFileDialog.getOpenFileName(self,'',".")
         file_path = full_file_path[0]
 
         self.import_file(file_path)
+        print("finished import_cb")
 
     def import_file(self,file_path):
         try:
@@ -1550,63 +2452,30 @@ class BioinfImport(QWidget):
 
         print("------------anndata object loaded-------------")
 
-        self.editing_cell_type_names = True
-        col_names = list(self.adata.obs.columns)
-        auto_continue = False
-        if self.column_line_edit.text() in col_names:
-            s = "Select column that contains cell type info:"
-            auto_continue = True
-        elif self.column_line_edit.text() != "":
-            s = f"{self.column_line_edit.text()} not found in the columns of the obs matrix.\nSelect from the following:"
-        else:
-            s = "Select column that contains cell type info:"
-        
-        self.window = BioinfImportWindow()
-
         self.spatial_data_found, self.spatial_data_key, self.spatial_data = self.search_adata_obsm_for("spatial")
 
-        vbox = QVBoxLayout()
-        label = QLabel(s)
-        vbox.addWidget(label)
+        self.open_next_window(BioinfImportWindow_ClusterColumn, show=False)
 
-        self.column_combobox = QComboBox()
-        self.column_combobox.currentIndexChanged.connect(self.column_combobox_changed_cb)
-        for col_name in col_names:
-            self.column_combobox.addItem(col_name)
-        vbox.addWidget(self.column_combobox)
 
-        hbox = QHBoxLayout()
-        continue_button = ContinueButton(self.window, self.continue_from_import)
-        hbox.addWidget(continue_button)
-
-        vbox.addLayout(hbox)
-
-        self.window.setLayout(vbox)
-
-        self.previous_windows = []
-
-        if auto_continue:
+        if self.auto_continue:
             self.current_column = self.column_line_edit.text()
             self.continue_from_import()
-            return
-        self.window.hide()
-        self.window.show()
-
-    def column_combobox_changed_cb(self, idx):
-        self.current_column = self.column_combobox.currentText()
+        else:
+            self.window.hide()
+            self.window.show()
 
     def continue_from_import(self):
         if not self.spatial_data_found:
             print("spatial data not found. continuing to editing cell types...")
             self.use_spatial_data = False
-            self.continue_to_cell_type_names_cb()
-            return
-        print("spatial data found. asking you about it now...")
-        self.open_next_window(lambda : BioinfImportWindow_SpatialQuery(self))
-        self.window.hide()
-        self.window.show()
+            self.collect_cell_type_data()
+            self.edit_cell_types()
+            print("finished continue_from_import")
+        else:
+            print("spatial data found. asking you about it now...")
+            self.open_next_window(BioinfImportWindow_SpatialQuery, show=True)
 
-    def continue_to_cell_type_names_cb(self):
+    def collect_cell_type_data(self):
         self.cell_types_original = self.adata.obs[self.current_column]
         self.cell_types_list_original = self.cell_types_original.unique().tolist()
         self.cell_types_list_original.sort()
@@ -1614,850 +2483,15 @@ class BioinfImport(QWidget):
         self.cell_types_list_original = [str(x) for x in self.cell_types_list_original] # make sure the names are strings
         self.remaining_cell_types_list_original = copy.deepcopy(self.cell_types_list_original)
 
+    def continue_from_spatial_query(self):
+        self.collect_cell_type_data()
         self.edit_cell_types()
 
+    ### Edit cell types
     def edit_cell_types(self):
-        print("------Editing cell types------")
-        self.open_next_window(BioinfImportWindow, show=False)
+        self.open_next_window(BioinfImportWindow_EditCellTypes, show=True)
 
-        keep_color = "lightgreen"
-        merge_color = "yellow"
-        delete_color = "#FFCCCB"
-        label = QLabel(f"""The following cell types were found.<br>\
-                        Choose which to <b style="background-color: {keep_color};">KEEP</b>, \
-                        <b style="background-color: {merge_color};">MERGE</b>, and \
-                        <b style="background-color: {delete_color};">DELETE</b>.<br>\
-                        By default, all are kept.\
-                        """)
-        checkbox_style_template = lambda x : f"""
-                QCheckBox {{
-                    color : black;
-                    font-weight: bold;
-                    background-color: {x};
-                }}
-                QCheckBox::indicator:checked {{
-                    background-color: rgb(255,255,255);
-                    border: 1px solid #5A5A5A;
-                    width : 15px;
-                    height : 15px;
-                    border-radius : 3px;
-                    image: url(images:checkmark.png);
-                }}
-                QCheckBox::indicator:unchecked
-                {{
-                    background-color: {"rgb(255,255,255)" if x==keep_color else "rgb(0,0,0)"};
-                    border: 1px solid #5A5A5A;
-                    width : 15px;
-                    height : 15px;
-                    border-radius : 3px;
-                }}
-                """
-        self.checkbox_style = {}
-        self.checkbox_style["keep"] = checkbox_style_template(keep_color)
-        self.checkbox_style["merge"] = checkbox_style_template(merge_color)
-        self.checkbox_style["delete"] = checkbox_style_template(delete_color)
-        self.cell_type_dict = {} # dictionary mapping original cell_type to intermediate/final cell type (depending on stage of walkthrough)
-
-        vbox = QVBoxLayout()
-        vbox.addWidget(label)
-        self.checkbox_dict_edit = {}
-        self.keep_button = {}
-        self.checkbox_group = QButtonGroup(exclusive=False)
-        self.checkbox_group.buttonToggled.connect(self.cell_type_toggled_cb)
-        self.merge_id = 0
-        rename_button_style_sheet_template = lambda x : f"""
-            QPushButton {{
-                color : black;
-                font-weight : bold;
-            }}
-            QPushButton:enabled {{
-                background-color: {x};
-            }}
-            QPushButton:disabled {{
-                background-color : grey;
-            }}
-            """
-        self.rename_button_style_sheet = {}
-        self.rename_button_style_sheet["keep"] = rename_button_style_sheet_template(keep_color)
-        self.rename_button_style_sheet["merge"] = rename_button_style_sheet_template(merge_color)
-        self.rename_button_style_sheet["delete"] = rename_button_style_sheet_template(delete_color)
-        row_height = 30
-        print(f"self.cell_types_list_original = {self.cell_types_list_original}")
-        self.cell_type_edit_scroll_area = QScrollArea()
-        vbox_cell_type_keep = QVBoxLayout()
-        for cell_type in self.cell_types_list_original:
-            hbox = QHBoxLayout()
-            self.checkbox_dict_edit[cell_type] = QCheckBox(cell_type,styleSheet=self.checkbox_style["keep"])
-            self.checkbox_dict_edit[cell_type].setChecked(False)
-            self.checkbox_dict_edit[cell_type].setEnabled(True)
-            self.checkbox_dict_edit[cell_type].setFixedHeight(row_height)
-            self.checkbox_group.addButton(self.checkbox_dict_edit[cell_type])
-            
-            self.keep_button[cell_type] = QPushButton("Keep",enabled=False,objectName=cell_type)
-            self.keep_button[cell_type].setStyleSheet(rename_button_style_sheet_template(keep_color))
-            self.keep_button[cell_type].setFixedHeight(row_height)
-            self.keep_button[cell_type].clicked.connect(self.keep_cb)
-
-            hbox.addWidget(self.checkbox_dict_edit[cell_type])
-            hbox.addStretch(1)
-            hbox.addWidget(self.keep_button[cell_type])
-            vbox_cell_type_keep.addLayout(hbox)
-            self.cell_type_dict[cell_type] = cell_type
-
-        widget_for_scroll_area = QWidget()
-        widget_for_scroll_area.setLayout(vbox_cell_type_keep)
-        self.cell_type_edit_scroll_area.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
-        self.cell_type_edit_scroll_area.setWidget(widget_for_scroll_area)
-        self.cell_type_edit_scroll_area.setWidgetResizable(True)
-
-        vbox.addWidget(self.cell_type_edit_scroll_area)
-
-        hbox = QHBoxLayout()
-
-        self.merge_button = QPushButton("Merge",enabled=False,styleSheet=rename_button_style_sheet_template(merge_color))
-        self.merge_button.clicked.connect(self.merge_cb)
-        hbox.addWidget(self.merge_button)
-
-        self.delete_button = QPushButton("Delete",enabled=False,styleSheet=rename_button_style_sheet_template(delete_color))
-        self.delete_button.clicked.connect(self.delete_cb)
-        hbox.addWidget(self.delete_button)
-
-        vbox.addLayout(hbox)
-        vbox.addWidget(QHLine())
-
-        hbox = QHBoxLayout()
-
-        go_back_button = GoBackButton(self.window, self)
-
-        continue_button = ContinueButton(self.window, self.continue_to_rename)
-
-        hbox.addWidget(go_back_button)
-        hbox.addWidget(continue_button)
-        vbox.addLayout(hbox)
-
-        self.dim_red_fig = None
-        self.dim_red_canvas = None
-        for key_substring in ["umap","tsne","pca"]:
-            if self.try_to_plot_dim_red(key_substring=key_substring):
-                splitter = QSplitter()
-                left_side = QWidget()
-                left_side.setLayout(vbox)
-                splitter.addWidget(left_side)
-
-                right_side = QWidget()
-                vbox = QVBoxLayout()
-                self.obsm_keys_combobox = QComboBox()
-                for i, k in enumerate(self.adata.obsm.keys()):
-                    if key_substring in k:
-                        id = i
-                    self.obsm_keys_combobox.addItem(k)
-                self.obsm_keys_combobox.setCurrentIndex(id)
-                self.obsm_keys_combobox.currentIndexChanged.connect(self.obsm_keys_combobox_changed_cb)
-
-                label = QLabel("Marker Size")
-                self.marker_size_edit = QLineEdit(str(self.marker_size))
-                self.marker_size_edit.setValidator(QtGui.QDoubleValidator(bottom=0))
-                self.marker_size_edit.textChanged.connect(self.marker_size_changed_cb)
-
-                hbox = QHBoxLayout()
-                hbox.addWidget(self.obsm_keys_combobox)
-                hbox.addWidget(label)
-                hbox.addWidget(self.marker_size_edit)
-
-                vbox.addLayout(hbox)
-                vbox.addWidget(self.dim_red_canvas)
-                right_side.setLayout(vbox)
-                splitter.addWidget(right_side)
-                vbox = QVBoxLayout()
-                vbox.addWidget(splitter)
-                break
-        
-        self.window.setLayout(vbox)
-
-        self.window.hide()
-        self.window.show()
-
-    def marker_size_changed_cb(self, text):
-        if not self.marker_size_edit.hasAcceptableInput():
-            return
-        self.marker_size = float(text)
-        self.scatter.set_sizes(self.marker_size + np.zeros_like(self.scatter.get_sizes()))
-        # self.scatter.draw()
-        self.dim_red_canvas.update()
-        self.dim_red_canvas.draw()
-        # for scatter_plot in self.scatter[0]:
-        #     scatter_plot.set_sizes
-
-    def obsm_keys_combobox_changed_cb(self, idx):
-        key = self.obsm_keys_combobox.currentText()
-        self.dim_red_ax.cla()
-        self.try_to_plot_dim_red(key_substring=key)
-
-    def open_next_window(self, window_class, layout=None, show=True):
-        self.previous_windows.append(self.window)
-        self.previous_windows[-1].hide()
-
-        self.window = window_class()
-        if layout:
-            self.window.setLayout(layout)
-
-        if show:
-            self.window.hide()
-            self.window.show()
-
-    def create_dim_red_fig(self):
-        self.dim_red_fig = plt.figure()
-        self.dim_red_canvas = FigureCanvasQTAgg(self.dim_red_fig)
-        self.dim_red_canvas.setStyleSheet("background-color:transparent;")
-        plt.style.use('ggplot')
-
-        self.dim_red_ax = self.dim_red_fig.add_subplot(111, adjustable='box')
-        self.marker_size = 0.18844459036110225*np.sqrt(self.n_points)
-
-    def try_to_plot_dim_red(self, key_substring="umap"):
-        found, k, _ = self.search_adata_obsm_for(key_substring) # (was this found?, the key in adata.obsm, the value of adata.obsm[k])
-        if not found:
-            return False
-        self.plot_dim_red(k)
-        return True
-
-    def plot_dim_red(self, k):
-        v = self.adata.obsm[k]
-        self.n_points = len(v)
-        if self.dim_red_fig is None:
-            self.create_dim_red_fig()
-        
-        temp = pd.CategoricalIndex(self.cell_types_original)
-        self.scatter = self.dim_red_ax.scatter(v[:,0],v[:,1],self.marker_size,c=temp.codes) # 0.18844459036110225 = 5/sqrt(704) where I found 5 to be a good size when working with 704 points
-        scatter_objects, _ = self.scatter.legend_elements()
-        self.dim_red_fig.legend(scatter_objects, temp.categories,
-                    loc=8, title="Clusters",ncol=3, mode="expand")
-        self.dim_red_ax.set_title(f"{k} plot")
-        self.dim_red_ax.set_aspect(1.0)
-        self.dim_red_canvas.update()
-        self.dim_red_canvas.draw()
-
-    def cell_type_toggled_cb(self):
-        checked_count = 0
-        enable_delete_button = False
-        enable_merge_button = False
-        for checkbox in self.checkbox_dict_edit.values():
-            checked_count += checkbox.isChecked()
-            if checked_count == 1:
-                enable_delete_button = True
-            if checked_count == 2:
-                enable_merge_button = True
-                break
-        self.delete_button.setEnabled(enable_delete_button)
-        self.merge_button.setEnabled(enable_merge_button)
-
-    def continue_to_cell_counts(self):
-
-        print("continuing to cell counts now...")
-
-        self.open_next_window(BioinfImportWindow)
-
-        names_width = 100
-        counts_width = 120
-        props_width = 120
-        manual_width = 120
-        confluence_width = 150
-        
-        vbox = QVBoxLayout()
-
-        vbox.addWidget(QLabel("Set how many of each cell type to place. You may use the counts found in your data, or use proportions or confluence to scale these counts.\nYou may also set the counts manually; these values will track the others, allowing you to adjust from those baselines."))
-
-        vbox_cols = [QVBoxLayout() for i in range(5)]
-
-        label = QLabel("Cell Type")
-        label.setFixedWidth(names_width)
-        vbox_cols[0].addWidget(label)
-
-        self.counts_button_group = QButtonGroup()
-        self.counts_button_group.idToggled.connect(self.counts_button_cb)
-        counts_button_group_next_id = 0
-
-        self.use_counts_as_is_radio_button = QRadioButton("Use counts")
-        self.use_counts_as_is_radio_button.setFixedWidth(counts_width)
-        self.use_counts_as_is_radio_button.setChecked(True)
-        self.counts_button_group.addButton(self.use_counts_as_is_radio_button,counts_button_group_next_id)
-        counts_button_group_next_id += 1
-
-        self.use_props_radio_button = QRadioButton("Use proportions")
-        self.use_props_radio_button.setFixedWidth(props_width)
-        self.use_props_radio_button.setChecked(False)
-        self.counts_button_group.addButton(self.use_props_radio_button,counts_button_group_next_id)
-        counts_button_group_next_id += 1
-
-        self.use_confluence_radio_button = QRadioButton("Set confluence (%)")
-        self.use_confluence_radio_button.setFixedWidth(confluence_width)
-        self.use_confluence_radio_button.setChecked(False)
-        self.counts_button_group.addButton(self.use_confluence_radio_button,counts_button_group_next_id)
-        counts_button_group_next_id += 1
-
-        self.use_manual_radio_button = QRadioButton("Set manually")
-        self.use_manual_radio_button.setFixedWidth(manual_width)
-        self.use_manual_radio_button.setChecked(False)
-        self.counts_button_group.addButton(self.use_manual_radio_button,counts_button_group_next_id)
-        counts_button_group_next_id += 1
-
-        vbox_cols[1].addWidget(self.use_counts_as_is_radio_button)
-        vbox_cols[2].addWidget(self.use_props_radio_button)
-        vbox_cols[3].addWidget(self.use_confluence_radio_button)
-        vbox_cols[4].addWidget(self.use_manual_radio_button)
-
-        self.cell_type_props = [self.cell_counts[cell_type]/len(self.cell_types_final) for cell_type in self.cell_types_list_final]
-
-        self.type_prop = {}
-        self.type_manual = {}
-        self.type_confluence = {}
-
-        self.prop_box_callback_paused = False
-        self.conf_box_callback_paused = False
-
-        num_validator = QtGui.QIntValidator()
-        num_validator.setBottom(0)
-
-        self.setup_confluence_info()
-
-        for idx, cell_type in enumerate(self.cell_types_list_final):
-            hbox = QHBoxLayout()
-            label = QLabel(cell_type)
-            label.setFixedWidth(names_width)
-
-            type_count = QLineEdit(enabled=False)
-            type_count.setText(str(self.cell_counts[cell_type]))
-            type_count.setFixedWidth(counts_width)
-            type_count.setStyleSheet(self.qlineedit_style_sheet)
-
-            self.type_prop[cell_type] = QLineEdit(enabled=False)
-            self.type_prop[cell_type].setText(str(self.cell_counts[cell_type]))
-            self.type_prop[cell_type].setFixedWidth(props_width)
-            self.type_prop[cell_type].setStyleSheet(self.qlineedit_style_sheet)
-            self.type_prop[cell_type].setValidator(num_validator)
-            self.type_prop[cell_type].setObjectName(str(idx))
-            self.type_prop[cell_type].textChanged.connect(self.prop_box_changed_cb)
-
-            self.type_confluence[cell_type] = QLineEdit(enabled=False)
-            self.type_confluence[cell_type].setFixedWidth(confluence_width)
-            self.type_confluence[cell_type].setStyleSheet(self.qlineedit_style_sheet)
-            self.type_confluence[cell_type].setValidator(QtGui.QDoubleValidator(bottom=0))
-            self.type_confluence[cell_type].setObjectName(str(idx))
-            self.type_confluence[cell_type].textChanged.connect(self.confluence_box_changed_cb)
-
-            self.type_manual[cell_type] = QLineEdit(enabled=False)
-            self.type_manual[cell_type].setText(str(self.cell_counts[cell_type]))
-            self.type_manual[cell_type].setFixedWidth(manual_width)
-            self.type_manual[cell_type].setStyleSheet(self.qlineedit_style_sheet)
-            self.type_manual[cell_type].setValidator(num_validator)
-            self.type_manual[cell_type].setObjectName(str(idx))
-            self.type_manual[cell_type].textChanged.connect(self.manual_box_changed_cb)
-            
-            vbox_cols[0].addWidget(label)
-            vbox_cols[1].addWidget(type_count)
-            vbox_cols[2].addWidget(self.type_prop[cell_type])
-            vbox_cols[3].addWidget(self.type_confluence[cell_type])
-            vbox_cols[4].addWidget(self.type_manual[cell_type])
-
-        label = QLabel("Total")
-        label.setFixedWidth(names_width)
-
-        type_count = QLineEdit(enabled=False)
-        type_count.setText(str(len(self.cell_types_final)))
-        type_count.setFixedWidth(counts_width)
-        type_count.setStyleSheet(self.qlineedit_style_sheet)
-
-        self.total_prop = QLineEdit(enabled=False)
-        self.total_prop.setText(str(len(self.cell_types_final)))
-        self.total_prop.setFixedWidth(props_width)
-        self.total_prop.setStyleSheet(self.qlineedit_style_sheet)
-        self.total_prop.setValidator(num_validator)
-        self.total_prop.textChanged.connect(self.prop_box_changed_cb)
-        self.total_prop.setObjectName("total_prop")
-
-        self.total_conf = QLineEdit(enabled=False)
-        self.total_conf.setFixedWidth(confluence_width)
-        self.total_conf.setStyleSheet(self.qlineedit_style_sheet)
-        self.total_conf.setValidator(QtGui.QDoubleValidator(bottom=0))
-        self.total_conf.textChanged.connect(self.confluence_box_changed_cb)
-        self.total_conf.setObjectName("total_conf")
-
-        self.total_manual = QLineEdit(enabled=False)
-        self.total_manual.setText(str(len(self.cell_types_final)))
-        self.total_manual.setFixedWidth(manual_width)
-        self.total_manual.setStyleSheet(self.qlineedit_style_sheet)
-        self.total_manual.setValidator(num_validator)
-
-        self.total_conf.setText("100") # this triggers the cb, which sets the manual column (see below) so force a toggle next
-        self.use_manual_radio_button.setChecked(True) 
-        self.use_counts_as_is_radio_button.setChecked(True) 
-
-        vbox_cols[0].addWidget(label)
-        vbox_cols[1].addWidget(type_count)
-        vbox_cols[2].addWidget(self.total_prop)
-        vbox_cols[3].addWidget(self.total_conf)
-        vbox_cols[4].addWidget(self.total_manual)
-
-
-        hbox = QHBoxLayout()
-        for idx, vb in enumerate(vbox_cols):
-            hbox.addLayout(vb)
-            if idx != (len(vbox_cols)-1):
-                hbox.addWidget(QVLine())
-        vbox.addLayout(hbox)
-
-        hbox = QHBoxLayout()
-
-        go_back_to_rename = GoBackButton(self.window, self)
-
-        continue_to_cell_pos = ContinueButton(self.window, self.continue_to_cell_pos_cb)
-        # continue_to_cell_pos = QPushButton("Continue \u2192")
-        # continue_to_cell_pos.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
-        # continue_to_cell_pos.clicked.connect(self.continue_to_cell_pos_cb)
-
-        hbox.addWidget(go_back_to_rename)
-        hbox.addWidget(continue_to_cell_pos)
-        
-        vbox.addLayout(hbox)
-
-        self.window.setLayout(vbox)
-
-        self.window.hide()
-        self.window.show()
-
-    def prop_box_changed_cb(self, text):
-        if self.prop_box_callback_paused:
-            return
-        type_prop_sender = self.sender()
-        if type_prop_sender.hasAcceptableInput() is False:
-            return
-        current_name = type_prop_sender.objectName()
-        self.prop_box_callback_paused = True
-        if current_name=="total_prop":
-            mult = int(text)
-            self.total_manual.setText(text)
-        else:
-            mult = int(text) / self.cell_type_props[int(current_name)]
-            self.total_prop.setText(str(round(mult)))
-            self.total_manual.setText(str(round(mult)))
-
-        for idx, cell_type in enumerate(self.cell_types_list_final):
-            if current_name==str(idx):
-                continue
-            self.type_prop[cell_type].setText(str(round(mult * self.cell_type_props[idx])))
-            self.type_manual[cell_type].setText(str(round(mult * self.cell_type_props[idx])))
-        self.prop_box_callback_paused = False
-
-    def confluence_box_changed_cb(self, text):
-        if self.conf_box_callback_paused:
-            return
-        type_conf_sender = self.sender()
-        if type_conf_sender.hasAcceptableInput() is False:
-            return
-        current_name = type_conf_sender.objectName()
-        self.conf_box_callback_paused = True
-        current_conf = float(text)
-        if current_name=="total_conf":
-            mult = current_conf
-            mult /= self.prop_dot_ratios
-        else:
-            current_idx = int(current_name)
-            mult = current_conf
-            mult /= self.prop_total_area_one[self.cell_types_list_final[current_idx]]
-            mult /= self.cell_type_props[current_idx]
-
-        total_conf = 0
-        for idx, cell_type in enumerate(self.cell_types_list_final):
-            if current_name==str(idx):
-                total_conf += current_conf
-                continue
-            new_conf = mult * self.cell_type_props[idx] * self.prop_total_area_one[cell_type]
-            total_conf += new_conf
-            self.type_confluence[cell_type].setText(str(new_conf))
-        if current_name!="total_conf":
-            self.total_conf.setText(str(total_conf))
-        counts, total = self.convert_confluence_to_counts()
-        for cell_type, n in counts.items():
-            self.type_manual[cell_type].setText(str(n))
-        self.total_manual.setText(str(total))
-        
-        if total_conf > 100:
-            self.total_conf.setStyleSheet("QLineEdit {background-color : red; color : black;}")
-        else:
-            self.total_conf.setStyleSheet(self.qlineedit_style_sheet)
-            
-        self.conf_box_callback_paused = False
-    def manual_box_changed_cb(self, text):
-        total_count = 0
-        for qle in self.type_manual.values():
-            total_count += int(qle.text())
-        self.total_manual.setText(str(total_count))
-
-    def counts_button_cb(self, id):
-        enable_props = id==1
-        enable_confluence = id==2
-        enable_manual = id==3
-
-        current_values = {}
-
-        if id==0:
-            current_values = self.cell_counts
-            current_total = len(self.cell_types_final)
-
-        for qw in self.type_prop.values():
-            qw.setEnabled(enable_props)
-        self.total_prop.setEnabled(enable_props)
-        if enable_props:
-            for k, qw in self.type_prop.items():
-                current_values[k] = qw.text()
-            current_total = self.total_prop.text()
-        
-        for qw in self.type_confluence.values():
-            qw.setEnabled(enable_confluence)
-        self.total_conf.setEnabled(enable_confluence)
-        if enable_confluence and float(self.total_conf.text()) > 100:
-            self.total_conf.setStyleSheet("QLineEdit {background-color : red; color : black;}")
-        else:
-            self.total_conf.setStyleSheet(self.qlineedit_style_sheet)
-        if enable_confluence:
-            current_values, current_total = self.convert_confluence_to_counts()
-        
-        for qw in self.type_manual.values():
-            qw.setEnabled(enable_manual)
-        if not enable_manual:
-            for k, qw in self.type_manual.items():
-                qw.setText(str(current_values[k]))
-            self.total_manual.setText(str(current_total))
-
-    def convert_confluence_to_counts(self):
-        total = 0
-        counts = {}
-        for cell_type in self.cell_types_list_final:
-            n = round(0.01 * float(self.type_confluence[cell_type].text()) / self.prop_total_area_one[cell_type])
-            counts[cell_type] = n
-            total += n
-        return counts, total
-
-    def continue_to_cell_pos_cb(self):
-
-        self.open_next_window(BioinfImportWindow, show=False)
-
-        if self.use_spatial_data or self.counts_button_group.checkedId()==0: # use counts found in data file
-            pass
-        elif self.counts_button_group.checkedId()==1: # use props found in data file
-            for cell_type in self.cell_types_list_final:
-                self.cell_counts[cell_type] = int(self.type_prop[cell_type].text())
-        elif self.counts_button_group.checkedId()==2: # set by confluence
-            self.cell_counts = self.convert_confluence_to_counts()
-        elif self.counts_button_group.checkedId()==3: # manually set
-            for cell_type in self.cell_types_list_final:
-                self.cell_counts[cell_type] = int(self.type_manual[cell_type].text())
-
-        self.ics_plot_area = None
-        self.create_cell_type_scroll_area()
-        self.create_pos_scroll_area()
-
-        splitter = QSplitter()
-        splitter.addWidget(self.cell_type_scroll_area)
-        splitter.addWidget(self.pos_scroll_area)
-
-        vbox = QVBoxLayout()
-        vbox.addWidget(splitter)
-
-        top_area = QWidget()
-        top_area.setLayout(vbox)
-
-        splitter = QSplitter(QtCore.Qt.Vertical)
-        splitter.addWidget(top_area)
-        self.ics_plot_area = BioinfImportPlotWindow(self, self.config_tab)
-        self.plot_scroll_area = QScrollArea()
-        self.plot_scroll_area.setWidget(self.ics_plot_area)
-        splitter.addWidget(self.plot_scroll_area)
-
-        vbox = QVBoxLayout()
-        vbox.addWidget(splitter)
-
-        go_back_button = GoBackButton(self.window, self)
-        self.continue_to_write_button = ContinueButton(self, self.continue_from_cell_pos)
-        self.continue_to_write_button.setEnabled(False)
-        self.continue_to_write_button.setStyleSheet(self.qpushbutton_style_sheet)
-
-        # self.finish_write_button = QPushButton("Overwrite \u2192",enabled=False)
-        # self.finish_write_button.setStyleSheet(self.qpushbutton_style_sheet)
-        # self.finish_write_button.clicked.connect(self.ics_plot_area.finish_write_button_cb)
-
-        # self.finish_append_button = QPushButton("Append \u2192",enabled=False)
-        # self.finish_append_button.setStyleSheet(self.qpushbutton_style_sheet)
-        # self.finish_append_button.clicked.connect(self.ics_plot_area.finish_append_button_cb)
-
-        hbox_write = QHBoxLayout()
-        hbox_write.addWidget(go_back_button)
-        hbox_write.addWidget(self.continue_to_write_button)
-        # hbox_write.addWidget(self.finish_write_button)
-        # hbox_write.addWidget(self.finish_append_button)
-
-        vbox.addLayout(hbox_write)
-
-        self.window.setLayout(vbox)
-        self.window.hide()
-        self.window.show()
-
-    def continue_from_cell_pos(self):
-        self.open_next_window(lambda : BioinfImportWindow_WritePositions(self), show=False)
-        self.window.hide()
-        self.window.show()
-        
-    def create_cell_type_scroll_area(self):
-        vbox_main = QVBoxLayout()
-        label = QLabel("Select cell type(s) to place.\nGreyed out cell types have already been placed.")
-        vbox_main.addWidget(label)
-
-        hbox_mid = QHBoxLayout()
-        vbox_mid_checkboxes = QVBoxLayout()
-        self.cell_type_button_group = QButtonGroup(exclusive=False)
-        self.cell_type_button_group.buttonClicked.connect(self.cell_type_button_group_cb)
-        self.checkbox_dict = create_checkboxes_for_cell_types(vbox_mid_checkboxes, self.cell_types_list_final)
-        self.undo_button = {}
-        for cbd in self.checkbox_dict.values():
-            self.cell_type_button_group.addButton(cbd)
-        vbox_mid_undos = QVBoxLayout()
-        for cell_type in self.cell_types_list_final:
-            self.undo_button[cell_type] = QPushButton("Undo",enabled=False,styleSheet=self.qpushbutton_style_sheet,objectName=cell_type)
-            self.undo_button[cell_type].clicked.connect(self.undo_button_cb)
-            vbox_mid_undos.addWidget(self.undo_button[cell_type])
-        
-        hbox_mid.addLayout(vbox_mid_checkboxes)
-        hbox_mid.addLayout(vbox_mid_undos)
-
-        vbox_main.addLayout(hbox_mid)
-
-        self.select_all_button = QPushButton("Select remaining",styleSheet=self.qpushbutton_style_sheet)
-        self.select_all_button.clicked.connect(self.select_all_button_cb)
-        
-        self.deselect_all_button = QPushButton("Unselect all",styleSheet=self.qpushbutton_style_sheet)
-        self.deselect_all_button.clicked.connect(self.deselect_all_button_cb)
-        hbox = QHBoxLayout()
-        hbox.addWidget(self.select_all_button)
-        hbox.addWidget(self.deselect_all_button)
-        
-        vbox_main.addLayout(hbox)
-
-        cell_type_scroll_area_widget = QWidget()
-        cell_type_scroll_area_widget.setLayout(vbox_main)
-
-        self.cell_type_scroll_area = QScrollArea()
-        self.cell_type_scroll_area.setWidget(cell_type_scroll_area_widget)
-
-    def undo_button_cb(self):
-        undone_cell_type = self.sender().objectName()
-        self.ics_plot_area.csv_array[undone_cell_type] = np.empty((0,3))
-        self.ics_plot_area.ax0.cla()
-        self.ics_plot_area.format_axis()
-        for cell_type in self.ics_plot_area.csv_array.keys():
-            sz = np.sqrt(self.ics_plot_area.cell_type_micron2_area_dict[cell_type] / np.pi)
-            self.ics_plot_area.circles(self.ics_plot_area.csv_array[cell_type], s=sz, color=self.ics_plot_area.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.ics_plot_area.alpha_value)
-
-        self.ics_plot_area.sync_par_area() # easy way to redraw the patch for current plotting
-        
-        self.checkbox_dict[undone_cell_type].setEnabled(True)
-        self.checkbox_dict[undone_cell_type].setChecked(False)
-        self.undo_button[undone_cell_type].setEnabled(False)
-        self.continue_to_write_button.setEnabled(False)
-        # self.finish_write_button.setEnabled(False)
-        # self.finish_append_button.setEnabled(False)
-
-    def cell_type_button_group_cb(self):
-        bval = self.is_any_cell_type_button_group_checked()
-        if bval:
-            # The plot is created and at least one is checked. See if the parameters are ready
-            self.ics_plot_area.sync_par_area() # this call is overkill, I just want to see if the parameters call for the Plot button being enabled
-        else:
-            self.ics_plot_area.plot_cells_button.setEnabled(False)
-
-    def is_any_cell_type_button_group_checked(self):
-        bval = self.cell_type_button_group.checkedButton() is not None
-        return bval
-
-    def cell_pos_button_group_cb(self):
-        if self.ics_plot_area:
-            self.ics_plot_area.sync_par_area()
-        if self.use_spatial_data:
-            self.ics_plot_area.num_box.setEnabled(self.cell_pos_button_group.checkedId()==6) # only enable for spatial plotter
-            
-        
-    def create_pos_scroll_area(self):
-        self.spatial_plotter_id = None
-        self.cell_pos_button_group = QButtonGroup()
-        self.cell_pos_button_group.setExclusive(True)
-        self.cell_pos_button_group.idToggled.connect(self.cell_pos_button_group_cb)
-        next_button_id = 0
-        
-        button_width = 250
-        button_height = 250
-        icon_width = round(0.8 * button_width)
-        icon_height = round(0.8 * button_height)
-        master_vbox = QVBoxLayout()
-
-        qpushbutton_style_sheet = """
-            QPushButton {
-                background-color : lightblue;
-                color : black;
-            }
-            QPushButton::unchecked {
-                background-color : lightblue;
-            }
-            QPushButton::checked {
-                background-color : black;
-            }
-            """
-
-        label = QLabel("Select an plotter to place the selected cell types:")
-        label.setAlignment(QtCore.Qt.AlignLeft)
-
-        master_vbox.addWidget(label)
-
-        # grid_layout = QHBoxLayout()
-        grid_layout = QGridLayout()
-        rI = 0
-        cI = 0
-        cmax = 1
-        icon_size = QtCore.QSize(icon_width, icon_height) 
-            
-        vbox = QVBoxLayout()
-        full_rectangle_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/scatter_square.svg"), iconSize=icon_size, checkable=True, checked=(not self.use_spatial_data))
-        full_rectangle_button.setFixedSize(button_width,button_height)
-        full_rectangle_button.setStyleSheet(qpushbutton_style_sheet) 
-        self.cell_pos_button_group.addButton(full_rectangle_button,next_button_id)
-        next_button_id += 1
-        vbox.addWidget(full_rectangle_button)
-
-        label = QLabel("Everywhere")
-        label.setFixedWidth(button_width)
-        label.setAlignment(QtCore.Qt.AlignCenter)
-        vbox.addWidget(label)
-
-        grid_layout.addLayout(vbox,rI,cI,1,1)
-        rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
-            
-        vbox = QVBoxLayout()
-        partial_rectangle_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/rectangle.svg"), iconSize=icon_size, checkable=True, checked=False)
-        partial_rectangle_button.setFixedSize(button_width,button_height)
-        partial_rectangle_button.setStyleSheet(qpushbutton_style_sheet) 
-        self.cell_pos_button_group.addButton(partial_rectangle_button,next_button_id)
-        next_button_id += 1
-        vbox.addWidget(partial_rectangle_button)
-
-        label = QLabel("Rectangle")
-        label.setFixedWidth(button_width)
-        label.setAlignment(QtCore.Qt.AlignCenter)
-        vbox.addWidget(label)
-
-        grid_layout.addLayout(vbox,rI,cI,1,1)
-        rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
-
-        vbox = QVBoxLayout()
-        disc_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/disc.svg"), iconSize=icon_size, checkable=True, checked=False)
-        disc_button.setFixedSize(button_width,button_height)
-        disc_button.setStyleSheet(qpushbutton_style_sheet) 
-        self.cell_pos_button_group.addButton(disc_button,next_button_id)
-        next_button_id += 1
-        vbox.addWidget(disc_button)
-
-        label = QLabel("Disc")
-        label.setFixedWidth(button_width)
-        label.setAlignment(QtCore.Qt.AlignCenter)
-        vbox.addWidget(label)
-
-        grid_layout.addLayout(vbox,rI,cI,1,1)
-        rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
-
-        vbox = QVBoxLayout()
-        annulus_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/annulus.svg"), iconSize=icon_size, checkable=True, checked=False)
-        annulus_button.setFixedSize(button_width,button_height)
-        annulus_button.setStyleSheet(qpushbutton_style_sheet) 
-        self.cell_pos_button_group.addButton(annulus_button,next_button_id)
-        next_button_id += 1
-        vbox.addWidget(annulus_button)
-
-        label = QLabel("Annulus")
-        label.setFixedWidth(button_width)
-        label.setAlignment(QtCore.Qt.AlignCenter)
-        vbox.addWidget(label)
-
-        grid_layout.addLayout(vbox,rI,cI,1,1)
-        rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
-
-        vbox = QVBoxLayout()
-        wedge_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/wedge.svg"), iconSize=icon_size, checkable=True, checked=False)
-        wedge_button.setFixedSize(button_width,button_height)
-        wedge_button.setStyleSheet(qpushbutton_style_sheet) 
-        self.cell_pos_button_group.addButton(wedge_button,next_button_id)
-        next_button_id += 1
-        vbox.addWidget(wedge_button)
-
-        label = QLabel("Wedge")
-        label.setFixedWidth(button_width)
-        label.setAlignment(QtCore.Qt.AlignCenter)
-        vbox.addWidget(label)
-
-        grid_layout.addLayout(vbox,rI,cI,1,1)
-        rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
-
-        vbox = QVBoxLayout()
-        rainbow_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/rainbow.svg"),enabled=False, iconSize=icon_size, checkable=True, checked=False) # not ready for this yet
-        rainbow_button.setFixedSize(button_width,button_height)
-        rainbow_button.setStyleSheet(qpushbutton_style_sheet) 
-        self.cell_pos_button_group.addButton(rainbow_button,next_button_id)
-        next_button_id += 1
-        vbox.addWidget(rainbow_button)
-
-        label = QLabel("Rainbow\n(why not?!)\nWork in progess...")
-        label.setFixedWidth(button_width)
-        label.setAlignment(QtCore.Qt.AlignCenter)
-        vbox.addWidget(label)
-
-        grid_layout.addLayout(vbox,rI,cI,1,1)
-        rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
-        if self.use_spatial_data:
-            self.spatial_plotter_id = next_button_id
-            vbox = QVBoxLayout()
-            spatial_button = QPushButton(icon=QIcon(sys.path[0] + "/icon/spatial.png"), enabled=True, checkable=True, iconSize=icon_size)
-            spatial_button.setFixedSize(button_width,button_height)
-            spatial_button.setStyleSheet(qpushbutton_style_sheet) 
-            spatial_button.toggled.connect(self.spatial_button_cb)
-            spatial_button.setChecked(True)
-            self.cell_pos_button_group.addButton(spatial_button,next_button_id)
-            next_button_id += 1
-            vbox.addWidget(spatial_button)
-
-            label = QLabel("Spatial Plotter")
-            label.setFixedWidth(button_width)
-            label.setAlignment(QtCore.Qt.AlignCenter)
-            vbox.addWidget(label)
-
-            grid_layout.addLayout(vbox,rI,cI,1,1)
-            rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
-
-        master_vbox.addLayout(grid_layout)
-
-        pos_scroll_area_widget = QWidget()
-        pos_scroll_area_widget.setLayout(master_vbox)
-
-        self.pos_scroll_area = QScrollArea()
-        self.pos_scroll_area.setWidget(pos_scroll_area_widget)
-
-    def spatial_button_cb(self, checked):
-        if not checked:
-            return
-        for cbd in self.checkbox_dict.values():
-            if cbd.isEnabled():
-                cbd.setChecked(True)
-
-    def continue_to_rename(self):
-        self.open_next_window(BioinfImportWindow, show=False)
-        vbox = QVBoxLayout()
-        label = QLabel("Rename your chosen cell types if you like:")
-        vbox.addWidget(label)
+    def continue_from_edit(self):
         self.intermediate_types = [] # types used after editing (keep, merge, delete) but before rename
         self.intermediate_type_pre_image = {} # dictionary where keys are intermediate cell types and values are the original cell types that map to them
         original_cell_type_list = list(self.cell_type_dict.keys())
@@ -2470,53 +2504,14 @@ class BioinfImport(QWidget):
                     self.intermediate_type_pre_image[intermediate_type] = [cell_type]
                 else:
                     self.intermediate_type_pre_image[intermediate_type].append(cell_type)
-        labels = {}
-        self.new_name_line_edit = {}
-        vbox_scroll_area = QVBoxLayout()
-        for intermediate_type in self.intermediate_types:
-            hbox = QHBoxLayout()
-            label_text = ", ".join(self.intermediate_type_pre_image[intermediate_type])
-            label_text += " \u21d2 "
-            labels[intermediate_type] = QLabel(label_text)
-            self.new_name_line_edit[intermediate_type] = QLineEdit()
-            self.new_name_line_edit[intermediate_type].setText(self.intermediate_type_pre_image[intermediate_type][0])
-            hbox.addWidget(labels[intermediate_type])
-            hbox.addWidget(self.new_name_line_edit[intermediate_type])
-            vbox_scroll_area.addLayout(hbox)
+        self.rename_cell_types()
 
-        widget_for_scroll_area = QWidget()
-        widget_for_scroll_area.setLayout(vbox_scroll_area)
-        self.cell_type_rename_scroll_area = QScrollArea()
-        self.cell_type_rename_scroll_area.setWidget(widget_for_scroll_area)
+    ### Rename cell types
+    def rename_cell_types(self):
+        self.open_next_window(BioinfImportWindow_RenameCellTypes, show=True)
 
-        vbox.addWidget(self.cell_type_rename_scroll_area)
-
-        hbox = QHBoxLayout()
-        go_back_button = GoBackButton(self.window, self)
-        continue_button = ContinueButton(self.window, self.continue_on_rename_cb)
-
-        hbox.addWidget(go_back_button)
-        hbox.addWidget(continue_button)
-
-        vbox.addLayout(hbox)
-
-        self.window.setLayout(vbox)
-        self.window.hide()
-        self.window.show()
-
-    def go_back_to_prev_window(self):
-        self.window = self.previous_windows.pop()
-        self.window.hide()
-        self.window.show()
-
-    def continue_on_rename_cb(self):
-        print("-------Continuing on to Rename-------")
-        # keep editing here
-        self.cell_types_list_final = []
-        for intermediate_type in self.intermediate_types:
-            self.cell_types_list_final.append(self.new_name_line_edit[intermediate_type].text())
-            for cell_type in self.intermediate_type_pre_image[intermediate_type]:
-                self.cell_type_dict[cell_type] = self.new_name_line_edit[intermediate_type].text()
+    def continue_from_rename(self):
+        print("-------Continuing from Rename-------")
 
         if self.use_spatial_data:
             print(f"self.cell_types_original = {self.cell_types_original}")
@@ -2528,10 +2523,10 @@ class BioinfImport(QWidget):
         self.count_final_cell_types()
         self.compute_cell_volumes() # used in confluence computations, and in spatial_plotter
         if self.use_spatial_data:
-            self.continue_to_cell_pos_cb()
+            self.set_cell_positions()
         else:
-            self.continue_to_cell_counts()
-
+            self.set_cell_counts()
+ 
     def count_final_cell_types(self):
         self.cell_counts = {}
         for cell_type in self.cell_types_list_final:
@@ -2539,69 +2534,6 @@ class BioinfImport(QWidget):
         for ctn in self.cell_types_final:
             self.cell_counts[ctn] += 1
 
-    def keep_cb(self):
-        cell_type = self.sender().objectName()
-        self.set_cell_type_to_keep(cell_type)
-
-    def set_cell_type_to_keep(self, cell_type, check_merge_gp=True):
-        self.cell_type_dict[cell_type] = cell_type
-        self.checkbox_dict_edit[cell_type].setEnabled(True)
-        self.checkbox_dict_edit[cell_type].setStyleSheet(self.checkbox_style["keep"])
-        if  check_merge_gp and ("\u21d2 Merge Gp. #" in self.checkbox_dict_edit[cell_type].text()):
-            # check for merge group that is no longer merging
-            gp_preimage = [ctn for ctn, new_name in self.cell_type_dict.items() if (ctn != cell_type and new_name == self.cell_type_dict[cell_type])] # get cell types that map into this merge group
-            if len(gp_preimage)==1: # then delete this merge gp:
-                # gp_preimage = [ctn for ctn in gp_preimage if ctn != cell_type]
-                self.set_cell_type_to_keep(gp_preimage[0], check_merge_gp=False)
-            elif cell_type == self.cell_type_dict[cell_type]: # make sure this current cell type did not set the merge group name
-                first_name = None
-                for ctn in gp_preimage:
-                    if first_name is None:
-                        first_name = ctn
-                    self.cell_type_dict[ctn] = first_name
-
-        self.cell_type_dict[cell_type] = cell_type
-        self.checkbox_dict_edit[cell_type].setText(cell_type)
-        self.keep_button[cell_type].setEnabled(False)
-
-    def delete_cb(self):
-        for cell_type in self.checkbox_dict_edit.keys():
-            if self.checkbox_dict_edit[cell_type].isChecked():
-                self.cell_type_dict[cell_type] = None
-                self.checkbox_dict_edit[cell_type].setChecked(False)
-                self.checkbox_dict_edit[cell_type].setEnabled(False)
-                self.checkbox_dict_edit[cell_type].setStyleSheet(self.checkbox_style["delete"])
-
-                self.keep_button[cell_type].setEnabled(True)
-
-    def merge_cb(self):
-        self.merge_id += 1
-        first_name = None
-        for cell_type in self.checkbox_dict_edit.keys():
-            if self.checkbox_dict_edit[cell_type].isChecked():
-                if first_name is None:
-                    first_name = cell_type
-                self.cell_type_dict[cell_type] = first_name
-                self.checkbox_dict_edit[cell_type].setChecked(False)
-                self.checkbox_dict_edit[cell_type].setEnabled(False)
-                self.checkbox_dict_edit[cell_type].setStyleSheet(self.checkbox_style["merge"])
-                self.checkbox_dict_edit[cell_type].setText(f"{cell_type} \u21d2 Merge Gp. #{self.merge_id}")
-
-                self.keep_button[cell_type].setEnabled(True)
-
-    def list_current_cell_type_names(self):
-        if self.editing_cell_type_names:
-            label_text = "The following cell types remain for editing"
-            cell_type_list = self.remaining_cell_types_list_original
-        else:
-            label_text = "The following cell types were found:"
-            cell_type_list = self.cell_types_list_original
-        label_text +=  "<html><ul>"
-        for ctn in cell_type_list:
-            label_text += f"<li>{ctn}</li>"
-        label_text += "</ul></html>"
-        return QLabel(label_text)
-    
     def compute_cell_volumes(self):
         self.cell_volume = {}
         for cell_type in self.cell_types_list_final:
@@ -2610,28 +2542,26 @@ class BioinfImport(QWidget):
             else:
                 self.cell_volume[cell_type] = 2494 # use PhysiCell default
 
-    def setup_confluence_info(self):
-        self.compute_cell_volumes()
-        volume_env = (float(self.config_tab.xmax.text()) - float(self.config_tab.xmin.text())) * (float(self.config_tab.ymax.text()) - float(self.config_tab.ymin.text()))
-        self.prop_total_area_one = {}
-        self.prop_dot_ratios = 0
-        for idx, cell_type in enumerate(self.cell_types_list_final):
-            self.prop_total_area_one[cell_type] = (((9*np.pi*self.cell_volume[cell_type]**2) / 16) ** (1./3)) / volume_env
-            self.prop_dot_ratios += (self.cell_type_props[idx] * self.prop_total_area_one[cell_type])
+    ### Set cell counts
+    def set_cell_counts(self):
+        self.open_next_window(BioinfImportWindow_CellCounts, show=True)
 
-    def fill_gui(self):
-        self.csv_folder.setText(self.config_tab.csv_folder.text())
-        self.csv_file.setText(self.config_tab.csv_file.text())
+    def continue_from_counts(self):
+        self.set_cell_positions()
 
-    def search_adata_obsm_for(self, substring):
-        print(f"search_adata_obsm_for {substring}")
-        print(f"self.adata.obsm.items() = {self.adata.obsm.items()}")
-        for k, v in self.adata.obsm.items():
-            if substring in k:
-                print(f"Found! substring = {substring} is in k = {k}, ")
-                return True, k, v
-        return False, None, None
+    ### Set cell positions
+    def set_cell_positions(self):
 
+        self.open_next_window(BioinfImportWindow_PositionsWindow, show=True)
+
+    def continue_from_positions(self):
+        self.write_to_file()
+
+    ### Write data
+    def write_to_file(self):
+        self.open_next_window(BioinfImportWindow_WritePositions, show=True)
+        
+    ### Finish
     def close_up(self):
         plt.style.use("default")
         self.ics_tab.clear_cb()
@@ -2642,7 +2572,8 @@ class BioinfImport(QWidget):
         self.close()
         self.window.close()
         print("BioinfImportWindow: Colors will likely change in the ICs tab due to previous cell types being present.")
-        
+
+# helper functions
 def create_checkboxes_for_cell_types(vbox, cell_types):
     checkbox_dict = {}
     for cell_type in cell_types:
