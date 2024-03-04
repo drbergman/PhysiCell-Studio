@@ -2340,10 +2340,7 @@ class BioinfImport(QWidget):
         self.celldef_tab = celldef_tab
         self.ics_tab = ics_tab
 
-        self.window = None
-        self.previous_windows = []
-        self.stale_futures = True
-        self.current_window_idx = 0
+        self.start_walkthrough()
 
         self.qlineedit_style_sheet = """
             QLineEdit:disabled {
@@ -2445,7 +2442,6 @@ class BioinfImport(QWidget):
                 else:
                     print(f"\tFutures are still not stale.")
             self.previous_windows[self.current_window_idx-1].hide()
-            # self.current_window_idx += 1
         else: # This is opening the very first window
             self.window = window_class(self)
 
@@ -2477,8 +2473,15 @@ class BioinfImport(QWidget):
                 return True, k, v
         return False, None, None
 
+    def start_walkthrough(self):
+        self.window = None
+        self.current_window_idx = 0 # reset the window index as this is an entry point for the walkthrough
+        self.stale_futures = True # reset the window index as this is an entry point for the walkthrough
+        self.previous_windows = []
+    
     ### Import data
     def import_cb(self):
+        self.start_walkthrough()
         full_file_path = QFileDialog.getOpenFileName(self,'',".")
         file_path = full_file_path[0]
 
