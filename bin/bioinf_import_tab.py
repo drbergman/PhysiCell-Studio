@@ -49,7 +49,7 @@ class ContinueButton(QPushButton):
 class BioinfImportWindow(QWidget):
     def __init__(self, bioinf_walkthrough):
         super().__init__()
-        self.setWindowTitle("Bioinformatics Import Walkthrough")
+        self.setWindowTitle(f"Bioinformatics Import Walkthrough: Step {bioinf_walkthrough.current_window_idx+1}")
         self.biwt = bioinf_walkthrough
         self.biwt.stale_futures = True # initializing a window means that any future windows are stale
 
@@ -816,8 +816,16 @@ class BioinfImportWindow_PositionsWindow(BioinfImportWindow):
         for cbd in self.checkbox_dict.values():
             self.cell_type_button_group.addButton(cbd)
         vbox_mid_undos = QVBoxLayout()
+        undo_qpushbutton_style_sheet = """
+            QPushButton:enabled {
+                background-color : yellow;
+            }
+            QPushButton:disabled {
+                background-color : grey;
+            }
+            """
         for cell_type in self.biwt.cell_types_list_final:
-            self.undo_button[cell_type] = QPushButton("Undo",enabled=False,styleSheet=self.biwt.qpushbutton_style_sheet,objectName=cell_type)
+            self.undo_button[cell_type] = QPushButton("Undo",enabled=False,styleSheet=undo_qpushbutton_style_sheet,objectName=cell_type)
             self.undo_button[cell_type].clicked.connect(self.undo_button_cb)
             vbox_mid_undos.addWidget(self.undo_button[cell_type])
         
@@ -1088,11 +1096,11 @@ class BioinfImportWindow_WritePositions(BioinfImportWindow):
         vbox.addLayout(hbox)
 
         self.finish_write_button = QPushButton("Overwrite")
-        self.finish_write_button.setStyleSheet("QPushButton {background-color : lightgreen; font-weight : bold;}")
+        self.finish_write_button.setStyleSheet("QPushButton {background-color : yellow; font-weight : bold;}")
         self.finish_write_button.clicked.connect(self.finish_write_button_cb)
 
         self.finish_append_button = QPushButton("Append")
-        self.finish_append_button.setStyleSheet("QPushButton {background-color : lightgreen; font-weight : bold;}")
+        self.finish_append_button.setStyleSheet("QPushButton {background-color : yellow; font-weight : bold;}")
         self.finish_append_button.clicked.connect(self.finish_append_button_cb)
 
         hbox = QHBoxLayout()
@@ -2422,15 +2430,22 @@ class BioinfImport(QWidget):
 
     def open_next_window(self, window_class, layout=None, show=True):
         if self.window is not None:
+            self.current_window_idx += 1
             if self.stale_futures:
-                del self.previous_windows[self.current_window_idx:]
+                print(f"\tFutures are stale. Deleting from {self.current_window_idx} to {len(self.previous_windows)}")
+                del self.previous_windows[self.current_window_idx-1:]
                 self.previous_windows.append(self.window)
                 self.window = window_class(self)
             else:
-                self.window = self.previous_windows[self.current_window_idx+1]
-                self.stale_futures = self.current_window_idx+1==len(self.previous_windows)-1 # if it's now the last one, mark it as stale
-            self.previous_windows[self.current_window_idx].hide()
-            self.current_window_idx += 1
+                print(f"\tFutures are not stale. Using window {self.current_window_idx+1}...")
+                self.window = self.previous_windows[self.current_window_idx]
+                self.stale_futures = self.current_window_idx==len(self.previous_windows)-1 # if it's now the last one, mark it as stale
+                if self.stale_futures:
+                    print(f"\tFutures are now stale.")
+                else:
+                    print(f"\tFutures are still not stale.")
+            self.previous_windows[self.current_window_idx-1].hide()
+            # self.current_window_idx += 1
         else: # This is opening the very first window
             self.window = window_class(self)
 
@@ -2444,10 +2459,15 @@ class BioinfImport(QWidget):
     def go_back_to_prev_window(self):
         if len(self.previous_windows)==self.current_window_idx:
             self.previous_windows.append(self.window)
+        if self.stale_futures and self.current_window_idx < len(self.previous_windows)-1:
+            print(f"\tFutures are stale. Deleting from {self.current_window_idx+2} to {len(self.previous_windows)}")
+            del self.previous_windows[self.current_window_idx+1:]
+        elif not self.stale_futures:
+            print(f"\tFutures are not stale. Keeping windows {self.current_window_idx+1} to {len(self.previous_windows)}")
+        self.stale_futures = False # any remaining future windows are not stale
         self.window.hide()
         self.current_window_idx -= 1
         self.window = self.previous_windows[self.current_window_idx]
-        self.stale_futures = False # any remaining future windows are not stale
         self.window.hide()
         self.window.show()
 
@@ -2535,7 +2555,7 @@ class BioinfImport(QWidget):
 
         if self.use_spatial_data:
             print(f"self.cell_types_original = {self.cell_types_original}")
-            self.cell_types_final, self.spatial_data_final = zip(*[(self.cell_type_dict_on_rename[ctn], pos) for ctn, pos in zip(self.cell_types_original, self.spatial_data) if self.cell_type_dict_on_rename[ctn] is not None])
+            self.cell_types_final, self.spatial_data_final = zip(*[(self.cell_type_dict_on_rename[ctn], pos) for ctn, pos in zip(self.cell_types_original, self.spatial_data) if ctn in self.cell_type_dict_on_rename.keys()])
             self.spatial_data_final = np.vstack([*self.spatial_data_final])
         else:
             self.cell_types_final = [self.cell_type_dict_on_rename[ctn] for ctn in self.cell_types_original if self.cell_type_dict_on_rename[ctn] is not None]
