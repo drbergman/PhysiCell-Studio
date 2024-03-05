@@ -3076,7 +3076,8 @@ class BioinfImport(QWidget):
 
         print("------------anndata object loaded-------------")
 
-        self.spatial_data_found, self.spatial_data_key, self.spatial_data = self.search_adata_obsm_for("spatial")
+
+        self.search_for_spatial_data()
 
         self.open_next_window(BioinfImportWindow_ClusterColumn, show=False)
 
