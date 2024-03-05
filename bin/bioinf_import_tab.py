@@ -97,7 +97,7 @@ class BioinfImportWindow_SpatialQuery(BioinfImportWindow):
     def __init__(self, bioinf_walkthrough):
         super().__init__(bioinf_walkthrough)
 
-        s = f"It seems this data may contain spatial information in adata.obsm['{self.biwt.spatial_data_key}'].\n"
+        s = f"It seems this data may contain spatial information in {self.biwt.spatial_data_location}.\n"
         s += "Would you like to use this?"
         label = QLabel(s)
 
@@ -250,7 +250,7 @@ class BioinfImportWindow_EditCellTypes(BioinfImportWindow):
 
         self.dim_red_fig = None
         self.dim_red_canvas = None
-        for key_substring in ["umap","tsne","pca"]:
+        for key_substring in ["umap","tsne","pca","spatial"]:
             if self.try_to_plot_dim_red(key_substring=key_substring):
                 splitter = QSplitter()
                 left_side = QWidget()
@@ -2414,11 +2414,12 @@ class BioinfImport(QWidget):
             # self.set_cell_positions()
         elif bioinf_import_test_spatial:
             self.column_line_edit.setText("cluster")
-            self.import_file("./data/visium_adata.h5ad")
+            # self.import_file("./data/visium_adata.h5ad")
+            self.import_file("./data/Zhuang-ABCA-1-1.064_raw_wClusterAnnots.h5ad")
             # self.continue_from_import()
-            self.continue_from_spatial_query()
-            self.continue_from_edit()
-            self.window.process_window() # process rename window
+            # self.continue_from_spatial_query()
+            # self.continue_from_edit()
+            # self.window.process_window() # process rename window
             # self.set_cell_positions()
 
     def fill_gui(self):
@@ -2467,10 +2468,20 @@ class BioinfImport(QWidget):
         self.window.hide()
         self.window.show()
 
-    def search_adata_obsm_for(self, substring):
-        for k, v in self.adata.obsm.items():
-            if substring in k:
-                return True, k, v
+    def search_adata_obsm_for(self, pattern, exact=False):
+        return self.search_for(self.adata.obsm, pattern, exact)
+
+    def search_adata_obs_for(self, pattern, exact=False):
+        return self.search_for(self.adata.obs, pattern, exact)
+    
+    def search_for(self, array_dict, pattern, exact=False):
+        for k, v in array_dict.items():
+            if exact:
+                if k == pattern:
+                    return True, k, v
+            else:
+                if pattern in k:
+                    return True, k, v
         return False, None, None
 
     def start_walkthrough(self):
@@ -2496,7 +2507,8 @@ class BioinfImport(QWidget):
 
         print("------------anndata object loaded-------------")
 
-        self.spatial_data_found, self.spatial_data_key, self.spatial_data = self.search_adata_obsm_for("spatial")
+
+        self.search_for_spatial_data()
 
         self.open_next_window(BioinfImportWindow_ClusterColumn, show=False)
 
@@ -2517,6 +2529,22 @@ class BioinfImport(QWidget):
         else:
             print("spatial data found. asking you about it now...")
             self.open_next_window(BioinfImportWindow_SpatialQuery, show=True)
+
+    def search_for_spatial_data(self):
+        # space ranger for visium data
+        self.spatial_data_found, key, self.spatial_data = self.search_adata_obsm_for("spatial")
+        if self.spatial_data_found:
+            self.spatial_data_location = f"adata.obsm['{key}']"
+            return
+        
+        # merscope
+        x_data_found, _, x_data = self.search_adata_obs_for("x", exact=True)
+        if x_data_found:
+            self.spatial_data_found, _, y_data = self.search_adata_obs_for("y", exact=True)
+            self.spatial_data = np.hstack((x_data.values.reshape(-1,1),y_data.values.reshape(-1,1)))
+            self.spatial_data_location = "adata.obs['x'] and adata.obs['y']"
+            self.adata.obsm["spatial"] = self.spatial_data
+            return
 
     def collect_cell_type_data(self):
         self.cell_types_original = self.adata.obs[self.current_column]
