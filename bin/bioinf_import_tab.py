@@ -114,7 +114,7 @@ class BioinfImportWindow_SpatialQuery(BioinfImportWindow):
         hbox_yn.addWidget(self.no)
 
         self.go_back_button = GoBackButton(self, self.biwt)
-        self.continue_button = ContinueButton(self, self.biwt.continue_from_spatial_query)
+        self.continue_button = ContinueButton(self, self.process_window)
         hbox_gb_cont = QHBoxLayout()
         hbox_gb_cont.addWidget(self.go_back_button)
         hbox_gb_cont.addWidget(self.continue_button)
@@ -128,6 +128,9 @@ class BioinfImportWindow_SpatialQuery(BioinfImportWindow):
     def yn_toggled(self,id):
         self.biwt.stale_futures = True
         self.biwt.use_spatial_data = id==0
+
+    def process_window(self):
+        self.biwt.continue_from_spatial_query()
 
 class BioinfImportWindow_EditCellTypes(BioinfImportWindow):
     def __init__(self, bioinf_walkthrough):
@@ -197,7 +200,6 @@ class BioinfImportWindow_EditCellTypes(BioinfImportWindow):
         self.rename_button_style_sheet["merge"] = rename_button_style_sheet_template(merge_color)
         self.rename_button_style_sheet["delete"] = rename_button_style_sheet_template(delete_color)
         row_height = 30
-        print(f"self.biwt.cell_types_list_original = {self.biwt.cell_types_list_original}")
         self.cell_type_edit_scroll_area = QScrollArea()
         vbox_cell_type_keep = QVBoxLayout()
         for cell_type in self.biwt.cell_types_list_original:
@@ -1201,6 +1203,8 @@ class BioinfImportPlotWindow(QWidget):
         self.plot_zdel = float(self.config_tab.zdel.text())
         self.plot_dz = self.plot_zmax - self.plot_zmin
 
+        self.plot_is_2d = self.plot_zmax - self. plot_zmin <= self.plot_zdel # if the domain height is larger than the voxel height, then we have a 3d simulation
+
         self.create_patch_history()
 
         vbox = QVBoxLayout()
@@ -1267,7 +1271,6 @@ class BioinfImportPlotWindow(QWidget):
 
     def num_box_cb(self, v):
         print("------num box changed-------")
-        print(f"\tv = {v}")
         self.scatter_sizes = v * self.single_scatter_sizes
         self.preview_patch.set_sizes(self.scatter_sizes)
         
@@ -1291,20 +1294,34 @@ class BioinfImportPlotWindow(QWidget):
             xL, xR = x[0] + [-0.5,0.5]
             yL, yR = y[0] + [-0.5,0.5]
 
-        factor_w = self.plot_dx / (xR-xL)
-        factor_h = self.plot_dy / (yR-yL)
+        spatial_factors = [self.plot_dx / (xR-xL),self.plot_dy / (yR-yL)] # factors for scaling each dimension to an interval of length 1
+        if not self.plot_is_2d:
+            z = self.biwt.spatial_data_final[:,2]
+            zL = np.min(z) if len(x) > 1 else z[0] - 0.5
+            zR = np.max(z) if len(x) > 1 else z[0] + 0.5
+            spatial_factors.append(self.plot_dz / (zR-zL))
 
-        spatial_factor = min([factor_w,factor_h])
+        spatial_factor = min(spatial_factors)
         width = (xR-xL)*spatial_factor
         height = (yR-yL)*spatial_factor
         x0 = 0.5*(self.plot_xmin+self.plot_xmax - width)
         y0 = 0.5*(self.plot_ymin+self.plot_ymax - height)
 
-        self.spatial_base_coords = self.biwt.spatial_data_final - [xL,yL]
+        self.spatial_base_coords = self.biwt.spatial_data_final[:,0:2] - [xL,yL]
         self.spatial_base_coords = self.spatial_base_coords / [xR-xL,yR-yL]
 
+        if self.plot_is_2d:
+            return [x0, y0, width, height]
+        
+        print(f"xL={xL}, xR={xR}, yL={yL}, yR={yR}, zL={zL}, zR={zR}")
+        print(f"spatial_factors = {spatial_factors}, spatial_factor = {spatial_factor}\n\n\n")
+        self.spatial_base_coords = np.hstack((self.spatial_base_coords, (self.biwt.spatial_data_final[:,2].reshape((-1,1)) - zL)/(zR-zL)))
+        depth = (zR-zL)*spatial_factor
+        z0 = 0.5*(self.plot_zmin+self.plot_zmax - depth)
+
+        return [x0, y0, z0, width, height, depth]
+
         # self.spatial_base_coords = np.array([0.5,0.5])
-        return [x0, y0, width, height]
 
     def setup_system_keys(self):
         is_windows_os = os.name == "nt"
@@ -1354,30 +1371,60 @@ class BioinfImportPlotWindow(QWidget):
         rI = 0
         cI = 0
         cmax = 2 
-        for i in range(6):
-            hbox = QHBoxLayout()
-            self.par_label.append(QLabel())
-            self.par_label[i].setAlignment(QtCore.Qt.AlignRight)
-            self.par_label[i].setFixedWidth(par_label_width)
-            self.par_text.append(QLineEdit())
-            self.par_text[i].setFixedWidth(par_text_width)
-            self.par_text[i].setStyleSheet(self.biwt.qlineedit_style_sheet)
-            self.par_text[i].editingFinished.connect(self.par_editing_finished)
+        if self.plot_is_2d:
+            for i in range(6):
+                hbox = QHBoxLayout()
+                self.par_label.append(QLabel())
+                self.par_label[i].setAlignment(QtCore.Qt.AlignRight)
+                self.par_label[i].setFixedWidth(par_label_width)
+                self.par_text.append(QLineEdit())
+                self.par_text[i].setFixedWidth(par_text_width)
+                self.par_text[i].setStyleSheet(self.biwt.qlineedit_style_sheet)
+                self.par_text[i].editingFinished.connect(self.par_editing_finished)
 
-            hbox.addWidget(self.par_label[i])
-            hbox.addWidget(self.par_text[i])
-            grid_layout.addLayout(hbox,rI,cI)
-            rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
+                hbox.addWidget(self.par_label[i])
+                hbox.addWidget(self.par_text[i])
+                grid_layout.addLayout(hbox,rI,cI)
+                rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
 
-        coord_validator = QtGui.QDoubleValidator()
-        self.par_text[0].setValidator(coord_validator)
-        self.par_text[1].setValidator(coord_validator)
-        self.par_text[4].setValidator(coord_validator) # theta 1
-        self.par_text[5].setValidator(coord_validator) # theta 2
-        pos_par_validator = QtGui.QDoubleValidator()
-        pos_par_validator.setBottom(0)
-        for i in range(2,4):
-            self.par_text[i].setValidator(pos_par_validator)
+
+            coord_validator = QtGui.QDoubleValidator()
+            self.par_text[0].setValidator(coord_validator)
+            self.par_text[1].setValidator(coord_validator)
+            self.par_text[4].setValidator(coord_validator) # theta 1
+            self.par_text[5].setValidator(coord_validator) # theta 2
+            pos_par_validator = QtGui.QDoubleValidator()
+            pos_par_validator.setBottom(0)
+            for i in range(2,4):
+                self.par_text[i].setValidator(pos_par_validator)
+        else: # 3d plotting pars
+            for i in range(9):
+                hbox = QHBoxLayout()
+                self.par_label.append(QLabel())
+                self.par_label[i].setAlignment(QtCore.Qt.AlignRight)
+                self.par_label[i].setFixedWidth(par_label_width)
+                self.par_text.append(QLineEdit())
+                self.par_text[i].setFixedWidth(par_text_width)
+                self.par_text[i].setStyleSheet(self.biwt.qlineedit_style_sheet)
+                self.par_text[i].editingFinished.connect(self.par_editing_finished)
+
+                hbox.addWidget(self.par_label[i])
+                hbox.addWidget(self.par_text[i])
+                grid_layout.addLayout(hbox,rI,cI)
+                rI, cI = [rI,cI+1] if cI < cmax else [rI+1,0]
+
+
+            coord_validator = QtGui.QDoubleValidator()
+            self.par_text[0].setValidator(coord_validator)
+            self.par_text[1].setValidator(coord_validator)
+            self.par_text[2].setValidator(coord_validator)
+            self.par_text[6].setValidator(coord_validator) # theta 1
+            self.par_text[7].setValidator(coord_validator) # theta 2
+            self.par_text[8].setValidator(coord_validator) # theta 2
+            pos_par_validator = QtGui.QDoubleValidator()
+            pos_par_validator.setBottom(0)
+            for i in range(3,6):
+                self.par_text[i].setValidator(pos_par_validator)
 
         return grid_layout
     
@@ -1469,8 +1516,14 @@ class BioinfImportPlotWindow(QWidget):
             elif id==6:
                 self.par_label[0].setText("x0")
                 self.par_label[1].setText("y0")
-                self.par_label[2].setText("width")
-                self.par_label[3].setText("height")
+                if self.plot_is_2d:
+                    self.par_label[2].setText("width")
+                    self.par_label[3].setText("height")
+                else:
+                    self.par_label[2].setText("z0")
+                    self.par_label[3].setText("width")
+                    self.par_label[4].setText("height")
+                    self.par_label[5].setText("depth")
                 self.mpl_cid.append(self.canvas.mpl_connect("button_press_event", self.rectangle_mouse_press))
                 self.mpl_cid.append(self.canvas.mpl_connect("motion_notify_event", self.rectangle_mouse_motion))
                 self.current_plotter = self.spatial_plotter
@@ -2050,10 +2103,10 @@ class BioinfImportPlotWindow(QWidget):
         self.current_pars_acceptable = True
 
     def spatial_plotter(self):
+        self.read_par_texts()
+        if not self.current_pars_acceptable:
+            return
         if self.plot_is_2d:
-            self.read_par_texts()
-            if not self.current_pars_acceptable:
-                return
             x0, y0, width, height = self.current_pars
             if self.preview_patch is None:
                 print(f"----initializing spatial plotter-----")
@@ -2070,11 +2123,12 @@ class BioinfImportPlotWindow(QWidget):
                 self.preview_patch.set_offsets(offset)
 
             # check left edge of rect is left of right edge of domain, right edge of rect is right of left edge of domain (similar in y direction)
-        bval = (x0 < self.plot_xmax) and (x0+width > self.plot_xmin) and (y0 < self.plot_ymax) and (y0+height > self.plot_ymin) # make sure the rectangle intersects the domain with positive area
-        if not self.plot_is_2d: # FIX (this will need a fix once we have 3d plotting fully implemented)
-            z0 = self.plot_zmin
-            depth = self.plot_zmax - self.plot_zmin
+            bval = (x0 < self.plot_xmax) and (x0+width > self.plot_xmin) and (y0 < self.plot_ymax) and (y0+height > self.plot_ymin) # make sure the rectangle intersects the domain with positive area
+        else: # FIX (this will need a fix once we have 3d plotting fully implemented)
+            x0, y0, z0, width, height, depth = self.current_pars
+            bval = (x0 < self.plot_xmax) and (x0+width > self.plot_xmin) and (y0 < self.plot_ymax) and (y0+height > self.plot_ymin) # make sure the rectangle intersects the domain with positive area
             bval = bval and (z0 < self.plot_zmax) and (z0+depth > self.plot_zmin)
+
         self.plot_cells_button.setEnabled(bval and self.pw.is_any_cell_type_button_group_checked())
 
         self.canvas.update()
@@ -2088,7 +2142,6 @@ class BioinfImportPlotWindow(QWidget):
 
         self.canvas.setFocusPolicy( QtCore.Qt.ClickFocus )
 
-        print(f"plot_zmin = {self.plot_zmin}, plot_zmax = {self.plot_zmax}, plot_zdel = {self.plot_zdel}")
         self.plot_is_2d = self.plot_zmax - self. plot_zmin <= self.plot_zdel # if the domain height is larger than the voxel height, then we have a 3d simulation
         if self.plot_is_2d: 
             print("\n\n2d projection\n\n")
@@ -2157,18 +2210,25 @@ class BioinfImportPlotWindow(QWidget):
     def plot_cell_pos(self):
         self.preview_constrained_to_axes = False
         if self.pw.cell_pos_button_group.checkedId()==self.pw.spatial_plotter_id:
-            x0, y0, width, height = self.current_pars
+            if self.plot_is_2d:
+                x0, y0, width, height = self.current_pars
+            else:
+                x0, y0, z0, width, height, depth = self.current_pars
             n_per_spot = self.num_box.value()
             for cell_type in self.pw.checkbox_dict.keys():
                 if self.pw.checkbox_dict[cell_type].isChecked():
                     idx_cell_type = [ctn==cell_type for ctn in self.biwt.cell_types_final]
                     cell_radius = np.sqrt(self.cell_type_micron2_area_dict[cell_type] / np.pi)
-                    cell_coords = np.hstack((self.spatial_base_coords[idx_cell_type] * [width, height] + [x0,y0],np.zeros((sum(idx_cell_type),1))))
+                    cell_coords = np.hstack((self.spatial_base_coords[idx_cell_type,0:2] * [width, height] + [x0,y0],np.zeros((sum(idx_cell_type),1))))
                     idx_inbounds = [(cc[0]>=self.plot_xmin and cc[0]<=self.plot_xmax and cc[1]>=self.plot_ymin and cc[1]<=self.plot_ymax) for cc in cell_coords]
                     cell_coords = cell_coords[idx_inbounds,:]
                     if n_per_spot==1:
                         self.biwt.csv_array[cell_type] = np.vstack((self.biwt.csv_array[cell_type],cell_coords))
-                        self.circles(cell_coords, s=cell_radius, color=self.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
+                        if self.plot_is_2d:
+                            self.circles(cell_coords, s=cell_radius, color=self.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
+                        else:
+                            cell_coords[:,2] = self.spatial_base_coords[idx_cell_type,2] * depth + z0
+                            self.ax0.scatter(cell_coords[:,0],cell_coords[:,1],cell_coords[:,2], s=8.0, color=self.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
                     else:
                         r = cell_radius * np.sqrt(n_per_spot)
                         all_new = np.empty((0,3))
@@ -2176,7 +2236,10 @@ class BioinfImportPlotWindow(QWidget):
                             self.wedge_sample(n_per_spot, cc[0], cc[1], r)
                             all_new = np.vstack((all_new,self.new_pos))
                         self.biwt.csv_array[cell_type] = np.vstack((self.biwt.csv_array[cell_type],all_new))
-                        self.circles(all_new, s=cell_radius, color=self.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
+                        if self.plot_is_2d:
+                            self.circles(all_new, s=cell_radius, color=self.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
+                        else:
+                            self.ax0.scatter(all_new[:,0],all_new[:,1],all_new[:,2], s=8.0, color=self.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
                     self.pw.checkbox_dict[cell_type].setEnabled(False)
                     self.pw.checkbox_dict[cell_type].setChecked(False)
                     self.pw.undo_button[cell_type].setEnabled(True)
@@ -2486,10 +2549,17 @@ class BioinfImport(QWidget):
             # self.continue_from_rename()
             # self.set_cell_positions()
         elif bioinf_import_test_spatial:
-            self.column_line_edit.setText("cluster")
-            # self.import_file("./data/visium_adata.h5ad")
-            self.import_file("./data/Zhuang-ABCA-1-1.064_raw_wClusterAnnots.h5ad")
-            # self.continue_from_import()
+            # file_name = "./data/visium_adata.h5ad"
+            file_name = "./data/Zhuang-ABCA-1-1.064_raw_wClusterAnnots.h5ad"
+            if file_name == "./data/Zhuang-ABCA-1-1.064_raw_wClusterAnnots.h5ad":
+                self.column_line_edit.setText("class")
+            else:
+                self.column_line_edit.setText("cluster")
+            self.import_file(file_name)
+            self.continue_from_import()
+            self.window.process_window() # process spatial y/n window
+            self.window.process_window() # process edit window
+            self.window.process_window() # process rename window
             # self.continue_from_spatial_query()
             # self.continue_from_edit()
             # self.window.process_window() # process rename window
@@ -2614,8 +2684,21 @@ class BioinfImport(QWidget):
         x_data_found, _, x_data = self.search_adata_obs_for("x", exact=True)
         if x_data_found:
             self.spatial_data_found, _, y_data = self.search_adata_obs_for("y", exact=True)
-            self.spatial_data = np.hstack((x_data.values.reshape(-1,1),y_data.values.reshape(-1,1)))
-            self.spatial_data_location = "adata.obs['x'] and adata.obs['y']"
+            if not self.spatial_data_found:
+                return
+            z_data_found, _, z_data = self.search_adata_obs_for("z", exact=True)
+
+            if z_data_found:
+                self.spatial_data = np.hstack((x_data.values.reshape(-1,1),y_data.values.reshape(-1,1),z_data.values.reshape(-1,1)))
+                self.spatial_data[:,2] += 0.02 * np.random.uniform(size=len(x_data)) - 100
+                print(f"\n\nz data found. Adding random z values to avoid overlap.")
+                print(f"self.spatial_data[:,2] = {self.spatial_data[:,2]}\n\n\n")
+                self.spatial_data_location = "adata.obs['x'], adata.obs['y'], and adata.obs['z']"
+            else:
+                print("\n\n\nz data not found. Assuming 2d data.\n\n\n")
+                self.spatial_data = np.hstack((x_data.values.reshape(-1,1),y_data.values.reshape(-1,1), np.zeros((len(x_data),1))))
+                self.spatial_data_location = "adata.obs['x'] and adata.obs['y']"
+
             self.adata.obsm["spatial"] = self.spatial_data
             return
 
@@ -2658,7 +2741,6 @@ class BioinfImport(QWidget):
         print("-------Continuing from Rename-------")
 
         if self.use_spatial_data:
-            print(f"self.cell_types_original = {self.cell_types_original}")
             self.cell_types_final, self.spatial_data_final = zip(*[(self.cell_type_dict_on_rename[ctn], pos) for ctn, pos in zip(self.cell_types_original, self.spatial_data) if ctn in self.cell_type_dict_on_rename.keys()])
             self.spatial_data_final = np.vstack([*self.spatial_data_final])
         else:
@@ -2695,7 +2777,6 @@ class BioinfImport(QWidget):
 
     ### Set cell positions
     def set_cell_positions(self):
-
         self.open_next_window(BioinfImportWindow_PositionsWindow, show=True)
 
     def continue_from_positions(self):
