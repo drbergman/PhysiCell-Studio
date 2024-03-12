@@ -21,6 +21,7 @@ import time
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Patch, Rectangle, Annulus, Wedge
 from matplotlib.collections import PatchCollection
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib import transforms
 
@@ -1058,9 +1059,12 @@ class BioinfImportWindow_PositionsWindow(BioinfImportWindow):
         self.ics_plot_area.ax0.cla()
         self.ics_plot_area.format_axis()
         for cell_type in self.biwt.csv_array.keys():
-            sz = np.sqrt(self.ics_plot_area.cell_type_micron2_area_dict[cell_type] / np.pi)
-            self.ics_plot_area.circles(self.biwt.csv_array[cell_type], s=sz, color=self.ics_plot_area.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.ics_plot_area.alpha_value)
-
+            if self.ics_plot_area.plot_is_2d:
+                sz = np.sqrt(self.ics_plot_area.cell_type_micron2_area_dict[cell_type] / np.pi)
+                self.ics_plot_area.circles(self.biwt.csv_array[cell_type], s=sz, color=self.ics_plot_area.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.ics_plot_area.alpha_value)
+            else:
+                # sz = self.ics_plot_area.cell_type_pt_area_dict[cell_type]
+                self.ics_plot_area.ax0.scatter(self.biwt.csv_array[cell_type][:,0],self.biwt.csv_array[cell_type][:,1],self.biwt.csv_array[cell_type][:,2], s=8.0, color=self.ics_plot_area.color_by_celltype[cell_type], alpha=self.ics_plot_area.alpha_value)
         self.ics_plot_area.sync_par_area() # easy way to redraw the patch for current plotting
         
         self.checkbox_dict[undone_cell_type].setEnabled(True)
@@ -1192,6 +1196,10 @@ class BioinfImportPlotWindow(QWidget):
         self.plot_ymin = float(self.config_tab.ymin.text())
         self.plot_ymax = float(self.config_tab.ymax.text())
         self.plot_dy = self.plot_ymax - self.plot_ymin
+        self.plot_zmin = float(self.config_tab.zmin.text())
+        self.plot_zmax = float(self.config_tab.zmax.text())
+        self.plot_zdel = float(self.config_tab.zdel.text())
+        self.plot_dz = self.plot_zmax - self.plot_zmin
 
         self.create_patch_history()
 
@@ -1408,7 +1416,7 @@ class BioinfImportPlotWindow(QWidget):
                 pt.setEnabled(False)
             for pl in self.par_label:
                 pl.setText("")
-            self.everywhere_plotter()
+            self.current_plotter = self.everywhere_plotter
         
         else: # set callbacks common to all
             self.mpl_cid.append(self.canvas.mpl_connect("button_release_event", self.mouse_released_cb)) # only appending to history on release; the motion doesn't add to history because it holds focus and so editingFinished signal not emitted while canvas holds focus
@@ -1468,7 +1476,7 @@ class BioinfImportPlotWindow(QWidget):
                 self.current_plotter = self.spatial_plotter
 
             self.activate_par_texts(id, self.current_plotter)
-            self.current_plotter()
+        self.current_plotter()
     
     def activate_par_texts(self, id, plotter):
         pars = self.patch_history[id][self.patch_history_idx[id]]
@@ -1492,11 +1500,14 @@ class BioinfImportPlotWindow(QWidget):
             pt.setText(str(pars[idx]))
 
     def everywhere_plotter(self):
-        if self.preview_patch is None:
-            self.preview_patch = self.ax0.add_patch(Rectangle((self.plot_xmin,self.plot_ymin),self.plot_dx,self.plot_dy,alpha=0.2))
+        if self.plot_is_2d:
+            if self.preview_patch is None:
+                self.preview_patch = self.ax0.add_patch(Rectangle((self.plot_xmin,self.plot_ymin),self.plot_dx,self.plot_dy,alpha=0.2))
+            else:
+                self.preview_patch.set_bounds(self.plot_xmin,self.plot_ymin,self.plot_dx,self.plot_dy)
         else:
-            self.preview_patch.set_bounds(self.plot_xmin,self.plot_ymin,self.plot_dx,self.plot_dy)
-
+            faces = rectangular_prism_faces(self.plot_xmin,self.plot_xmax,self.plot_ymin,self.plot_ymax,self.plot_zmin,self.plot_zmax)
+            self.preview_patch = self.ax0.add_collection3d(Poly3DCollection(faces, alpha=0.2, facecolors='gray', linewidths=1, edgecolors='black'))
         self.plot_cells_button.setEnabled(self.pw.is_any_cell_type_button_group_checked())
 
         self.canvas.update()
@@ -1682,17 +1693,22 @@ class BioinfImportPlotWindow(QWidget):
         return 57.295779513082323 * np.arctan2(y1-y0,x1-x0) # convert to degrees
 
     def rectangle_plotter(self):
-        self.read_par_texts()
-        if not self.current_pars_acceptable:
-            return
-        x0, y0, width, height = self.current_pars
-        if self.preview_patch is None:
-            self.preview_patch = self.ax0.add_patch(Rectangle((x0,y0),width,height,alpha=0.2))
-        else:
-            self.preview_patch.set_bounds(x0,y0,width,height)
+        if self.plot_is_2d:
+            self.read_par_texts()
+            if not self.current_pars_acceptable:
+                return
+            x0, y0, width, height = self.current_pars
+            if self.preview_patch is None:
+                self.preview_patch = self.ax0.add_patch(Rectangle((x0,y0),width,height,alpha=0.2))
+            else:
+                self.preview_patch.set_bounds(x0,y0,width,height)
 
         # check left edge of rect is left of right edge of domain, right edge of rect is right of left edge of domain (similar in y direction)
         bval = (x0 < self.plot_xmax) and (x0+width > self.plot_xmin) and (y0 < self.plot_ymax) and (y0+height > self.plot_ymin) # make sure the rectangle intersects the domain with positive area
+        if not self.plot_is_2d: # FIX (this will need a fix once we have 3d plotting fully implemented)
+            z0 = self.plot_zmin
+            depth = self.plot_zmax - self.plot_zmin
+            bval = bval and (z0 < self.plot_zmax) and (z0+depth > self.plot_zmin)
 
         self.plot_cells_button.setEnabled(bval and self.pw.is_any_cell_type_button_group_checked())
 
@@ -1700,20 +1716,26 @@ class BioinfImportPlotWindow(QWidget):
         self.canvas.draw()
 
     def disc_plotter(self):
-        self.read_par_texts()
-        if not self.current_pars_acceptable:
-            return
-        x0, y0, r = self.current_pars
-        if self.preview_patch is None:
-            self.preview_patch = self.ax0.add_patch(Circle((x0,y0),r,alpha=0.2))
-        else:
-            self.preview_patch.set(center=(x0,y0),radius=r)
+        if self.plot_is_2d:
+            self.read_par_texts()
+            if not self.current_pars_acceptable:
+                return
+            x0, y0, r = self.current_pars
+            if self.preview_patch is None:
+                self.preview_patch = self.ax0.add_patch(Circle((x0,y0),r,alpha=0.2))
+            else:
+                self.preview_patch.set(center=(x0,y0),radius=r)
 
-        # check the disc intersects the domain in non-trivial manner
-        r2 = self.get_distance2_to_domain(x0, y0)[0]
+            # check the disc intersects the domain in non-trivial manner
+            r2 = self.get_distance2_to_domain(x0, y0)[0]
         bval = r2 < r*r # make sure the distance from center of Circle to domain is less than radius of circle
-        
+        if not self.plot_is_2d: # FIX (this will need a fix once we have 3d plotting fully implemented)
+            z0 = self.plot_zmin
+            depth = self.plot_zmax - self.plot_zmin
+            bval = bval and (z0 < self.plot_zmax) and (z0+depth > self.plot_zmin)
+
         self.plot_cells_button.setEnabled(bval and self.pw.is_any_cell_type_button_group_checked())
+
         self.canvas.update()
         self.canvas.draw()
 
@@ -1734,36 +1756,41 @@ class BioinfImportPlotWindow(QWidget):
         return dx*dx + dy*dy, dx, dy
     
     def annulus_plotter(self):
-        self.read_par_texts()
-        if not self.current_pars_acceptable:
-            return
-        x0, y0, r0, r1 = self.current_pars
-        if r1==0 or (r1 < r0):
-            if self.preview_patch: # probably a way to impose this using validators, but that would require dynamically updating the validators...
-                self.preview_patch.remove()
-                self.canvas.update()
-                self.canvas.draw()
-                self.preview_patch = None
-            self.plot_cells_button.setEnabled(False)
-            return
-        
-        r2 = self.get_distance2_to_domain(x0,y0)[0]
-        cr2 = self.get_circumscribing_radius(x0, y0)
-        # outer_radius_reaches_domain = r2 < r1*r1
-        # inner_radius_does_not_contain_entire_domain = cr2 > r0*r0
+        if self.plot_is_2d:
+            self.read_par_texts()
+            if not self.current_pars_acceptable:
+                return
+            x0, y0, r0, r1 = self.current_pars
+            if r1==0 or (r1 < r0):
+                if self.preview_patch: # probably a way to impose this using validators, but that would require dynamically updating the validators...
+                    self.preview_patch.remove()
+                    self.canvas.update()
+                    self.canvas.draw()
+                    self.preview_patch = None
+                self.plot_cells_button.setEnabled(False)
+                return
+            
+            r2 = self.get_distance2_to_domain(x0,y0)[0]
+            cr2 = self.get_circumscribing_radius(x0, y0)
+            # outer_radius_reaches_domain = r2 < r1*r1
+            # inner_radius_does_not_contain_entire_domain = cr2 > r0*r0
+
+            width = r1-r0
+            try:
+                self.annulus_setter(x0,y0,r1,width)
+            except:
+                # my PR to matplotlib should resolve the need for this check!
+                # if width==r1: # hack to address the bug in matplotlib.patches.Annulus which checks if width < r0 rather than <= r0 as the error message suggests it does
+                #     width *= 1 - np.finfo(width).eps # reduce width by the littlest bit possible to make sure this bug doesn't hit
+                print("\tBioinfImport WARNING: You likely can use an update to matplotlib to fix a bug in their Annulus plots.\n\tWe'll take care of it for now.")
+                self.annulus_setter(x0,y0,r1,width*(1-np.finfo(width).eps))
+
         bval = (r2 < r1*r1) and (cr2 > r0*r0)
-
+        if not self.plot_is_2d: # FIX (this will need a fix once we have 3d plotting fully implemented)
+            z0 = self.plot_zmin
+            depth = self.plot_zmax - self.plot_zmin
+            bval = bval and (z0 < self.plot_zmax) and (z0+depth > self.plot_zmin)
         self.plot_cells_button.setEnabled(bval and self.pw.is_any_cell_type_button_group_checked())
-
-        width = r1-r0
-        try:
-            self.annulus_setter(x0,y0,r1,width)
-        except:
-            # my PR to matplotlib should resolve the need for this check!
-            # if width==r1: # hack to address the bug in matplotlib.patches.Annulus which checks if width < r0 rather than <= r0 as the error message suggests it does
-            #     width *= 1 - np.finfo(width).eps # reduce width by the littlest bit possible to make sure this bug doesn't hit
-            print("\tBioinfImport WARNING: You likely can use an update to matplotlib to fix a bug in their Annulus plots.\n\tWe'll take care of it for now.")
-            self.annulus_setter(x0,y0,r1,width*(1-np.finfo(width).eps))
 
         self.canvas.update()
         self.canvas.draw()
@@ -1786,34 +1813,39 @@ class BioinfImportPlotWindow(QWidget):
         return dx*dx + dy*dy
 
     def wedge_plotter(self):
-        self.read_par_texts()
-        if not self.current_pars_acceptable:
-            return
-        x0, y0, r0, r1, th1, th2 = self.current_pars
-        if r1 < r0:
-            if self.preview_patch: # probably a way to impose this using validators, but that would require dynamically updating the validators...
-                self.preview_patch.remove()
-                self.canvas.update()
-                self.canvas.draw()
-                self.preview_patch = None
-            self.plot_cells_button.setEnabled(False)
-            return
+        if self.plot_is_2d:
+            self.read_par_texts()
+            if not self.current_pars_acceptable:
+                return
+            x0, y0, r0, r1, th1, th2 = self.current_pars
+            if r1 < r0:
+                if self.preview_patch: # probably a way to impose this using validators, but that would require dynamically updating the validators...
+                    self.preview_patch.remove()
+                    self.canvas.update()
+                    self.canvas.draw()
+                    self.preview_patch = None
+                self.plot_cells_button.setEnabled(False)
+                return
+            
+            r2, dx, dy = self.get_distance2_to_domain(x0,y0)
+            cr2 = self.get_circumscribing_radius(x0, y0)
+            # outer_radius_reaches_domain = r2 < r1*r1
+            # inner_radius_does_not_contain_entire_domain = cr2 > r0*r0
+
+            if self.preview_patch is None:
+                self.preview_patch = self.ax0.add_patch(Wedge((x0,y0),r1,th1,th2,width=r1-r0,alpha=0.2))
+            else:
+                self.preview_patch.set(center=(x0,y0),radius=r1,theta1=th1,theta2=th2,width=r1-r0)
         
-        r2, dx, dy = self.get_distance2_to_domain(x0,y0)
-        cr2 = self.get_circumscribing_radius(x0, y0)
-        # outer_radius_reaches_domain = r2 < r1*r1
-        # inner_radius_does_not_contain_entire_domain = cr2 > r0*r0
         bval = (r2 < r1*r1) and (cr2 > r0*r0)
 
         bval = bval and self.wedge_in_domain(x0,y0,r0,r1,th1,th2,dx,dy,r2)
-
+        if not self.plot_is_2d: # FIX (this will need a fix once we have 3d plotting fully implemented)
+            z0 = self.plot_zmin
+            depth = self.plot_zmax - self.plot_zmin
+            bval = bval and (z0 < self.plot_zmax) and (z0+depth > self.plot_zmin)
         self.plot_cells_button.setEnabled(bval and self.pw.is_any_cell_type_button_group_checked())
 
-        if self.preview_patch is None:
-            self.preview_patch = self.ax0.add_patch(Wedge((x0,y0),r1,th1,th2,width=r1-r0,alpha=0.2))
-        else:
-            self.preview_patch.set(center=(x0,y0),radius=r1,theta1=th1,theta2=th2,width=r1-r0)
-        
         self.canvas.update()
         self.canvas.draw()
 
@@ -2018,27 +2050,31 @@ class BioinfImportPlotWindow(QWidget):
         self.current_pars_acceptable = True
 
     def spatial_plotter(self):
-        self.read_par_texts()
-        if not self.current_pars_acceptable:
-            return
-        x0, y0, width, height = self.current_pars
-        if self.preview_patch is None:
-            print(f"----initializing spatial plotter-----")
-            self.initial_x0 = x0
-            self.initial_y0 = y0
-            self.initial_width = width
-            self.initial_height = height
-            initial_coords = self.spatial_base_coords * [width, height] + [x0,y0]
-            self.preview_patch = self.ax0.scatter(initial_coords[:,0],initial_coords[:,1], self.scatter_sizes, 'gray', alpha=0.5)
-            self.initial_offsets = self.preview_patch.get_offsets()
-        else:
-            print(f"----updating spatial plotter-----")
-            offset = self.initial_offsets + (self.spatial_base_coords * [width-self.initial_width, height-self.initial_height] + [x0-self.initial_x0,y0-self.initial_y0])
-            self.preview_patch.set_offsets(offset)
+        if self.plot_is_2d:
+            self.read_par_texts()
+            if not self.current_pars_acceptable:
+                return
+            x0, y0, width, height = self.current_pars
+            if self.preview_patch is None:
+                print(f"----initializing spatial plotter-----")
+                self.initial_x0 = x0
+                self.initial_y0 = y0
+                self.initial_width = width
+                self.initial_height = height
+                initial_coords = self.spatial_base_coords * [width, height] + [x0,y0]
+                self.preview_patch = self.ax0.scatter(initial_coords[:,0],initial_coords[:,1], self.scatter_sizes, 'gray', alpha=0.5)
+                self.initial_offsets = self.preview_patch.get_offsets()
+            else:
+                print(f"----updating spatial plotter-----")
+                offset = self.initial_offsets + (self.spatial_base_coords * [width-self.initial_width, height-self.initial_height] + [x0-self.initial_x0,y0-self.initial_y0])
+                self.preview_patch.set_offsets(offset)
 
-        # check left edge of rect is left of right edge of domain, right edge of rect is right of left edge of domain (similar in y direction)
+            # check left edge of rect is left of right edge of domain, right edge of rect is right of left edge of domain (similar in y direction)
         bval = (x0 < self.plot_xmax) and (x0+width > self.plot_xmin) and (y0 < self.plot_ymax) and (y0+height > self.plot_ymin) # make sure the rectangle intersects the domain with positive area
-
+        if not self.plot_is_2d: # FIX (this will need a fix once we have 3d plotting fully implemented)
+            z0 = self.plot_zmin
+            depth = self.plot_zmax - self.plot_zmin
+            bval = bval and (z0 < self.plot_zmax) and (z0+depth > self.plot_zmin)
         self.plot_cells_button.setEnabled(bval and self.pw.is_any_cell_type_button_group_checked())
 
         self.canvas.update()
@@ -2052,8 +2088,17 @@ class BioinfImportPlotWindow(QWidget):
 
         self.canvas.setFocusPolicy( QtCore.Qt.ClickFocus )
 
-        self.ax0 = self.figure.add_subplot(111, adjustable='box')
+        print(f"plot_zmin = {self.plot_zmin}, plot_zmax = {self.plot_zmax}, plot_zdel = {self.plot_zdel}")
+        self.plot_is_2d = self.plot_zmax - self. plot_zmin <= self.plot_zdel # if the domain height is larger than the voxel height, then we have a 3d simulation
+        if self.plot_is_2d: 
+            print("\n\n2d projection\n\n")
+            projection = None
+        else:
+            projection = '3d'
+            print("\n\n3d projection\n\n")
 
+        self.ax0 = self.figure.add_subplot(111, adjustable='box',projection=projection)
+        
         self.format_axis()
 
         self.mpl_cid = []
@@ -2068,14 +2113,14 @@ class BioinfImportPlotWindow(QWidget):
         self.canvas.draw()
 
         self.cell_type_micron2_area_dict = {cell_type: (((9*np.pi*V**2) / 16) ** (1./3)) for cell_type, V in self.biwt.cell_volume.items()}
-        if self.biwt.use_spatial_data:
+        if self.biwt.use_spatial_data or (not self.plot_is_2d):
             dx, dy = self.ax0.transData.transform((1,1))-self.ax0.transData.transform((0,0)) # # pixels/ micron
-            self.area_scale_factor = dx*dy
-            self.fudge_factor = 1.258199089131739 # empirically-defined value to multiply area (in pts) to represent true area in microns on plot
-            self.cell_type_pt_area_dict = {cell_type: self.fudge_factor * self.area_scale_factor * 72*72/(self.figure.dpi**2)*A for cell_type, A in self.cell_type_micron2_area_dict.items()}
-
+            area_scale_factor = dx*dy  * (72/self.figure.dpi)**2
+            fudge_factor = 1.258199089131739 # empirically-defined value to multiply area (in pts) to represent true area in microns on plot
+            self.cell_type_pt_area_dict = {cell_type: fudge_factor * area_scale_factor * A for cell_type, A in self.cell_type_micron2_area_dict.items()}
             self.single_scatter_sizes = np.array([self.cell_type_pt_area_dict[ctn] for ctn in self.biwt.cell_types_final])
-            self.scatter_sizes = self.num_box.value() * self.single_scatter_sizes
+            if self.biwt.use_spatial_data:
+                self.scatter_sizes = self.num_box.value() * self.single_scatter_sizes
 
     def canvas_in_focus(self, event):
         self.mouse_keyboard_label.setEnabled(True)
@@ -2103,7 +2148,11 @@ class BioinfImportPlotWindow(QWidget):
     def format_axis(self):
         self.ax0.set_xlim(self.plot_xmin, self.plot_xmax)
         self.ax0.set_ylim(self.plot_ymin, self.plot_ymax)
-        self.ax0.set_aspect(1.0)
+        if self.plot_is_2d:
+            self.ax0.set_aspect(1.0)
+        else:
+            self.ax0.set_zlim(self.plot_zmin, self.plot_zmax)
+            self.ax0.set_box_aspect([1,1,1])
 
     def plot_cell_pos(self):
         self.preview_constrained_to_axes = False
@@ -2164,6 +2213,12 @@ class BioinfImportPlotWindow(QWidget):
         return [corners[0,0],corners[0,1],corners[1,0]-corners[0,0],corners[1,1]-corners[0,1]]
     
     def plot_cell_pos_single(self, cell_type):
+        if self.plot_is_2d:
+            self.plot_cell_pos_single_2d(cell_type)
+        else:
+            self.plot_cell_pos_single_3d(cell_type)
+            
+    def plot_cell_pos_single_2d(self, cell_type):
         N = self.biwt.cell_counts[cell_type]
         if type(self.preview_patch) is Rectangle:
             # first make sure the rectangle is all in bounds
@@ -2218,12 +2273,30 @@ class BioinfImportPlotWindow(QWidget):
             print("unknown patch")
         self.biwt.csv_array[cell_type] = np.append(self.biwt.csv_array[cell_type],self.new_pos,axis=0)
 
-        self.circles(self.new_pos, s=8., color=self.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
+        self.circles(self.new_pos, s=(0.75*self.cell_volume[cell_type]/np.pi)**(1/3), color=self.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
 
         self.pw.checkbox_dict[cell_type].setEnabled(False)
         self.pw.checkbox_dict[cell_type].setChecked(False)
         self.pw.undo_button[cell_type].setEnabled(True)
 
+    def plot_cell_pos_single_3d(self, cell_type):
+        N = self.biwt.cell_counts[cell_type]
+        if self.current_plotter == self.everywhere_plotter:
+            x0, y0, z0 = [self.plot_xmin, self.plot_ymin, self.plot_zmin]
+            width, height, depth = [self.plot_dx, self.plot_dy, self.plot_dz]
+            x = x0 + width * np.random.uniform(size=(N,1))
+            y = y0 + height * np.random.uniform(size=(N,1))
+            z = z0 + depth * np.random.uniform(size=(N,1))
+            self.new_pos = np.concatenate((x,y,z),axis=1)
+        self.biwt.csv_array[cell_type] = np.append(self.biwt.csv_array[cell_type],self.new_pos,axis=0)
+
+        # sz = self.cell_type_micron2_area_dict[cell_type] * 0.036089556256 # empirically-determined value to scale area to points in 3d (scales typical cell volume's area to be 8pt)
+        self.ax0.scatter(self.new_pos[:,0],self.new_pos[:,1],self.new_pos[:,2], s=8.0, color=self.color_by_celltype[cell_type], edgecolor='black', linewidth=0.5, alpha=self.alpha_value)
+
+        self.pw.checkbox_dict[cell_type].setEnabled(False)
+        self.pw.checkbox_dict[cell_type].setChecked(False)
+        self.pw.undo_button[cell_type].setEnabled(True)
+        
     def wedge_sample(self,N,x0,y0,r1, r0=0.0, th_lim=(0,2*np.pi)):
         i_start = 0
         self.new_pos = np.empty((N,3))
@@ -2675,3 +2748,22 @@ def compute_theta_intersection_distances(TH,D,th,x0,y0,xL,xR,yL,yR,dy):
     TH = np.append(TH,th)
     D = np.append(D,d2,axis=1)
     return TH, D
+
+def rectangular_prism_faces(x_min, x_max, y_min, y_max, z_min, z_max):
+    # Define the corners of the rectangular prism
+    corners = np.array([[x_min, y_min, z_min],
+                        [x_max, y_min, z_min],
+                        [x_max, y_max, z_min],
+                        [x_min, y_max, z_min],
+                        [x_min, y_min, z_max],
+                        [x_max, y_min, z_max],
+                        [x_max, y_max, z_max],
+                        [x_min, y_max, z_max]])
+
+    # Define the faces using the corners
+    return [[corners[0], corners[1], corners[2], corners[3]],
+            [corners[4], corners[5], corners[6], corners[7]],
+            [corners[0], corners[1], corners[5], corners[4]],
+            [corners[2], corners[3], corners[7], corners[6]],
+            [corners[0], corners[3], corners[7], corners[4]],
+            [corners[1], corners[2], corners[6], corners[5]]]
