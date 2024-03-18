@@ -3229,11 +3229,7 @@ class BioinfImport(QWidget):
             )
             self.spatial_data_final = np.vstack([*self.spatial_data_final])
         else:
-            self.cell_types_final = [
-                self.cell_type_dict_on_rename[ctn]
-                for ctn in self.cell_types_original
-                if self.cell_type_dict_on_rename[ctn] is not None
-            ]
+            self.cell_types_final = [self.cell_type_dict_on_rename[ctn] for ctn in self.cell_types_original if ctn in self.cell_type_dict_on_rename.keys()]
 
         self.count_final_cell_types()
         self.compute_cell_volumes()  # used in confluence computations, and in spatial_plotter
