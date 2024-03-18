@@ -13,8 +13,6 @@ try:
     import rpy2.robjects as ro
     from rpy2.robjects import pandas2ri, r
     from rpy2.robjects.packages import importr
-
-    print("no Rpy2")
 except:
     print("no Rpy2")
 
@@ -39,25 +37,11 @@ from matplotlib.collections import PatchCollection
 from matplotlib.patches import Annulus, Circle, Patch, Rectangle, Wedge
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import (
-    QApplication,
-    QButtonGroup,
-    QCheckBox,
-    QComboBox,
-    QFileDialog,
-    QGridLayout,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QPushButton,
-    QRadioButton,
-    QScrollArea,
-    QSizePolicy,
-    QSpinBox,
-    QSplitter,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt5.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QComboBox,
+                             QFileDialog, QGridLayout, QHBoxLayout, QLabel,
+                             QLineEdit, QPushButton, QRadioButton, QScrollArea,
+                             QSizePolicy, QSpinBox, QSplitter, QVBoxLayout,
+                             QWidget)
 from studio_classes import QCheckBox_custom, QHLine, QVLine
 
 
@@ -3113,7 +3097,6 @@ class BioinfImport(QWidget):
         print("in import file function")
         try:
             print("trying to import base R library")
-
             base = importr("base")
             print("reading R object...")
             rdata = base.readRDS(file_path)
