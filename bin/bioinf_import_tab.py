@@ -37,11 +37,25 @@ from matplotlib.collections import PatchCollection
 from matplotlib.patches import Annulus, Circle, Patch, Rectangle, Wedge
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QComboBox,
-                             QFileDialog, QGridLayout, QHBoxLayout, QLabel,
-                             QLineEdit, QPushButton, QRadioButton, QScrollArea,
-                             QSizePolicy, QSpinBox, QSplitter, QVBoxLayout,
-                             QWidget)
+from PyQt5.QtWidgets import (
+    QApplication,
+    QButtonGroup,
+    QCheckBox,
+    QComboBox,
+    QFileDialog,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QRadioButton,
+    QScrollArea,
+    QSizePolicy,
+    QSpinBox,
+    QSplitter,
+    QVBoxLayout,
+    QWidget,
+)
 from studio_classes import QCheckBox_custom, QHLine, QVLine
 
 
@@ -3123,9 +3137,9 @@ class BioinfImport(QWidget):
             return
         print("------------R object loaded-------------")
 
-        # self.spatial_data_found, self.spatial_data_key, self.spatial_data = (
-        #     self.search_adata_obsm_for("spatial")
-        # )
+        self.spatial_data_found, self.spatial_data_key, self.spatial_data = (
+            self.search_adata_obsm_for("spatial")
+        )
 
         self.open_next_window(BioinfImportWindow_ClusterColumn, show=False)
 
