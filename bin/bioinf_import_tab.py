@@ -9,9 +9,10 @@ import logging
 import os
 import sys
 
-    from rpy2.robjects import r
+try:
+    import rpy2.robjects as ro
+    from rpy2.robjects import pandas2ri, r
     from rpy2.robjects.packages import importr
-except:
     print("no Rpy2")
 
 try:
@@ -316,7 +317,7 @@ class BioinfImportWindow_EditCellTypes(BioinfImportWindow):
 
         self.dim_red_fig = None
         self.dim_red_canvas = None
-        for key_substring in ["umap","tsne","pca","spatial"]:
+        for key_substring in ["umap", "tsne", "pca", "spatial"]:
             if self.try_to_plot_dim_red(key_substring=key_substring):
                 splitter = QSplitter()
                 left_side = QWidget()
@@ -2906,7 +2907,7 @@ class BioinfImport(QWidget):
             )
         )
         hbox = QHBoxLayout()
-        self.import_button = QPushButton("Import from AnnData")
+        self.import_button = QPushButton("Import from AnnData or R object")
         self.import_button.setStyleSheet(
             "QPushButton {background-color: lightgreen; color: black;}"
         )
@@ -3064,8 +3065,12 @@ class BioinfImport(QWidget):
         self.start_walkthrough()
         full_file_path = QFileDialog.getOpenFileName(self, "", ".")
         file_path = full_file_path[0]
-
-        self.import_file(file_path)
+        if file_path.endswith(".h5ad"):
+            self.import_file(file_path)
+        elif file_path.endswith(".Rds"):
+            self.import_file_from_R(file_path)
+        else:
+            print("File extension not recognized.")
 
     def import_file(self, file_path):
         try:
@@ -3075,7 +3080,6 @@ class BioinfImport(QWidget):
             return
 
         print("------------anndata object loaded-------------")
-
 
         self.search_for_spatial_data()
 
@@ -3089,20 +3093,39 @@ class BioinfImport(QWidget):
             self.window.show()
 
     def import_file_from_R(self, file_path):
+        print("in import file function")
         try:
             print("trying to import base R library")
+
             base = importr("base")
             print("reading R object...")
-            obj = base.readRDS(file_path)
+            rdata = base.readRDS(file_path)
             print("...success! (?)")
+
+            print("Slots found in this R object: ", tuple(rdata.slotnames()))
+            # rdata.slots["assays"]
+            # rdata.slots["reductions"]
+
+            metadata = rdata.slots["meta.data"]
+            print("converting to pandas dataframe...")
+            with (ro.default_converter + pandas2ri.converter).context():
+                print("converting")
+                metadata_df = ro.conversion.get_conversion().rpy2py(metadata)
+
+            print(metadata_df)
+
+            adata_construct = anndata.AnnData(obs=metadata_df)
+            adata_construct.obs
+            self.adata = adata_construct
+            print("R data has been loaded and parsed into python :)")
         except:
             print(f"Import failed...")
             return
         print("------------R object loaded-------------")
 
-        self.spatial_data_found, self.spatial_data_key, self.spatial_data = (
-            self.search_adata_obsm_for("spatial")
-        )
+        # self.spatial_data_found, self.spatial_data_key, self.spatial_data = (
+        #     self.search_adata_obsm_for("spatial")
+        # )
 
         self.open_next_window(BioinfImportWindow_ClusterColumn, show=False)
 
@@ -3125,7 +3148,9 @@ class BioinfImport(QWidget):
 
     def search_for_spatial_data(self):
         # space ranger for visium data
-        self.spatial_data_found, key, self.spatial_data = self.search_adata_obsm_for("spatial")
+        self.spatial_data_found, key, self.spatial_data = self.search_adata_obsm_for(
+            "spatial"
+        )
         if self.spatial_data_found:
             self.spatial_data_location = f"adata.obsm['{key}']"
             return
@@ -3133,8 +3158,12 @@ class BioinfImport(QWidget):
         # merscope
         x_data_found, _, x_data = self.search_adata_obs_for("x", exact=True)
         if x_data_found:
-            self.spatial_data_found, _, y_data = self.search_adata_obs_for("y", exact=True)
-            self.spatial_data = np.hstack((x_data.values.reshape(-1,1),y_data.values.reshape(-1,1)))
+            self.spatial_data_found, _, y_data = self.search_adata_obs_for(
+                "y", exact=True
+            )
+            self.spatial_data = np.hstack(
+                (x_data.values.reshape(-1, 1), y_data.values.reshape(-1, 1))
+            )
             self.spatial_data_location = "adata.obs['x'] and adata.obs['y']"
             self.adata.obsm["spatial"] = self.spatial_data
             return
