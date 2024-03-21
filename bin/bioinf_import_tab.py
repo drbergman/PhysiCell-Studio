@@ -37,25 +37,11 @@ from matplotlib.collections import PatchCollection
 from matplotlib.patches import Annulus, Circle, Patch, Rectangle, Wedge
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import (
-    QApplication,
-    QButtonGroup,
-    QCheckBox,
-    QComboBox,
-    QFileDialog,
-    QGridLayout,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QPushButton,
-    QRadioButton,
-    QScrollArea,
-    QSizePolicy,
-    QSpinBox,
-    QSplitter,
-    QVBoxLayout,
-    QWidget,
-)
+from PyQt5.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QComboBox,
+                             QFileDialog, QGridLayout, QHBoxLayout, QLabel,
+                             QLineEdit, QPushButton, QRadioButton, QScrollArea,
+                             QSizePolicy, QSpinBox, QSplitter, QVBoxLayout,
+                             QWidget)
 from studio_classes import QCheckBox_custom, QHLine, QVLine
 
 
@@ -3114,13 +3100,19 @@ class BioinfImport(QWidget):
             base = importr("base")
             print("reading R object...")
             rdata = base.readRDS(file_path)
-            print("...success! (?)")
+            classname = tuple(rdata.rclass)[0]
+            print("...success! got an R object of class", classname)
 
-            print("Slots found in this R object: ", tuple(rdata.slotnames()))
-            # rdata.slots["assays"]
-            # rdata.slots["reductions"]
+            if classname in ["SingleCellExperiment"]:
+                metadata = rdata.slots["metadata"]
+                print(
+                    "Slots found in this SingleCellExperiment object: ",
+                    tuple(rdata.slotnames()),
+                )
+            elif classname in ["Seurat"]:
+                print("Slots found in this Seurat object: ", tuple(rdata.slotnames()))
+                metadata = rdata.slots["meta.data"]
 
-            metadata = rdata.slots["meta.data"]
             print("converting to pandas dataframe...")
             with (ro.default_converter + pandas2ri.converter).context():
                 print("converting")
