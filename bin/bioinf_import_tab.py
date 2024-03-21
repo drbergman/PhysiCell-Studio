@@ -3082,7 +3082,7 @@ class BioinfImport(QWidget):
         file_path = full_file_path[0]
         if file_path.endswith(".h5ad"):
             self.import_file(file_path)
-        elif file_path.endswith(".Rds"):
+        elif file_path.lower().endswith(".rds") or file_path.lower().endswith(".rda"):
             self.import_file_from_R(file_path)
         else:
             print("File extension not recognized.")
@@ -3132,6 +3132,7 @@ class BioinfImport(QWidget):
             adata_construct.obs
             self.adata = adata_construct
             print("R data has been loaded and parsed into python :)")
+
         except:
             print(f"Import failed...")
             return
