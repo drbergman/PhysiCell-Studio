@@ -58,12 +58,12 @@ class BioinfImportWindow_ClusterColumn(BioinfImportWindow):
     def __init__(self, bioinf_walkthrough):
         super().__init__(bioinf_walkthrough)
 
-        col_names = list(self.biwt.adata.obs.columns)
+        # col_names = list(self.biwt.adata.obs.columns)
         self.biwt.auto_continue = False
         self.column_combobox = QComboBox()
-        for col_name in col_names:
+        for col_name in self.biwt.data_columns.keys():
             self.column_combobox.addItem(col_name)
-        if self.biwt.column_line_edit.text() in col_names:
+        if self.biwt.column_line_edit.text() in self.biwt.data_columns:
             s = "Select column that contains cell type info:"
             self.biwt.auto_continue = True
             self.column_combobox.setCurrentIndex(self.column_combobox.findText(self.biwt.column_line_edit.text()))
@@ -263,7 +263,8 @@ class BioinfImportWindow_EditCellTypes(BioinfImportWindow):
                 right_side = QWidget()
                 vbox = QVBoxLayout()
                 self.obsm_keys_combobox = QComboBox()
-                for i, k in enumerate(self.biwt.adata.obsm.keys()):
+                # for i, k in enumerate(self.biwt.adata.obsm.keys()):
+                for i, k in enumerate(self.biwt.data_vis_arrays.keys()):
                     if key_substring in k:
                         id = i
                     self.obsm_keys_combobox.addItem(k)
@@ -300,20 +301,25 @@ class BioinfImportWindow_EditCellTypes(BioinfImportWindow):
         self.marker_size = 0.18844459036110225*np.sqrt(self.n_points)
 
     def try_to_plot_dim_red(self, key_substring="umap"):
-        found, k, _ = self.biwt.search_adata_obsm_for(key_substring) # (was this found?, the key in adata.obsm, the value of adata.obsm[k])
+        found, k, _ = self.biwt.search_vis_arrays_for(key_substring) # (was this found?, the key in adata.obsm, the value of adata.obsm[k])
         if not found:
             return False
         self.plot_dim_red(k)
         return True
 
     def plot_dim_red(self, k):
-        v = self.biwt.adata.obsm[k]
+        v = self.biwt.data_vis_arrays[k]
         self.n_points = len(v)
         if self.dim_red_fig is None:
             self.create_dim_red_fig()
         
         temp = pd.CategoricalIndex(self.biwt.cell_types_original)
-        self.scatter = self.dim_red_ax.scatter(v[:,0],v[:,1],self.marker_size,c=temp.codes) # 0.18844459036110225 = 5/sqrt(704) where I found 5 to be a good size when working with 704 points
+        if v.shape[0] > 1e5:
+            # 100000 random indices from 0 to v.shape[0] - 1
+            indices = np.random.choice(v.shape[0], size=100000, replace=False)
+        else:
+            indices = range(v.shape[0])
+        self.scatter = self.dim_red_ax.scatter(v[indices,0],v[indices,1],self.marker_size,c=temp.codes[indices]) # 0.18844459036110225 = 5/sqrt(704) where I found 5 to be a good size when working with 704 points
         scatter_objects, _ = self.scatter.legend_elements()
         self.dim_red_fig.legend(scatter_objects, temp.categories,
                     loc=8, title="Clusters",ncol=3, mode="expand")
@@ -2550,16 +2556,17 @@ class BioinfImport(QWidget):
             # self.set_cell_positions()
         elif bioinf_import_test_spatial:
             # file_name = "./data/visium_adata.h5ad"
-            file_name = "./data/Zhuang-ABCA-1-1.064_raw_wClusterAnnots.h5ad"
-            if file_name == "./data/Zhuang-ABCA-1-1.064_raw_wClusterAnnots.h5ad":
+            # file_name = "./data/Zhuang-ABCA-1-1.064_raw_wClusterAnnots.h5ad"
+            file_name = "./data/abc/metadata/Zhuang-ABCA-1/20231215/views/cell_metadata_with_cluster_annotation.csv"
+            if "Zhuang" in file_name:
                 self.column_line_edit.setText("class")
             else:
                 self.column_line_edit.setText("cluster")
             self.import_file(file_name)
-            self.continue_from_import()
-            self.window.process_window() # process spatial y/n window
-            self.window.process_window() # process edit window
-            self.window.process_window() # process rename window
+            # self.continue_from_import()
+            # self.window.process_window() # process spatial y/n window
+            # self.window.process_window() # process edit window
+            # self.window.process_window() # process rename window
             # self.continue_from_spatial_query()
             # self.continue_from_edit()
             # self.window.process_window() # process rename window
@@ -2611,11 +2618,11 @@ class BioinfImport(QWidget):
         self.window.hide()
         self.window.show()
 
-    def search_adata_obsm_for(self, pattern, exact=False):
-        return self.search_for(self.adata.obsm, pattern, exact)
+    def search_vis_arrays_for(self, pattern, exact=False):
+        return self.search_for(self.data_vis_arrays, pattern, exact)
 
-    def search_adata_obs_for(self, pattern, exact=False):
-        return self.search_for(self.adata.obs, pattern, exact)
+    def search_columns_for(self, pattern, exact=False):
+        return self.search_for(self.data_columns, pattern, exact)
     
     def search_for(self, array_dict, pattern, exact=False):
         for k, v in array_dict.items():
@@ -2642,19 +2649,12 @@ class BioinfImport(QWidget):
         self.import_file(file_path)
 
     def import_file(self,file_path):
-        try:
-            self.adata = anndata.read_h5ad(file_path)
-        except:
-            print(f"Import failed...")
-            return
-
-        print("------------anndata object loaded-------------")
-
-
-        self.search_for_spatial_data()
+        if file_path.endswith(".h5ad"):
+            self.import_file_from_h5ad(file_path)
+        elif file_path.endswith(".csv"):
+            self.import_file_from_csv(file_path)
 
         self.open_next_window(BioinfImportWindow_ClusterColumn, show=False)
-
 
         if self.auto_continue:
             self.current_column = self.column_line_edit.text()
@@ -2662,6 +2662,27 @@ class BioinfImport(QWidget):
         else:
             self.window.hide()
             self.window.show()
+
+    def import_file_from_csv(self,file_path):
+        self.data_columns = pd.read_csv(file_path)
+        self.data_vis_arrays = {}
+        self.search_columns_for_xyz()
+
+    def import_file_from_h5ad(self,file_path):
+        try:
+            adata = anndata.read_h5ad(file_path)
+            self.data_columns = adata.obs
+            self.data_vis_arrays = adata.obsm
+
+        except:
+            print(f"Import failed...")
+            return
+
+        print("------------anndata object loaded-------------")
+
+        self.search_for_h5ad_spatial_data()
+        if self.spatial_data_found:
+            self.spatial_data_location = f"adata.obsm['{self.spatial_data_key}']"
 
     def continue_from_import(self):
         if not self.spatial_data_found:
@@ -2673,20 +2694,23 @@ class BioinfImport(QWidget):
             print("spatial data found. asking you about it now...")
             self.open_next_window(BioinfImportWindow_SpatialQuery, show=True)
 
-    def search_for_spatial_data(self):
+    def search_for_h5ad_spatial_data(self):
         # space ranger for visium data
-        self.spatial_data_found, key, self.spatial_data = self.search_adata_obsm_for("spatial")
+        self.spatial_data_found, key, self.spatial_data = self.search_vis_arrays_for("spatial")
         if self.spatial_data_found:
-            self.spatial_data_location = f"adata.obsm['{key}']"
+            self.spatial_data_key = key
             return
         
         # merscope
-        x_data_found, _, x_data = self.search_adata_obs_for("x", exact=True)
+        self.search_columns_for_xyz()
+
+    def search_columns_for_xyz(self):
+        x_data_found, _, x_data = self.search_columns_for("x", exact=True)
         if x_data_found:
-            self.spatial_data_found, _, y_data = self.search_adata_obs_for("y", exact=True)
+            self.spatial_data_found, _, y_data = self.search_columns_for("y", exact=True)
             if not self.spatial_data_found:
                 return
-            z_data_found, _, z_data = self.search_adata_obs_for("z", exact=True)
+            z_data_found, _, z_data = self.search_columns_for("z", exact=True)
 
             if z_data_found:
                 self.spatial_data = np.hstack((x_data.values.reshape(-1,1),y_data.values.reshape(-1,1),z_data.values.reshape(-1,1)))
@@ -2699,11 +2723,21 @@ class BioinfImport(QWidget):
                 self.spatial_data = np.hstack((x_data.values.reshape(-1,1),y_data.values.reshape(-1,1), np.zeros((len(x_data),1))))
                 self.spatial_data_location = "adata.obs['x'] and adata.obs['y']"
 
-            self.adata.obsm["spatial"] = self.spatial_data
+            new_key = "spatial"
+            suffix = ""
+            n=0
+            while f"{new_key}_{suffix}" in self.data_vis_arrays.keys():
+                n += 1
+                suffix = str(n)
+            self.data_vis_arrays[f"{new_key}_{suffix}"] = self.spatial_data
+            # if "spatial" not in self.data_vis_arrays.keys():
+            #     self.data_vis_arrays["spatial"] = self.spatial_data
+            # self.data_vis_arrays["spatial"] = self.spatial_data
             return
 
     def collect_cell_type_data(self):
-        self.cell_types_original = self.adata.obs[self.current_column]
+        # self.cell_types_original = self.adata.obs[self.current_column]
+        self.cell_types_original = self.data_columns[self.current_column]
         self.cell_types_list_original = self.cell_types_original.unique().tolist()
         self.cell_types_list_original.sort()
         self.cell_types_original = [str(x) for x in self.cell_types_original] # make sure the names are strings
