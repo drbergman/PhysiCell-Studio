@@ -1,0 +1,6 @@
+PyQt5
+matplotlib
+scipy
+pandas
+simulariumio[physicell]
+anndata
