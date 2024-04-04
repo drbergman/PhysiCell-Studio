@@ -240,7 +240,6 @@ class ICs(QWidget):
 
         #----
         label = QLabel("Cell Initital Conditions")
-        label.setFixedHeight(label_height)
         label.setStyleSheet("background-color: orange")
         label.setAlignment(QtCore.Qt.AlignCenter)
         idx_row = 0
@@ -599,7 +598,6 @@ class ICs(QWidget):
         #--------------------- substrate save button
 
         label = QLabel("Substrate Initital Conditions")
-        label.setFixedHeight(label_height)
         label.setStyleSheet("background-color: orange")
         label.setAlignment(QtCore.Qt.AlignCenter)
         idx_row = 0
