@@ -6643,7 +6643,8 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         self.motility_substrate_dropdown.removeItem(item_idx)
         self.motility2_substrate_dropdown.removeItem(item_idx)
         self.secretion_substrate_dropdown.removeItem(item_idx)
-        self.pd_substrate_combobox.removeItem(item_idx)
+        if self.pkpd_flag:
+            self.pd_substrate_combobox.removeItem(item_idx)
         # self.motility_substrate_dropdown.clear()
         # self.secretion_substrate_dropdown.clear()
 
