@@ -53,6 +53,21 @@ class BioinfImportWindow(QWidget):
         self.biwt = bioinf_walkthrough
         self.biwt.stale_futures = True # initializing a window means that any future windows are stale
 
+class BioinfImportWindow_WarningWindow(BioinfImportWindow):
+    def __init__(self, bioinf_walkthrough, layout, continue_cb):
+        super().__init__(bioinf_walkthrough)
+        vbox = QVBoxLayout()
+        vbox.addLayout(layout)
+
+        self.go_back_button = GoBackButton(self, self.biwt)
+        self.continue_button = ContinueButton(self, continue_cb)
+        hbox_gb_cont = QHBoxLayout()
+        hbox_gb_cont.addWidget(self.go_back_button)
+        hbox_gb_cont.addWidget(self.continue_button)
+
+        vbox.addLayout(hbox_gb_cont)
+        self.setLayout(vbox)
+    
 class BioinfImportWindow_ClusterColumn(BioinfImportWindow):
     def __init__(self, bioinf_walkthrough):
         super().__init__(bioinf_walkthrough)
@@ -2453,21 +2468,25 @@ class BioinfImport(QWidget):
 
     def open_next_window(self, window_class, layout=None, show=True):
         if self.window is not None:
+            self.window.hide()
             self.current_window_idx += 1
             if self.stale_futures:
-                print(f"\tFutures are stale. Deleting from {self.current_window_idx} to {len(self.previous_windows)}")
+                # print(f"\tFutures are stale. Deleting from {self.current_window_idx} to {len(self.previous_windows)}")
                 del self.previous_windows[self.current_window_idx-1:]
-                self.previous_windows.append(self.window)
+                if type(self.window) is not BioinfImportWindow_WarningWindow:
+                    self.previous_windows.append(self.window)
+                else:
+                    self.current_window_idx -= 1 # ok, actually, don't increase the index if the current window is a popup warning window
                 self.window = window_class(self)
             else:
-                print(f"\tFutures are not stale. Using window {self.current_window_idx+1}...")
+                # print(f"\tFutures are not stale. Using window {self.current_window_idx+1}...")
                 self.window = self.previous_windows[self.current_window_idx]
                 self.stale_futures = self.current_window_idx==len(self.previous_windows)-1 # if it's now the last one, mark it as stale
-                if self.stale_futures:
-                    print(f"\tFutures are now stale.")
-                else:
-                    print(f"\tFutures are still not stale.")
-            self.previous_windows[self.current_window_idx-1].hide()
+                # if self.stale_futures:
+                    # print(f"\tFutures are now stale.")
+                # else:
+                    # print(f"\tFutures are still not stale.")
+            # self.previous_windows[self.current_window_idx-1].hide()
         else: # This is opening the very first window
             self.window = window_class(self)
 
@@ -2609,6 +2628,23 @@ class BioinfImport(QWidget):
     def continue_from_rename(self):
         print("-------Continuing from Rename-------")
 
+
+        if len(set(self.cell_types_list_final)) != len(self.cell_types_list_final): # this very well could be a suboptimal check for all unique names. coded midflight so no copilot help
+            duplicate_names = []
+            for idx, cell_type_1 in enumerate(self.cell_types_list_final):
+                if (cell_type_1 not in duplicate_names) and (cell_type_1 in self.cell_types_list_final[idx+1:]):
+                    duplicate_names.append(cell_type_1)
+
+            s = "The following cell type names were used multiple times:<html><ul>"
+            for duplicate_name in duplicate_names:
+                s += f"\n\t<li> {duplicate_name}</li>"
+            s += "</ul></html>"
+            s += "\nThis could cause unexpected behavior. We recommend you go back and Merge these cell types."
+            self.pop_up_warning_window(s, self.continue_from_rename_check)
+        else:
+            self.continue_from_rename_check()
+        
+    def continue_from_rename_check(self):  
         if self.use_spatial_data:
             print(f"self.cell_types_original = {self.cell_types_original}")
             self.cell_types_final, self.spatial_data_final = zip(*[(self.cell_type_dict_on_rename[ctn], pos) for ctn, pos in zip(self.cell_types_original, self.spatial_data) if ctn in self.cell_type_dict_on_rename.keys()])
@@ -2623,6 +2659,12 @@ class BioinfImport(QWidget):
         else:
             self.set_cell_counts()
  
+    def pop_up_warning_window(self, s, continue_cb):
+        hbox = QHBoxLayout()
+        label = QLabel(s)
+        hbox.addWidget(label)
+        self.open_next_window(lambda biwt : BioinfImportWindow_WarningWindow(biwt, hbox, continue_cb), show=True)
+        
     def count_final_cell_types(self):
         self.cell_counts = {}
         for cell_type in self.cell_types_list_final:
