@@ -845,6 +845,10 @@ class BioinfImportWindow_PositionsWindow(BioinfImportWindow):
         
         vbox_main.addLayout(hbox)
 
+        self.undo_all_button = QPushButton("Undo All",enabled=False,styleSheet=undo_qpushbutton_style_sheet)
+        self.undo_all_button.clicked.connect(self.undo_all_button_cb)
+        vbox_main.addWidget(self.undo_all_button)
+
         cell_type_scroll_area_widget = QWidget()
         cell_type_scroll_area_widget.setLayout(vbox_main)
 
@@ -1054,7 +1058,24 @@ class BioinfImportWindow_PositionsWindow(BioinfImportWindow):
 
     def undo_button_cb(self):
         undone_cell_type = self.sender().objectName()
+        self.undo_cell_type(undone_cell_type)
+        self.replot_all_cells_after_undo()
+
+    def undo_cell_type(self, undone_cell_type, undo_all_flag=False):
         self.biwt.csv_array[undone_cell_type] = np.empty((0,3))
+        self.checkbox_dict[undone_cell_type].setEnabled(True)
+        self.checkbox_dict[undone_cell_type].setChecked(False)
+        self.undo_button[undone_cell_type].setEnabled(False)
+        if undo_all_flag:
+            return # if undo all was clicked, don't bother checking this
+        for cell_type in self.biwt.csv_array.keys():
+            if self.biwt.csv_array[cell_type].shape[0] > 0:
+                return
+        # if we get here, then all cell types have been removed, turn off undo all
+        self.undo_all_button.setEnabled(False)
+
+
+    def replot_all_cells_after_undo(self):
         self.ics_plot_area.ax0.cla()
         self.ics_plot_area.format_axis()
         for cell_type in self.biwt.csv_array.keys():
@@ -1063,12 +1084,13 @@ class BioinfImportWindow_PositionsWindow(BioinfImportWindow):
 
         self.ics_plot_area.sync_par_area() # easy way to redraw the patch for current plotting
         
-        self.checkbox_dict[undone_cell_type].setEnabled(True)
-        self.checkbox_dict[undone_cell_type].setChecked(False)
-        self.undo_button[undone_cell_type].setEnabled(False)
         self.continue_to_write_button.setEnabled(False)
-        # self.finish_write_button.setEnabled(False)
-        # self.finish_append_button.setEnabled(False)
+
+    def undo_all_button_cb(self):
+        for cell_type in self.biwt.csv_array.keys():
+            self.undo_cell_type(cell_type, undo_all_flag=True)
+        self.replot_all_cells_after_undo()
+        self.undo_all_button.setEnabled(False)
 
     def process_window(self):
         self.biwt.continue_from_positions()
@@ -2131,6 +2153,7 @@ class BioinfImportPlotWindow(QWidget):
                     self.pw.checkbox_dict[cell_type].setEnabled(False)
                     self.pw.checkbox_dict[cell_type].setChecked(False)
                     self.pw.undo_button[cell_type].setEnabled(True)
+                    self.pw.undo_all_button.setEnabled(True)
         else:
             for ctn in self.pw.checkbox_dict.keys():
                 if self.pw.checkbox_dict[ctn].isChecked():
@@ -2223,6 +2246,7 @@ class BioinfImportPlotWindow(QWidget):
         self.pw.checkbox_dict[cell_type].setEnabled(False)
         self.pw.checkbox_dict[cell_type].setChecked(False)
         self.pw.undo_button[cell_type].setEnabled(True)
+        self.pw.undo_all_button.setEnabled(True)
 
     def wedge_sample(self,N,x0,y0,r1, r0=0.0, th_lim=(0,2*np.pi)):
         i_start = 0
