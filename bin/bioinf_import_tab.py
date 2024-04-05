@@ -53,6 +53,21 @@ class BioinfImportWindow(QWidget):
         self.biwt = bioinf_walkthrough
         self.biwt.stale_futures = True # initializing a window means that any future windows are stale
 
+class BioinfImportWindow_WarningWindow(BioinfImportWindow):
+    def __init__(self, bioinf_walkthrough, layout, continue_cb):
+        super().__init__(bioinf_walkthrough)
+        vbox = QVBoxLayout()
+        vbox.addLayout(layout)
+
+        self.go_back_button = GoBackButton(self, self.biwt)
+        self.continue_button = ContinueButton(self, continue_cb)
+        hbox_gb_cont = QHBoxLayout()
+        hbox_gb_cont.addWidget(self.go_back_button)
+        hbox_gb_cont.addWidget(self.continue_button)
+
+        vbox.addLayout(hbox_gb_cont)
+        self.setLayout(vbox)
+    
 class BioinfImportWindow_ClusterColumn(BioinfImportWindow):
     def __init__(self, bioinf_walkthrough):
         super().__init__(bioinf_walkthrough)
@@ -97,7 +112,7 @@ class BioinfImportWindow_SpatialQuery(BioinfImportWindow):
     def __init__(self, bioinf_walkthrough):
         super().__init__(bioinf_walkthrough)
 
-        s = f"It seems this data may contain spatial information in adata.obsm['{self.biwt.spatial_data_key}'].\n"
+        s = f"It seems this data may contain spatial information in {self.biwt.spatial_data_location}.\n"
         s += "Would you like to use this?"
         label = QLabel(s)
 
@@ -250,7 +265,7 @@ class BioinfImportWindow_EditCellTypes(BioinfImportWindow):
 
         self.dim_red_fig = None
         self.dim_red_canvas = None
-        for key_substring in ["umap","tsne","pca"]:
+        for key_substring in ["umap","tsne","pca","spatial"]:
             if self.try_to_plot_dim_red(key_substring=key_substring):
                 splitter = QSplitter()
                 left_side = QWidget()
@@ -845,6 +860,10 @@ class BioinfImportWindow_PositionsWindow(BioinfImportWindow):
         
         vbox_main.addLayout(hbox)
 
+        self.undo_all_button = QPushButton("Undo All",enabled=False,styleSheet=undo_qpushbutton_style_sheet)
+        self.undo_all_button.clicked.connect(self.undo_all_button_cb)
+        vbox_main.addWidget(self.undo_all_button)
+
         cell_type_scroll_area_widget = QWidget()
         cell_type_scroll_area_widget.setLayout(vbox_main)
 
@@ -1054,7 +1073,24 @@ class BioinfImportWindow_PositionsWindow(BioinfImportWindow):
 
     def undo_button_cb(self):
         undone_cell_type = self.sender().objectName()
+        self.undo_cell_type(undone_cell_type)
+        self.replot_all_cells_after_undo()
+
+    def undo_cell_type(self, undone_cell_type, undo_all_flag=False):
         self.biwt.csv_array[undone_cell_type] = np.empty((0,3))
+        self.checkbox_dict[undone_cell_type].setEnabled(True)
+        self.checkbox_dict[undone_cell_type].setChecked(False)
+        self.undo_button[undone_cell_type].setEnabled(False)
+        if undo_all_flag:
+            return # if undo all was clicked, don't bother checking this
+        for cell_type in self.biwt.csv_array.keys():
+            if self.biwt.csv_array[cell_type].shape[0] > 0:
+                return
+        # if we get here, then all cell types have been removed, turn off undo all
+        self.undo_all_button.setEnabled(False)
+
+
+    def replot_all_cells_after_undo(self):
         self.ics_plot_area.ax0.cla()
         self.ics_plot_area.format_axis()
         for cell_type in self.biwt.csv_array.keys():
@@ -1063,12 +1099,13 @@ class BioinfImportWindow_PositionsWindow(BioinfImportWindow):
 
         self.ics_plot_area.sync_par_area() # easy way to redraw the patch for current plotting
         
-        self.checkbox_dict[undone_cell_type].setEnabled(True)
-        self.checkbox_dict[undone_cell_type].setChecked(False)
-        self.undo_button[undone_cell_type].setEnabled(False)
         self.continue_to_write_button.setEnabled(False)
-        # self.finish_write_button.setEnabled(False)
-        # self.finish_append_button.setEnabled(False)
+
+    def undo_all_button_cb(self):
+        for cell_type in self.biwt.csv_array.keys():
+            self.undo_cell_type(cell_type, undo_all_flag=True)
+        self.replot_all_cells_after_undo()
+        self.undo_all_button.setEnabled(False)
 
     def process_window(self):
         self.biwt.continue_from_positions()
@@ -2131,6 +2168,7 @@ class BioinfImportPlotWindow(QWidget):
                     self.pw.checkbox_dict[cell_type].setEnabled(False)
                     self.pw.checkbox_dict[cell_type].setChecked(False)
                     self.pw.undo_button[cell_type].setEnabled(True)
+                    self.pw.undo_all_button.setEnabled(True)
         else:
             for ctn in self.pw.checkbox_dict.keys():
                 if self.pw.checkbox_dict[ctn].isChecked():
@@ -2223,6 +2261,7 @@ class BioinfImportPlotWindow(QWidget):
         self.pw.checkbox_dict[cell_type].setEnabled(False)
         self.pw.checkbox_dict[cell_type].setChecked(False)
         self.pw.undo_button[cell_type].setEnabled(True)
+        self.pw.undo_all_button.setEnabled(True)
 
     def wedge_sample(self,N,x0,y0,r1, r0=0.0, th_lim=(0,2*np.pi)):
         i_start = 0
@@ -2415,11 +2454,12 @@ class BioinfImport(QWidget):
             # self.set_cell_positions()
         elif bioinf_import_test_spatial:
             self.column_line_edit.setText("cluster")
-            self.import_file("./data/visium_adata.h5ad")
+            # self.import_file("./data/visium_adata.h5ad")
+            self.import_file("./data/Zhuang-ABCA-1-1.064_raw_wClusterAnnots.h5ad")
             # self.continue_from_import()
-            self.continue_from_spatial_query()
-            self.continue_from_edit()
-            self.window.process_window() # process rename window
+            # self.continue_from_spatial_query()
+            # self.continue_from_edit()
+            # self.window.process_window() # process rename window
             # self.set_cell_positions()
 
     def fill_gui(self):
@@ -2428,21 +2468,25 @@ class BioinfImport(QWidget):
 
     def open_next_window(self, window_class, layout=None, show=True):
         if self.window is not None:
+            self.window.hide()
             self.current_window_idx += 1
             if self.stale_futures:
-                print(f"\tFutures are stale. Deleting from {self.current_window_idx} to {len(self.previous_windows)}")
+                # print(f"\tFutures are stale. Deleting from {self.current_window_idx} to {len(self.previous_windows)}")
                 del self.previous_windows[self.current_window_idx-1:]
-                self.previous_windows.append(self.window)
+                if type(self.window) is not BioinfImportWindow_WarningWindow:
+                    self.previous_windows.append(self.window)
+                else:
+                    self.current_window_idx -= 1 # ok, actually, don't increase the index if the current window is a popup warning window
                 self.window = window_class(self)
             else:
-                print(f"\tFutures are not stale. Using window {self.current_window_idx+1}...")
+                # print(f"\tFutures are not stale. Using window {self.current_window_idx+1}...")
                 self.window = self.previous_windows[self.current_window_idx]
                 self.stale_futures = self.current_window_idx==len(self.previous_windows)-1 # if it's now the last one, mark it as stale
-                if self.stale_futures:
-                    print(f"\tFutures are now stale.")
-                else:
-                    print(f"\tFutures are still not stale.")
-            self.previous_windows[self.current_window_idx-1].hide()
+                # if self.stale_futures:
+                    # print(f"\tFutures are now stale.")
+                # else:
+                    # print(f"\tFutures are still not stale.")
+            # self.previous_windows[self.current_window_idx-1].hide()
         else: # This is opening the very first window
             self.window = window_class(self)
 
@@ -2468,10 +2512,20 @@ class BioinfImport(QWidget):
         self.window.hide()
         self.window.show()
 
-    def search_adata_obsm_for(self, substring):
-        for k, v in self.adata.obsm.items():
-            if substring in k:
-                return True, k, v
+    def search_adata_obsm_for(self, pattern, exact=False):
+        return self.search_for(self.adata.obsm, pattern, exact)
+
+    def search_adata_obs_for(self, pattern, exact=False):
+        return self.search_for(self.adata.obs, pattern, exact)
+    
+    def search_for(self, array_dict, pattern, exact=False):
+        for k, v in array_dict.items():
+            if exact:
+                if k == pattern:
+                    return True, k, v
+            else:
+                if pattern in k:
+                    return True, k, v
         return False, None, None
 
     def start_walkthrough(self):
@@ -2497,7 +2551,8 @@ class BioinfImport(QWidget):
 
         print("------------anndata object loaded-------------")
 
-        self.spatial_data_found, self.spatial_data_key, self.spatial_data = self.search_adata_obsm_for("spatial")
+
+        self.search_for_spatial_data()
 
         self.open_next_window(BioinfImportWindow_ClusterColumn, show=False)
 
@@ -2518,6 +2573,22 @@ class BioinfImport(QWidget):
         else:
             print("spatial data found. asking you about it now...")
             self.open_next_window(BioinfImportWindow_SpatialQuery, show=True)
+
+    def search_for_spatial_data(self):
+        # space ranger for visium data
+        self.spatial_data_found, key, self.spatial_data = self.search_adata_obsm_for("spatial")
+        if self.spatial_data_found:
+            self.spatial_data_location = f"adata.obsm['{key}']"
+            return
+        
+        # merscope
+        x_data_found, _, x_data = self.search_adata_obs_for("x", exact=True)
+        if x_data_found:
+            self.spatial_data_found, _, y_data = self.search_adata_obs_for("y", exact=True)
+            self.spatial_data = np.hstack((x_data.values.reshape(-1,1),y_data.values.reshape(-1,1)))
+            self.spatial_data_location = "adata.obs['x'] and adata.obs['y']"
+            self.adata.obsm["spatial"] = self.spatial_data
+            return
 
     def collect_cell_type_data(self):
         self.cell_types_original = self.adata.obs[self.current_column]
@@ -2557,6 +2628,23 @@ class BioinfImport(QWidget):
     def continue_from_rename(self):
         print("-------Continuing from Rename-------")
 
+
+        if len(set(self.cell_types_list_final)) != len(self.cell_types_list_final): # this very well could be a suboptimal check for all unique names. coded midflight so no copilot help
+            duplicate_names = []
+            for idx, cell_type_1 in enumerate(self.cell_types_list_final):
+                if (cell_type_1 not in duplicate_names) and (cell_type_1 in self.cell_types_list_final[idx+1:]):
+                    duplicate_names.append(cell_type_1)
+
+            s = "The following cell type names were used multiple times:<html><ul>"
+            for duplicate_name in duplicate_names:
+                s += f"\n\t<li> {duplicate_name}</li>"
+            s += "</ul></html>"
+            s += "\nThis could cause unexpected behavior. We recommend you go back and Merge these cell types."
+            self.pop_up_warning_window(s, self.continue_from_rename_check)
+        else:
+            self.continue_from_rename_check()
+        
+    def continue_from_rename_check(self):  
         if self.use_spatial_data:
             print(f"self.cell_types_original = {self.cell_types_original}")
             self.cell_types_final, self.spatial_data_final = zip(*[(self.cell_type_dict_on_rename[ctn], pos) for ctn, pos in zip(self.cell_types_original, self.spatial_data) if ctn in self.cell_type_dict_on_rename.keys()])
@@ -2571,6 +2659,12 @@ class BioinfImport(QWidget):
         else:
             self.set_cell_counts()
  
+    def pop_up_warning_window(self, s, continue_cb):
+        hbox = QHBoxLayout()
+        label = QLabel(s)
+        hbox.addWidget(label)
+        self.open_next_window(lambda biwt : BioinfImportWindow_WarningWindow(biwt, hbox, continue_cb), show=True)
+        
     def count_final_cell_types(self):
         self.cell_counts = {}
         for cell_type in self.cell_types_list_final:
@@ -2613,6 +2707,9 @@ class BioinfImport(QWidget):
         self.ics_tab.tab_widget.setCurrentIndex(self.ics_tab.base_tab_id)
         self.ics_tab.csv_folder.setText(self.csv_folder.text())
         self.ics_tab.output_file.setText(self.csv_file.text())
+        self.config_tab.cells_csv.setChecked(True)
+        self.config_tab.csv_folder.setText(self.csv_folder.text())
+        self.config_tab.csv_file.setText(self.csv_file.text())
         self.close()
         self.window.close()
         print("BioinfImportWindow: Colors will likely change in the ICs tab due to previous cell types being present.")
