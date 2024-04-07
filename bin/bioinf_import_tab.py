@@ -1339,7 +1339,8 @@ class BioinfImportPlotWindow(QWidget):
         is_windows_os = os.name == "nt"
         if is_windows_os:
             self.alt_key_str = "Alt"
-            self.alt_key_ucode = "\u2387"
+            # self.alt_key_ucode = "\u2387"
+            self.alt_key_ucode = "Alt" # the ucode for windows alt key is ugly/non-existent. just use "Alt" instead"
             self.ctrl_key_ucode = "Ctrl"
             self.cmd_z_str = "Ctrl-z"
             self.cmd_shift_z_str = "Ctrl-shift-z"
