@@ -13,6 +13,11 @@ try:
     HAVE_ANNDATA = True
 except:
     HAVE_ANNDATA = False
+
+BIWT_DEV_MODE = os.getenv('BIWT_DEV_MODE', 'False')
+if BIWT_DEV_MODE == 'True':
+    from biwt_dev import biwt_dev_mode
+BIWT_DEV_MODE = BIWT_DEV_MODE=='True'
 # import scanpy as sc
 import copy
 import numpy as np
@@ -67,7 +72,7 @@ class BioinfImportWindow_WarningWindow(BioinfImportWindow):
 
         vbox.addLayout(hbox_gb_cont)
         self.setLayout(vbox)
-    
+        
 class BioinfImportWindow_ClusterColumn(BioinfImportWindow):
     def __init__(self, bioinf_walkthrough):
         super().__init__(bioinf_walkthrough)
@@ -1339,7 +1344,8 @@ class BioinfImportPlotWindow(QWidget):
         is_windows_os = os.name == "nt"
         if is_windows_os:
             self.alt_key_str = "Alt"
-            self.alt_key_ucode = "\u2387"
+            # self.alt_key_ucode = "\u2387"
+            self.alt_key_ucode = "Alt" # the ucode for windows alt key is ugly/non-existent. just use "Alt" instead"
             self.ctrl_key_ucode = "Ctrl"
             self.cmd_z_str = "Ctrl-z"
             self.cmd_shift_z_str = "Ctrl-shift-z"
@@ -2358,7 +2364,7 @@ class BioinfImportPlotWindow(QWidget):
         pass
 
 class BioinfImport(QWidget):
-    def __init__(self, config_tab, celldef_tab, ics_tab, bioinf_import_test, bioinf_import_test_spatial):
+    def __init__(self, config_tab, celldef_tab, ics_tab):
         super().__init__()
         if HAVE_ANNDATA is False:
             vbox = QVBoxLayout()
@@ -2445,22 +2451,8 @@ class BioinfImport(QWidget):
         self.layout = QVBoxLayout(self)  # leave this!
         self.layout.addWidget(base_widget)
 
-        if bioinf_import_test:
-            self.import_file("./data/pbmc3k_clustered.h5ad")
-            self.continue_from_edit()
-            self.window.process_window() # process rename window
-            self.window.process_window() # process cell count window
-            # self.continue_from_rename()
-            # self.set_cell_positions()
-        elif bioinf_import_test_spatial:
-            self.column_line_edit.setText("cluster")
-            # self.import_file("./data/visium_adata.h5ad")
-            self.import_file("./data/Zhuang-ABCA-1-1.064_raw_wClusterAnnots.h5ad")
-            # self.continue_from_import()
-            # self.continue_from_spatial_query()
-            # self.continue_from_edit()
-            # self.window.process_window() # process rename window
-            # self.set_cell_positions()
+        if BIWT_DEV_MODE:
+            biwt_dev_mode(self)
 
     def fill_gui(self):
         self.csv_folder.setText(self.config_tab.csv_folder.text())
