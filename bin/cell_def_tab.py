@@ -7094,7 +7094,8 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         if self.rules_tab:
             self.rules_tab.add_new_substrate(sub_name)
 
-        self.pkpd_add_new_substrate(sub_name, sub_to_copy)
+        if self.pkpd_flag:
+            self.pkpd_add_new_substrate(sub_name, sub_to_copy)
 
     def pkpd_add_new_substrate(self, sub_name, sub_to_copy):
         for cdname in self.param_d.keys():
