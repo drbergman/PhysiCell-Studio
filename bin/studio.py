@@ -243,7 +243,7 @@ class PhysiCellXMLCreator(QWidget):
         self.celldef_tab.fill_substrates_comboboxes() # do before populate? Yes, assuming we check for cell_def != None
 
         # Beware: this may set the substrate chosen for Motility/[Advanced]Chemotaxis
-        populate_tree_cell_defs(self.celldef_tab, self.skip_validate_flag, self.pkpd_flag)
+        populate_tree_cell_defs(self.celldef_tab, self.skip_validate_flag, pkpd_flag=self.pkpd_flag)
         # self.celldef_tab.customdata.param_d = self.celldef_tab.param_d
 
         # self.celldef_tab.enable_interaction_callbacks()
@@ -657,7 +657,7 @@ PhysiCell Studio is provided "AS IS" without warranty of any kind. &nbsp; In no 
 
         self.celldef_tab.config_path = self.current_xml_file
         self.celldef_tab.fill_substrates_comboboxes()   # do before populate_tree_cell_defs
-        populate_tree_cell_defs(self.celldef_tab, self.skip_validate_flag)
+        populate_tree_cell_defs(self.celldef_tab, self.skip_validate_flag, pkpd_flag=self.pkpd_flag)
 
         self.celldef_tab.fill_celltypes_comboboxes()
 
