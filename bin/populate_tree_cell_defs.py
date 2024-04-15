@@ -126,7 +126,7 @@ def pkpd_populate_tree_cell_defs(cell_def_tab, uep, pkpd_flag):
                 dt = dt_elm.text
             cell_def_tab.param_d[cell_def_name]["pd"][substrate]["dt"] = dt
 
-def populate_tree_cell_defs(cell_def_tab, skip_validate, pkpd_flag):
+def populate_tree_cell_defs(cell_def_tab, skip_validate, pkpd_flag=False):
     logging.debug(f'=======================  populate_tree_cell_defs(): ======================= ')
     logging.debug(f'    cell_def_tab.param_d = {cell_def_tab.param_d}')
     # cell_def_tab.master_custom_varname.clear()
