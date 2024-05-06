@@ -192,6 +192,7 @@ class SubstrateDef(QWidget):
         self.pk_model_combobox = QComboBox()
         self.pk_model_combobox.currentIndexChanged.connect(self.pk_model_combobox_changed_cb)
         self.pk_model_combobox.addItem("None")
+        self.pk_model_combobox.addItem("Constant")
         self.pk_model_combobox.addItem("1C")
         self.pk_model_combobox.addItem("2C")
         self.pk_model_combobox.addItem("SBML")
@@ -797,9 +798,15 @@ class SubstrateDef(QWidget):
         if self.pk_model_combobox.currentText() == "None" or self.pk_model_combobox.currentText() == "SBML":
             self.disable_all_schedule()
             self.disable_rate_parameters()
+        elif self.pk_model_combobox.currentText() == "Constant":
+            self.pk_schedule_format_combobox.setCurrentIndex(self.pk_schedule_format_combobox.findText("csv"))
+            self.pk_schedule_format_combobox.setEnabled(False)
+            self.pk_schedule_format_combobox.setStyleSheet("background-color: lightgray; color: black")
+            self.disable_rate_parameters()
         else:
             self.enable_all_schedule()
             self.enable_rate_parameters()
+
         if self.pk_model_combobox.currentText() == "None":
             self.pk_biot_number.setEnabled(False)
             self.pk_biot_number.setStyleSheet("background-color: lightgray; color: black")
@@ -807,6 +814,7 @@ class SubstrateDef(QWidget):
             self.pk_biot_number.setEnabled(True)
             self.pk_biot_number.setText(str(self.param_d[self.current_substrate]["biot_number"]))
             self.pk_biot_number.setStyleSheet("background-color: white; color: black")
+
         if self.pk_model_combobox.currentText() == "SBML":
             self.pk_sbml_filename.setEnabled(True)
             self.pk_sbml_filename.setText(str(self.param_d[self.current_substrate]["sbml_filename"]))
@@ -839,7 +847,7 @@ class SubstrateDef(QWidget):
 
     def enable_all_schedule(self):
         self.pk_schedule_format_combobox.setEnabled(True)
-        self.pk_schedule_format_combobox.setStyleSheet("background-color: white; color: black")
+        self.pk_schedule_format_combobox.setStyleSheet("QComboBox{color: #000000; background-color: #FFFFFF;}")
         if self.pk_schedule_format_combobox.currentText() == "parameters":
             self.enable_schedule_parameters()
 
@@ -1891,19 +1899,21 @@ class SubstrateDef(QWidget):
                                 subelm3 = ET.SubElement(subelm2, "loading_dose")
                                 subelm3.text = str(self.param_d[substrate]["loading_dose"]) # no idea why this one needs to be explicitly converted to a string and not the others...
                                 subelm3.tail = indent12
-                            subelm2 = ET.SubElement(subelm, "elimination_rate",{"units":"1/min"})
-                            subelm2.text = self.param_d[substrate]["elimination_rate"]
-                            subelm2.tail = indent10
-                            if self.param_d[substrate]["pk_model"] == "2C":
-                                subelm2 = ET.SubElement(subelm, "k12",{"units":"1/min"})
-                                subelm2.text = self.param_d[substrate]["k12"]
+                            
+                            if self.param_d[substrate]["pk_model"] in ["1C", "2C"]:
+                                subelm2 = ET.SubElement(subelm, "elimination_rate",{"units":"1/min"})
+                                subelm2.text = self.param_d[substrate]["elimination_rate"]
                                 subelm2.tail = indent10
-                                subelm2 = ET.SubElement(subelm, "k21",{"units":"1/min"})
-                                subelm2.text = self.param_d[substrate]["k21"]
-                                subelm2.tail = indent10
-                                subelm2 = ET.SubElement(subelm, "volume_ratio")
-                                subelm2.text = self.param_d[substrate]["volume_ratio"]
-                                subelm2.tail = indent10
+                                if self.param_d[substrate]["pk_model"] == "2C":
+                                    subelm2 = ET.SubElement(subelm, "k12",{"units":"1/min"})
+                                    subelm2.text = self.param_d[substrate]["k12"]
+                                    subelm2.tail = indent10
+                                    subelm2 = ET.SubElement(subelm, "k21",{"units":"1/min"})
+                                    subelm2.text = self.param_d[substrate]["k21"]
+                                    subelm2.tail = indent10
+                                    subelm2 = ET.SubElement(subelm, "volume_ratio")
+                                    subelm2.text = self.param_d[substrate]["volume_ratio"]
+                                    subelm2.tail = indent10
                         else:
                             subelm2 = ET.SubElement(subelm, "sbml_filename")
                             subelm2.text = str(self.param_d[substrate]["sbml_filename"])
