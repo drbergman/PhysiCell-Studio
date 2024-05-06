@@ -25,7 +25,9 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
+from multivariate_rules import Window_plot_rules
 
 class RulesPlotWindow(QWidget):
     def __init__(self):
@@ -565,6 +567,12 @@ class Rules(QWidget):
         #-------
         hlayout2 = QHBoxLayout()
         hlayout2.addWidget(groupbox) 
+
+        self.plot_rules_button = QPushButton("Plot rules")
+        self.plot_rules_button.setFixedWidth(150)
+        self.plot_rules_button.setStyleSheet("background-color: lightgreen")
+        self.plot_rules_button.clicked.connect(self.plot_rules)
+        hlayout2.addWidget(self.plot_rules_button) 
 
         self.clear_button = QPushButton("Clear table")
         self.clear_button.setFixedWidth(150)
@@ -1171,6 +1179,41 @@ class Rules(QWidget):
 
         # if idx == -1:
         #     return
+    #-----------------------------------------------------------
+    def plot_rules(self):
+        dataframe = pd.DataFrame(columns=['cell', 'signal', 'direction', 'behavior', 'saturation', 'half_max', 'hill_power', 'dead', 'base_behavior'])
+        dataframe = dataframe.astype({'cell':str, 'signal':str, 'direction':str, 'behavior':str, 'saturation':float, 'half_max':float, 'hill_power':int,  'dead':int,  'base_behavior':float})
+        for irow in range(self.max_rule_table_rows):
+            cell_irow = self.rules_table.cellWidget(irow, self.rules_celltype_idx).text()
+            if (cell_irow == ''): 
+                if irow == 0: return # No rules
+                else: break # empty line
+            signal_irow = self.rules_table.cellWidget(irow, self.rules_signal_idx).text()
+            direction_irow = self.rules_table.cellWidget(irow, self.rules_direction_idx).text()
+            behavior_irow = self.rules_table.cellWidget(irow, self.rules_response_idx).text()
+            saturation_irow = float(self.rules_table.cellWidget(irow, self.rules_maxval_idx).text())
+            halfmax_irow = float(self.rules_table.cellWidget(irow, self.rules_halfmax_idx).text())
+            hillpower_irow = int(self.rules_table.cellWidget(irow, self.rules_hillpower_idx).text())
+            if self.rules_table.cellWidget(irow,self.rules_applydead_idx).isChecked():
+                dead_irow = 1
+            else:
+                dead_irow = 0
+            # base value
+            self.update_base_value_by_name(behavior_irow, False) # It's not the better approach
+            base_behavior_irow = self.base_val
+
+            if base_behavior_irow == '??':  # don't think we ever have this now
+                if "decreases" in direction_irow: base_behavior_irow = 1.0
+                else: base_behavior_irow = 0.0
+            else: 
+                base_behavior_irow = float(base_behavior_irow)
+            # print({'cell':cell_irow, 'signal':signal_irow, 'direction':direction_irow, 'behavior':behavior_irow, 'saturation':saturation_irow, 
+            #                   'half_max':halfmax_irow, 'hill_power':hillpower_irow, 'dead':dead_irow, 'base_behavior':base_behavior_irow})
+            dataframe = dataframe._append({'cell':cell_irow, 'signal':signal_irow, 'direction':direction_irow, 'behavior':behavior_irow, 'saturation':saturation_irow, 
+                              'half_max':halfmax_irow, 'hill_power':hillpower_irow, 'dead':dead_irow, 'base_behavior':base_behavior_irow}, ignore_index = True)
+        # print(dataframe)
+        self.RulesWindow = Window_plot_rules(dataframe=dataframe)
+        self.RulesWindow.show()
 
     #-----------------------------------------------------------
     def clear_rules(self):
@@ -1392,7 +1435,7 @@ class Rules(QWidget):
             return False
 
     #-----------------------------------------------------------
-    def check_for_duplicate(self, cell_type_new,signal_new,behavior_new):
+    def check_for_duplicate(self, cell_type_new,signal_new,behavior_new,direction_new):
         print("check_for_duplicate(): num_rules=",self.num_rules)
         # for irow in range(self.max_rule_table_rows):
         for irow in range(self.num_rules):
@@ -1414,7 +1457,9 @@ class Rules(QWidget):
                 if signal == signal_new:
                     behavior = self.rules_table.cellWidget(irow, self.rules_response_idx).text()
                     if behavior == behavior_new:
-                        return irow
+                        direction = self.rules_table.cellWidget(irow, self.rules_direction_idx).text()
+                        if direction == direction_new:
+                            return irow
 
         return -1
 
@@ -1433,9 +1478,9 @@ class Rules(QWidget):
             if not self.valid_behavior(behavior):
                 self.show_warning("Invalid behavior: " + behavior)
                 return
-
+            direction = self.up_down_combobox.currentText()
             # Avoid this in PhysiCell: "Warning! Signal substrate was already part of the rule. Ignoring input."
-            dup_rule = self.check_for_duplicate(self.celltype_combobox.currentText(), signal, behavior)
+            dup_rule = self.check_for_duplicate(self.celltype_combobox.currentText(), signal, behavior, direction)
             if dup_rule >= 0:
                 self.show_warning(f"Error: You already have this signal-behavior defined for this cell type (row {dup_rule}). Either delete the rule in the table first or edit it manually.")
                 return

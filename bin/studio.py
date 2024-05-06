@@ -1365,7 +1365,7 @@ def main():
         parser.add_argument("--pkpd", help="display PK and PD tabs", action="store_true")
         if platform.system() == "Windows":
             exec_file = 'project.exe'
-        else:
+        else:        
             exec_file = 'project'  # for template sample
 
         # args = parser.parse_args()
