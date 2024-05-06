@@ -540,6 +540,10 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
             else:
                 break
 
+        self.new_cell_def_named(cdname) # added by DRB to make it easier for BioinfImport to add a new cell type programmatically
+
+    def new_cell_def_named(self, cdname):
+
         # Make a new substrate (that's a copy of the currently selected one)
         self.param_d[cdname] = copy.deepcopy(self.param_d[self.current_cell_def])
         self.param_d[cdname]["ID"] = str(self.new_cell_def_count)
@@ -5703,7 +5707,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         self.custom_data_table.setColumnCount(self.max_custom_data_cols)
         self.custom_data_table.setRowCount(self.max_custom_data_rows)
         # self.custom_data_table.setHorizontalHeaderLabels(['Conserve','Name','Value','Units','Desc'])
-        self.custom_data_table.setHorizontalHeaderLabels(['Name','Value','Conserve','Units','Desc'])
+        self.custom_data_table.setHorizontalHeaderLabels(['Name','Value','Conserve','Units','Description'])
 
         # Don't like the behavior these offer, e.g., locks down width of 0th column :/
         # header = self.custom_data_table.horizontalHeader()       
@@ -9016,3 +9020,23 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
                     idx += 1
 
         logging.debug(f'----------- end cell_def_tab.py: fill_xml(): ----------')
+
+    #-------------------------------------------------------------------
+    # Simple text summary of cell types phenotypes
+    def summary(self, textW):
+        print("cell_def_tab.py: ----------------- summary() ---------------")
+        # textW.appendPlainText("mary had a liittle lamb\nhis fleece was white.")
+
+        # l.8489
+        uep = self.xml_root.find('.//cell_definitions')
+        for cdef in self.param_d.keys():
+            textW.appendPlainText(">>> "+cdef)
+            textW.appendPlainText("-- mechanics")
+            textW.appendPlainText(self.param_d[cdef]['mechanics_adhesion'])
+
+            # l.7447
+            # combo_widget_idx = self.param_d[cdef]["cycle_choice_idx"]
+            # cycle = ET.SubElement(pheno, "cycle",
+            #     {"code":self.cycle_combo_idx_code[combo_widget_idx],
+            #         "name":self.cycle_combo_idx_name[combo_widget_idx] } )
+            # textW.appendPlainText(cycle)
