@@ -2026,10 +2026,10 @@ class SubstrateDef(QWidget):
                                 subelm3.tail = indent12
 
                             elif self.param_d[substrate]["schedule_format"] == "csv":
-                                subelm3 = ET.SubElement(subelm2, "pk_csv_folder")
+                                subelm3 = ET.SubElement(subelm2, "folder")
                                 subelm3.text = self.param_d[substrate]["pk_csv_folder"]
                                 subelm3.tail = indent12
-                                subelm3 = ET.SubElement(subelm2, "pk_csv_filename")
+                                subelm3 = ET.SubElement(subelm2, "filename")
                                 subelm3.text = self.param_d[substrate]["pk_csv_filename"]
                                 subelm3.tail = indent12
 
