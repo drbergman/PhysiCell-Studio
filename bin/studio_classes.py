@@ -120,3 +120,4 @@ class FileNameValidator(QValidator):
             return QValidator.Acceptable, string, pos
         else:
             return QValidator.Intermediate, string, pos
+            
