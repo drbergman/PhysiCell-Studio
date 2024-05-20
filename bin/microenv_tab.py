@@ -6,10 +6,13 @@ Dr. Paul Macklin (macklinp@iu.edu)
 """
 
 import sys
+import os
 import copy
 import logging
 import xml.etree.ElementTree as ET  # https://docs.python.org/2/library/xml.etree.elementtree.html
 # from ElementTree_pretty import prettify
+
+from studio_classes import QLineEdit_custom, FolderPathValidator, FileNameValidator, QLabelSeparator
 
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import *
@@ -186,6 +189,7 @@ class SubstrateDef(QWidget):
         units_width = 150
 
         hbox = QHBoxLayout()
+        hbox.addStretch()
         label = QLabel("PK Model")
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
@@ -198,11 +202,7 @@ class SubstrateDef(QWidget):
         self.pk_model_combobox.addItem("2C")
         self.pk_model_combobox.addItem("SBML")
         hbox.addWidget(self.pk_model_combobox)
-        
-        # hbox.addStretch()
-        # self.pk_tab_layout.addLayout(hbox)
 
-        # hbox = QHBoxLayout()
         label = QLabel("Schedule Format")
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
@@ -215,7 +215,31 @@ class SubstrateDef(QWidget):
         self.pk_schedule_format_combobox.currentIndexChanged.connect(self.pk_schedule_format_combobox_changed_cb)
         hbox.addWidget(self.pk_schedule_format_combobox)
 
-        label = QLabel("Total Doses")
+        label = QLabel("Biot number")
+        label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(label)
+
+        self.pk_biot_number = QLineEdit()
+        self.pk_biot_number.setFixedWidth(60)
+        self.pk_biot_number.setEnabled(False)
+        self.pk_biot_number.setStyleSheet("background-color: lightgray; color: black")
+        self.pk_biot_number.setValidator(QtGui.QDoubleValidator())
+        self.pk_biot_number.textChanged.connect(self.pk_biot_number_changed_cb)
+        hbox.addWidget(self.pk_biot_number)
+
+        hbox.addStretch()
+        self.pk_tab_layout.addLayout(hbox)
+
+        self.pk_tab_layout.addWidget(QLabelSeparator("Schedule parameters"))
+        
+        hbox = QHBoxLayout()
+
+        label = QLabel("Number of doses:")
+        label.setAlignment(QtCore.Qt.AlignLeft)
+        label.setStyleSheet("font-weight: bold")
+        hbox.addWidget(label)
+
+        label = QLabel("Total #")
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
 
@@ -227,7 +251,7 @@ class SubstrateDef(QWidget):
         self.pk_total_doses.textChanged.connect(self.pk_total_doses_changed_cb)
         hbox.addWidget(self.pk_total_doses)
 
-        label = QLabel("Loading Doses")
+        label = QLabel("Loading #")
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
 
@@ -243,6 +267,46 @@ class SubstrateDef(QWidget):
         self.pk_tab_layout.addLayout(hbox)
 
         hbox = QHBoxLayout()
+
+        label = QLabel("Dose amount:")
+        label.setAlignment(QtCore.Qt.AlignLeft)
+        label.setStyleSheet("font-weight: bold")
+        hbox.addWidget(label)
+
+        label = QLabel("Regular Dose")
+        label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(label)
+
+        self.pk_regular_dose = QLineEdit()
+        self.pk_regular_dose.setFixedWidth(60)
+        self.pk_regular_dose.setEnabled(False)
+        self.pk_regular_dose.setStyleSheet("background-color: lightgray; color: black")
+        self.pk_regular_dose.setValidator(QtGui.QDoubleValidator())
+        self.pk_regular_dose.textChanged.connect(self.pk_regular_dose_changed_cb)
+        hbox.addWidget(self.pk_regular_dose)
+
+        label = QLabel("Loading Dose")
+        label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(label)
+
+        self.pk_loading_dose = QLineEdit()
+        self.pk_loading_dose.setFixedWidth(60)
+        self.pk_loading_dose.setEnabled(False)
+        self.pk_loading_dose.setStyleSheet("background-color: lightgray; color: black")
+        self.pk_loading_dose.setValidator(QtGui.QDoubleValidator())
+        self.pk_loading_dose.textChanged.connect(self.pk_loading_dose_changed_cb)
+        hbox.addWidget(self.pk_loading_dose)
+
+        hbox.addStretch()
+        self.pk_tab_layout.addLayout(hbox)
+
+        hbox = QHBoxLayout()
+
+        label = QLabel("Dose timing:")
+        label.setAlignment(QtCore.Qt.AlignLeft)
+        label.setStyleSheet("font-weight: bold")
+        hbox.addWidget(label)
+
         label = QLabel("First Dose Time")
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
@@ -275,32 +339,11 @@ class SubstrateDef(QWidget):
         label.setAlignment(QtCore.Qt.AlignLeft)
         hbox.addWidget(units)
 
-        label = QLabel("Regular Dose")
-        label.setAlignment(QtCore.Qt.AlignRight)
-        hbox.addWidget(label)
-
-        self.pk_regular_dose = QLineEdit()
-        self.pk_regular_dose.setFixedWidth(60)
-        self.pk_regular_dose.setEnabled(False)
-        self.pk_regular_dose.setStyleSheet("background-color: lightgray; color: black")
-        self.pk_regular_dose.setValidator(QtGui.QDoubleValidator())
-        self.pk_regular_dose.textChanged.connect(self.pk_regular_dose_changed_cb)
-        hbox.addWidget(self.pk_regular_dose)
-
-        label = QLabel("Loading Dose")
-        label.setAlignment(QtCore.Qt.AlignRight)
-        hbox.addWidget(label)
-
-        self.pk_loading_dose = QLineEdit()
-        self.pk_loading_dose.setFixedWidth(60)
-        self.pk_loading_dose.setEnabled(False)
-        self.pk_loading_dose.setStyleSheet("background-color: lightgray; color: black")
-        self.pk_loading_dose.setValidator(QtGui.QDoubleValidator())
-        self.pk_loading_dose.textChanged.connect(self.pk_loading_dose_changed_cb)
-        hbox.addWidget(self.pk_loading_dose)
-
         hbox.addStretch()
+
         self.pk_tab_layout.addLayout(hbox)
+
+        self.pk_tab_layout.addWidget(QLabelSeparator("PK rate parameters"))
 
         # PK rate parameters
         hbox = QHBoxLayout()
@@ -367,38 +410,78 @@ class SubstrateDef(QWidget):
 
         hbox.addStretch()
         self.pk_tab_layout.addLayout(hbox)
-        
+
+        self.pk_tab_layout.addWidget(QLabelSeparator("Supporting files"))
+
         hbox = QHBoxLayout()
-        label = QLabel("Biot number")
+        label = QLabel("CSV-defined PK schedule")
+        label.setAlignment(QtCore.Qt.AlignLeft)
+        label.setStyleSheet("font-weight: bold")
+        hbox.addWidget(label)
+        hbox.addStretch()
+
+        self.pk_tab_layout.addLayout(hbox)
+
+        hbox = QHBoxLayout()
+
+        label = QLabel("Folder")
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
 
-        self.pk_biot_number = QLineEdit()
-        self.pk_biot_number.setFixedWidth(60)
-        self.pk_biot_number.setEnabled(False)
-        self.pk_biot_number.setStyleSheet("background-color: lightgray; color: black")
-        self.pk_biot_number.setValidator(QtGui.QDoubleValidator())
-        self.pk_biot_number.textChanged.connect(self.pk_biot_number_changed_cb)
-        hbox.addWidget(self.pk_biot_number)
+        self.pk_csv_folder = QLineEdit_custom()
+        self.pk_csv_folder.setEnabled(False)
+        self.pk_csv_folder.setValidator(FolderPathValidator())
+        self.pk_csv_folder.textChanged.connect(self.pk_csv_folder_changed_cb)
+        hbox.addWidget(self.pk_csv_folder)
+
+        label = QLabel("Filename")
+        label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(label)
+
+        self.pk_csv_filename = QLineEdit_custom()
+        self.pk_csv_filename.setEnabled(False)
+        self.pk_csv_filename.setValidator(FileNameValidator(self.pk_csv_folder))
+        self.pk_csv_filename.textChanged.connect(self.pk_csv_filename_changed_cb)
+        hbox.addWidget(self.pk_csv_filename)
+
+        self.pk_tab_layout.addLayout(hbox)
+
+        hbox = QHBoxLayout()
+        label = QLabel("SBML file")
+        label.setAlignment(QtCore.Qt.AlignLeft)
+        label.setStyleSheet("font-weight: bold")
+        hbox.addWidget(label)
+        hbox.addStretch()
+
+        self.pk_tab_layout.addLayout(hbox)
+
+        hbox = QHBoxLayout()
+
+        label = QLabel("Folder")
+        label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(label)
+
+        self.pk_sbml_folder = QLineEdit_custom()
+        self.pk_sbml_folder.setEnabled(False)
+        self.pk_sbml_folder.setValidator(FolderPathValidator())
+        self.pk_sbml_folder.textChanged.connect(self.pk_sbml_folder_changed_cb)
+        hbox.addWidget(self.pk_sbml_folder)
+        
+        label = QLabel("Filename")
+        label.setAlignment(QtCore.Qt.AlignRight)
+        hbox.addWidget(label)
+        self.pk_sbml_filename = QLineEdit_custom()
+        self.pk_sbml_filename.setEnabled(False)
+        self.pk_sbml_filename.setValidator(FileNameValidator(self.pk_sbml_folder))
+        self.pk_sbml_filename.textChanged.connect(self.pk_sbml_filename_changed_cb)
+        hbox.addWidget(self.pk_sbml_filename)
 
         hbox.addStretch()
         self.pk_tab_layout.addLayout(hbox)
 
         hbox = QHBoxLayout()
-        label = QLabel("SBML Filename in ./config/")
-        label.setAlignment(QtCore.Qt.AlignRight)
+        label = QLabel(f"The boxes above turn red if the file cannot be found.\nRelative paths are relative to {os.getcwd()} ")
         hbox.addWidget(label)
-
-        self.pk_sbml_filename = QLineEdit()
-        self.pk_sbml_filename.setFixedWidth(200)
-        self.pk_sbml_filename.setEnabled(False)
-        self.pk_sbml_filename.setStyleSheet("background-color: lightgray; color: black")
-        rx_valid_filename = QtCore.QRegExp("^[a-zA-Z][a-zA-Z0-9_]+.xml$")
-        name_validator = QtGui.QRegExpValidator(rx_valid_filename)
-        self.pk_sbml_filename.setValidator(name_validator)
-        self.pk_sbml_filename.textChanged.connect(self.pk_sbml_filename_changed_cb)
-        hbox.addWidget(self.pk_sbml_filename)
-
         hbox.addStretch()
         self.pk_tab_layout.addLayout(hbox)
 
@@ -799,11 +882,15 @@ class SubstrateDef(QWidget):
         if self.pk_model_combobox.currentText() == "None" or self.pk_model_combobox.currentText() == "SBML":
             self.disable_all_schedule()
             self.disable_rate_parameters()
+            self.pk_csv_folder.setEnabled(False)
+            self.pk_csv_filename.setEnabled(False)
         elif self.pk_model_combobox.currentText() == "Constant":
             self.pk_schedule_format_combobox.setCurrentIndex(self.pk_schedule_format_combobox.findText("csv"))
             self.pk_schedule_format_combobox.setEnabled(False)
             self.pk_schedule_format_combobox.setStyleSheet("background-color: lightgray; color: black")
             self.disable_rate_parameters()
+            self.pk_csv_folder.setEnabled(True)
+            self.pk_csv_filename.setEnabled(True)
         else:
             self.enable_all_schedule()
             self.enable_rate_parameters()
@@ -817,13 +904,15 @@ class SubstrateDef(QWidget):
             self.pk_biot_number.setStyleSheet("background-color: white; color: black")
 
         if self.pk_model_combobox.currentText() == "SBML":
+            self.pk_sbml_folder.setEnabled(True)
+            self.pk_sbml_folder.setText(str(self.param_d[self.current_substrate]["sbml_folder"]))
             self.pk_sbml_filename.setEnabled(True)
             self.pk_sbml_filename.setText(str(self.param_d[self.current_substrate]["sbml_filename"]))
-            self.pk_sbml_filename.setStyleSheet("background-color: white; color: black")
         else:
+            self.pk_sbml_folder.setEnabled(False)
+            self.pk_sbml_folder.setText(str(self.param_d[self.current_substrate]["sbml_folder"]))
             self.pk_sbml_filename.setEnabled(False)
             self.pk_sbml_filename.setText(str(self.param_d[self.current_substrate]["sbml_filename"]))
-            self.pk_sbml_filename.setStyleSheet("background-color: lightgray; color: black")
             
 
     def enable_rate_parameters(self):
@@ -920,6 +1009,9 @@ class SubstrateDef(QWidget):
 
         if self.pk_model_combobox.currentText() == "None" or self.pk_model_combobox.currentText() == "SBML" or self.pk_schedule_format_combobox.currentText() != "parameters":
             self.disable_schedule_parameters()
+            if self.pk_schedule_format_combobox.currentText() == "csv":
+                self.pk_csv_folder.setEnabled(True)
+                self.pk_csv_filename.setEnabled(True)
         else:
             self.enable_schedule_parameters()
 
@@ -955,6 +1047,17 @@ class SubstrateDef(QWidget):
 
     def pk_biot_number_changed_cb(self, text):
         self.param_d[self.current_substrate]["biot_number"] = text
+
+    def pk_csv_folder_changed_cb(self, text):
+        self.param_d[self.current_substrate]["pk_csv_folder"] = text
+        self.pk_csv_filename.check_validity(self.pk_csv_filename.text())
+
+    def pk_csv_filename_changed_cb(self, text):
+        self.param_d[self.current_substrate]["pk_csv_filename"] = text
+
+    def pk_sbml_folder_changed_cb(self, text):
+        self.param_d[self.current_substrate]["sbml_folder"] = text
+        self.pk_sbml_filename.check_validity(self.pk_sbml_filename.text())
 
     def pk_sbml_filename_changed_cb(self, text):
         self.param_d[self.current_substrate]["sbml_filename"] = text
@@ -1096,6 +1199,9 @@ class SubstrateDef(QWidget):
             self.param_d[subname]["k21"] = "0"
             self.param_d[subname]["volume_ratio"] = "1"
             self.param_d[subname]["biot_number"] = "1"
+            self.param_d[subname]["pk_csv_folder"] = None
+            self.param_d[subname]["pk_csv_filename"] = None
+            self.param_d[subname]["sbml_folder"] = "./config"
             self.param_d[subname]["sbml_filename"] = "PK_default.xml"
 
         # NOooo!
@@ -1333,6 +1439,9 @@ class SubstrateDef(QWidget):
             self.pk_k21.setText(str(self.param_d[self.current_substrate]["k21"]))
             self.pk_volume_ratio.setText(str(self.param_d[self.current_substrate]["volume_ratio"]))
             self.pk_biot_number.setText(str(self.param_d[self.current_substrate]["biot_number"]))
+            self.pk_csv_folder.setText(str(self.param_d[self.current_substrate]["pk_csv_folder"]))
+            self.pk_csv_filename.setText(str(self.param_d[self.current_substrate]["pk_csv_filename"]))
+            self.pk_sbml_folder.setText(str(self.param_d[self.current_substrate]["sbml_folder"]))
             self.pk_sbml_filename.setText(str(self.param_d[self.current_substrate]["sbml_filename"]))
 
         # global to all substrates
@@ -1533,6 +1642,9 @@ class SubstrateDef(QWidget):
                         k21 = "0"
                         volume_ratio = "1"
                         biot_number = "1"
+                        csv_folder = None
+                        csv_filename = None
+                        sbml_folder = "./config"
                         sbml_filename = "PK_default.xml"
                         if pk_model_enabled == "true":
                             pk_model = pk_path.find(".//model").text
@@ -1559,6 +1671,13 @@ class SubstrateDef(QWidget):
                                         loading_dose_elm = schedule_elm.find(".//loading_dose")
                                         if loading_dose_elm is not None and loading_dose_elm.text is not None:
                                             loading_dose = loading_dose_elm.text
+                                    elif schedule_format == "csv":
+                                        csv_folder_elm = pk_path.find(".//folder")
+                                        if csv_folder_elm is not None and csv_folder_elm.text is not None:
+                                            csv_folder = csv_folder_elm.text
+                                        csv_filename_elm = pk_path.find(".//filename")
+                                        if csv_filename_elm is not None and csv_filename_elm.text is not None:
+                                            csv_filename = csv_filename_elm.text
                                 elimination_rate_elm = pk_path.find(".//elimination_rate")
                                 if elimination_rate_elm is not None and elimination_rate_elm.text is not None:
                                     elimination_rate = elimination_rate_elm.text
@@ -1572,6 +1691,9 @@ class SubstrateDef(QWidget):
                                 if volume_ratio_elm is not None and volume_ratio_elm.text is not None:
                                     volume_ratio = volume_ratio_elm.text
                             else:
+                                sbml_folder_elm = pk_path.find(".//sbml_folder")
+                                if sbml_folder_elm is not None and sbml_folder_elm.text is not None:
+                                    sbml_folder = sbml_folder_elm.text
                                 sbml_filename_elm = pk_path.find(".//sbml_filename")
                                 if sbml_filename_elm is not None and sbml_filename_elm.text is not None:
                                     sbml_filename = sbml_filename_elm.text
@@ -1595,6 +1717,9 @@ class SubstrateDef(QWidget):
                         self.param_d[substrate_name]["k21"] = k21
                         self.param_d[substrate_name]["volume_ratio"] = volume_ratio
                         self.param_d[substrate_name]["biot_number"] = biot_number
+                        self.param_d[substrate_name]["pk_csv_folder"] = csv_folder
+                        self.param_d[substrate_name]["pk_csv_filename"] = csv_filename
+                        self.param_d[substrate_name]["sbml_folder"] = sbml_folder
                         self.param_d[substrate_name]["sbml_filename"] = sbml_filename
 
                         if idx == 1:
@@ -1904,7 +2029,15 @@ class SubstrateDef(QWidget):
                                 subelm3 = ET.SubElement(subelm2, "loading_dose")
                                 subelm3.text = str(self.param_d[substrate]["loading_dose"]) # no idea why this one needs to be explicitly converted to a string and not the others...
                                 subelm3.tail = indent12
-                            
+
+                            elif self.param_d[substrate]["schedule_format"] == "csv":
+                                subelm3 = ET.SubElement(subelm2, "pk_csv_folder")
+                                subelm3.text = self.param_d[substrate]["pk_csv_folder"]
+                                subelm3.tail = indent12
+                                subelm3 = ET.SubElement(subelm2, "pk_csv_filename")
+                                subelm3.text = self.param_d[substrate]["pk_csv_filename"]
+                                subelm3.tail = indent12
+
                             if self.param_d[substrate]["pk_model"] in ["1C", "2C"]:
                                 subelm2 = ET.SubElement(subelm, "elimination_rate",{"units":"1/min"})
                                 subelm2.text = self.param_d[substrate]["elimination_rate"]
@@ -1920,6 +2053,9 @@ class SubstrateDef(QWidget):
                                     subelm2.text = self.param_d[substrate]["volume_ratio"]
                                     subelm2.tail = indent10
                         else:
+                            subelm2 = ET.SubElement(subelm, "sbml_folder")
+                            subelm2.text = str(self.param_d[substrate]["sbml_folder"])
+                            subelm2.tail = indent10
                             subelm2 = ET.SubElement(subelm, "sbml_filename")
                             subelm2.text = str(self.param_d[substrate]["sbml_filename"])
                             subelm2.tail = indent10
