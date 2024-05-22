@@ -66,7 +66,7 @@ class QCheckBox_custom(QCheckBox):  # it's insane to have to do this!
 
 class ICs(QWidget):
 
-    def __init__(self, config_tab, celldef_tab, bioinf_import_flag):
+    def __init__(self, config_tab, celldef_tab, biwt_flag):
         super().__init__()
         # global self.config_params
 
@@ -75,7 +75,7 @@ class ICs(QWidget):
         self.celldef_tab = celldef_tab
         self.config_tab = config_tab
 
-        self.bioinf_import_flag = bioinf_import_flag
+        self.biwt_flag = biwt_flag
 
         # self.circle_radius = 100  # will be set in run_tab.py using the .xml
         # self.mech_voxel_size = 30
@@ -211,7 +211,7 @@ class ICs(QWidget):
 
         self.tab_widget = QTabWidget()
         self.base_tab_id = self.tab_widget.addTab(self.create_base_ics_tab(),"Base")
-        if self.bioinf_import_flag:
+        if self.biwt_flag:
             self.biwt_tab = BioinformaticsWalkthrough(self.config_tab, self.celldef_tab, self)
             self.tab_widget.addTab(self.biwt_tab,"BIWT")
 
@@ -2281,7 +2281,7 @@ class ICs(QWidget):
     def fill_gui(self):
         self.csv_folder.setText(self.config_tab.csv_folder.text())
         self.output_file.setText(self.config_tab.csv_file.text())
-        if self.bioinf_import_flag:
+        if self.biwt_flag:
             self.biwt_tab.fill_gui()
         self.fill_substrate_combobox()
 

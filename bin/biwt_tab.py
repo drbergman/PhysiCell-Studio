@@ -40,11 +40,11 @@ from PyQt5.QtGui import QIcon
 from studio_classes import QHLine, QVLine, QCheckBox_custom
 
 class GoBackButton(QPushButton):
-    def __init__(self, parent, bioinf_walkthrough):
+    def __init__(self, parent, biwt):
         super().__init__(parent)
         self.setText("\u2190 Go back")
         self.setStyleSheet(f"QPushButton {{background-color: lightgreen; color: black;}}")
-        self.clicked.connect(bioinf_walkthrough.go_back_to_prev_window)
+        self.clicked.connect(biwt.go_back_to_prev_window)
 
 class ContinueButton(QPushButton):
     def __init__(self, parent, cb, text="Continue \u2192",styleSheet="QPushButton {background-color: lightgreen; color: black;}"):
@@ -54,15 +54,15 @@ class ContinueButton(QPushButton):
         self.clicked.connect(cb)
 
 class BioinformaticsWalkthroughWindow(QWidget):
-    def __init__(self, bioinf_walkthrough):
+    def __init__(self, biwt):
         super().__init__()
-        self.setWindowTitle(f"Bioinformatics Import Walkthrough: Step {bioinf_walkthrough.current_window_idx+1}")
-        self.biwt = bioinf_walkthrough
+        self.setWindowTitle(f"Bioinformatics Import Walkthrough: Step {biwt.current_window_idx+1}")
+        self.biwt = biwt
         self.biwt.stale_futures = True # initializing a window means that any future windows are stale
 
 class BioinformaticsWalkthroughWindow_WarningWindow(BioinformaticsWalkthroughWindow):
-    def __init__(self, bioinf_walkthrough, layout, continue_cb):
-        super().__init__(bioinf_walkthrough)
+    def __init__(self, biwt, layout, continue_cb):
+        super().__init__(biwt)
         vbox = QVBoxLayout()
         vbox.addLayout(layout)
 
@@ -76,8 +76,8 @@ class BioinformaticsWalkthroughWindow_WarningWindow(BioinformaticsWalkthroughWin
         self.setLayout(vbox)
         
 class BioinformaticsWalkthroughWindow_ClusterColumn(BioinformaticsWalkthroughWindow):
-    def __init__(self, bioinf_walkthrough):
-        super().__init__(bioinf_walkthrough)
+    def __init__(self, biwt):
+        super().__init__(biwt)
 
         print("------Selecting cell type column------")
 
@@ -118,8 +118,8 @@ class BioinformaticsWalkthroughWindow_ClusterColumn(BioinformaticsWalkthroughWin
         self.biwt.continue_from_import()
 
 class BioinformaticsWalkthroughWindow_SpatialQuery(BioinformaticsWalkthroughWindow):
-    def __init__(self, bioinf_walkthrough):
-        super().__init__(bioinf_walkthrough)
+    def __init__(self, biwt):
+        super().__init__(biwt)
 
         print("------Asking if you want to use the spatial data found------")
 
@@ -158,8 +158,8 @@ class BioinformaticsWalkthroughWindow_SpatialQuery(BioinformaticsWalkthroughWind
         self.biwt.continue_from_spatial_query()
 
 class BioinformaticsWalkthroughWindow_EditCellTypes(BioinformaticsWalkthroughWindow):
-    def __init__(self, bioinf_walkthrough):
-        super().__init__(bioinf_walkthrough)
+    def __init__(self, biwt):
+        super().__init__(biwt)
 
         print("------Editing cell types------")
 
@@ -444,8 +444,8 @@ class BioinformaticsWalkthroughWindow_EditCellTypes(BioinformaticsWalkthroughWin
         self.biwt.continue_from_edit()
 
 class BioinformaticsWalkthroughWindow_RenameCellTypes(BioinformaticsWalkthroughWindow):
-    def __init__(self, bioinf_walkthrough):
-        super().__init__(bioinf_walkthrough)
+    def __init__(self, biwt):
+        super().__init__(biwt)
 
         print("------Renaming cell types------")
         vbox = QVBoxLayout()
@@ -497,8 +497,8 @@ class BioinformaticsWalkthroughWindow_RenameCellTypes(BioinformaticsWalkthroughW
         self.biwt.continue_from_rename()
 
 class BioinformaticsWalkthroughWindow_CellCounts(BioinformaticsWalkthroughWindow):
-    def __init__(self, bioinf_walkthrough):
-        super().__init__(bioinf_walkthrough)
+    def __init__(self, biwt):
+        super().__init__(biwt)
         print("------Setting cell type counts------")
         names_width = 100
         counts_width = 120
@@ -810,8 +810,8 @@ class BioinformaticsWalkthroughWindow_CellCounts(BioinformaticsWalkthroughWindow
         self.biwt.continue_from_counts()
 
 class BioinformaticsWalkthroughWindow_PositionsWindow(BioinformaticsWalkthroughWindow):
-    def __init__(self, bioinf_walkthrough):
-        super().__init__(bioinf_walkthrough)
+    def __init__(self, biwt):
+        super().__init__(biwt)
         print("------Setting cell type positions------")
 
         self.ics_plot_area = None
@@ -1147,8 +1147,8 @@ class BioinformaticsWalkthroughWindow_PositionsWindow(BioinformaticsWalkthroughW
         self.biwt.continue_from_positions()
         
 class BioinformaticsWalkthroughWindow_WritePositions(BioinformaticsWalkthroughWindow):
-    def __init__(self, bioinf_walkthrough):
-        super().__init__(bioinf_walkthrough)
+    def __init__(self, biwt):
+        super().__init__(biwt)
 
         print("------Writing cell positions to file------")
 
@@ -1243,10 +1243,10 @@ class BioinformaticsWalkthroughWindow_WritePositions(BioinformaticsWalkthroughWi
         self.biwt.close_up()
 
 class BioinformaticsWalkthroughPlotWindow(QWidget):
-    def __init__(self, positions_window, bioinf_walkthrough, config_tab):
+    def __init__(self, positions_window, biwt, config_tab):
         super().__init__()
         self.pw = positions_window
-        self.biwt = bioinf_walkthrough
+        self.biwt = biwt
         self.config_tab = config_tab
 
         self.setup_system_keys()
