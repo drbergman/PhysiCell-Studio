@@ -30,7 +30,7 @@ from PyQt5.QtWidgets import QFrame,QApplication,QWidget,QTabWidget,QFormLayout,Q
 from PyQt5.QtGui import QPixmap
 
 from studio_classes import QHLine
-from bioinf_import_tab import BioinfImport
+from biwt_tab import BioinformaticsWalkthrough
 
 import numpy as np
 import matplotlib
@@ -187,8 +187,8 @@ class ICs(QWidget):
         self.tab_widget = QTabWidget()
         self.base_tab_id = self.tab_widget.addTab(self.create_base_ics_tab(),"Base")
         if self.bioinf_import_flag:
-            self.bioinf_import_tab = BioinfImport(self.config_tab, self.celldef_tab, self)
-            self.tab_widget.addTab(self.bioinf_import_tab,"Bioinformatics Import")
+            self.biwt_tab = BioinformaticsWalkthrough(self.config_tab, self.celldef_tab, self)
+            self.tab_widget.addTab(self.biwt_tab,"BIWT")
 
         self.layout = QVBoxLayout(self)
         self.layout.addWidget(self.tab_widget)
@@ -1944,7 +1944,7 @@ class ICs(QWidget):
         self.csv_folder.setText(self.config_tab.csv_folder.text())
         self.output_file.setText(self.config_tab.csv_file.text())
         if self.bioinf_import_flag:
-            self.bioinf_import_tab.fill_gui()
+            self.biwt_tab.fill_gui()
 
     def on_enter_axes(self, event):
         self.mouse_on_axes = True
