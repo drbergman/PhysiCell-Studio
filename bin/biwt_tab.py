@@ -1,5 +1,6 @@
 """
 Authors:
+Daniel Bergman (dbergma5@jh.edu)
 Randy Heiland (heiland@iu.edu)
 Dr. Paul Macklin (macklinp@iu.edu)
 Rf. Credits.md
@@ -18,7 +19,7 @@ BIWT_DEV_MODE = os.getenv('BIWT_DEV_MODE', 'False')
 if BIWT_DEV_MODE == 'True':
     from biwt_dev import biwt_dev_mode
 BIWT_DEV_MODE = BIWT_DEV_MODE=='True'
-# import scanpy as sc
+
 import copy
 import numpy as np
 import pandas as pd
