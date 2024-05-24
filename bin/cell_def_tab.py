@@ -6730,7 +6730,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
                 self.motility2_substrate_dropdown.setItemText(idx, new_name)
             if old_name == self.secretion_substrate_dropdown.itemText(idx):
                 self.secretion_substrate_dropdown.setItemText(idx, new_name)
-            if old_name == self.pd_substrate_combobox.itemText(idx):
+            if self.pkpd_flag and old_name == self.pd_substrate_combobox.itemText(idx):
                 self.pd_substrate_combobox.setItemText(idx, new_name)
 
         # 2) update in the param_d dict
