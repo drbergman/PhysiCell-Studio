@@ -6748,12 +6748,13 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
             self.param_d[cdname]["secretion"][new_name] = self.param_d[cdname]["secretion"].pop(old_name)
             self.param_d[cdname]["chemotactic_sensitivity"][new_name] = self.param_d[cdname]["chemotactic_sensitivity"].pop(old_name)
 
-            self.param_d[cdname]["pd"][new_name] = self.param_d[cdname]["pd"].pop(old_name)
+            if self.pkpd_flag:
+                self.param_d[cdname]["pd"][new_name] = self.param_d[cdname]["pd"].pop(old_name)
 
         if old_name == self.current_secretion_substrate:
             self.current_secretion_substrate = new_name
 
-        if old_name == self.current_pd_substrate:
+        if self.pkpd_flag and old_name == self.current_pd_substrate:
             self.current_pd_substrate = new_name
 
         if self.rules_tab:
