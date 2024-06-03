@@ -134,9 +134,9 @@ class BioinformaticsWalkthroughWindow_ClusterColumn(BioinformaticsWalkthroughWin
         # col_names = list(self.biwt.adata.obs.columns)
         self.biwt.auto_continue = False
         self.column_combobox = QComboBox()
-        for col_name in self.biwt.data_columns.keys():
+        for col_name in tuple(self.biwt.data_columns.names):
             self.column_combobox.addItem(col_name)
-        if self.biwt.column_line_edit.text() in self.biwt.data_columns:
+        if self.biwt.column_line_edit.text() in tuple(self.biwt.data_columns.names):
             s = "Select column that contains cell type info:"
             self.biwt.auto_continue = True
             self.column_combobox.setCurrentIndex(
