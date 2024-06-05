@@ -3558,14 +3558,16 @@ class BioinformaticsWalkthrough(QWidget):
             with (ro.default_converter + pandas2ri.converter).context():
                 temp_data_cols = ro.conversion.get_conversion().rpy2py(metadata)
             names = tuple(temp_data_cols.names)
-            print("\nChoose from columns", names)
             nrows = tuple(temp_data_cols.slots["nrows"])[0]
             rownames = tuple(temp_data_cols.slots["rownames"])
             tempDF = pd.DataFrame()
+            # grab one column at a time and write into pandas df
+            # takes around 20s
             for element in np.arange(len(names)):
                 tempDF[names[element]] = list(
                     tuple(temp_data_cols.slots["listData"])[element]
                 )
+            tempDF.index = rownames
             self.data_columns = pd.DataFrame(tempDF)
 
         elif classname in ["Seurat"]:
