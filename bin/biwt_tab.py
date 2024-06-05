@@ -134,9 +134,9 @@ class BioinformaticsWalkthroughWindow_ClusterColumn(BioinformaticsWalkthroughWin
         # col_names = list(self.biwt.adata.obs.columns)
         self.biwt.auto_continue = False
         self.column_combobox = QComboBox()
-        for col_name in tuple(self.biwt.data_columns.names):
+        for col_name in self.biwt.data_columns:
             self.column_combobox.addItem(col_name)
-        if self.biwt.column_line_edit.text() in tuple(self.biwt.data_columns.names):
+        if self.biwt.column_line_edit.text() in self.biwt.data_columns:
             s = "Select column that contains cell type info:"
             self.biwt.auto_continue = True
             self.column_combobox.setCurrentIndex(
@@ -3548,9 +3548,29 @@ class BioinformaticsWalkthrough(QWidget):
             )
             return False
 
-        with (ro.default_converter + pandas2ri.converter).context():
-            print("Converting to pandas dataframe...")
-            self.data_columns = ro.conversion.get_conversion().rpy2py(metadata)
+        print("Converting to pandas dataframe...")
+        if classname in [
+            "SingleCellExperiment",
+            "SummarizedExperiment",
+        ]:
+            # the RS4 object needs a couple more conversion steps
+            # i think duplicating this code into 2 cases is the simplest method though a little ugly
+            with (ro.default_converter + pandas2ri.converter).context():
+                temp_data_cols = ro.conversion.get_conversion().rpy2py(metadata)
+            names = tuple(temp_data_cols.names)
+            print("\nChoose from columns", names)
+            nrows = tuple(temp_data_cols.slots["nrows"])[0]
+            rownames = tuple(temp_data_cols.slots["rownames"])
+            tempDF = pd.DataFrame()
+            for element in np.arange(len(names)):
+                tempDF[names[element]] = list(
+                    tuple(temp_data_cols.slots["listData"])[element]
+                )
+            self.data_columns = pd.DataFrame(tempDF)
+
+        elif classname in ["Seurat"]:
+            with (ro.default_converter + pandas2ri.converter).context():
+                self.data_columns = ro.conversion.get_conversion().rpy2py(metadata)
 
         print("------------R data file loaded-------------")
         try:
