@@ -19,8 +19,10 @@ except:
     HAVE_ANNDATA = False
 
 try:
+    import anndata2ri
     import rpy2.robjects as ro
     from rpy2.robjects import pandas2ri, r
+    from rpy2.robjects.conversion import localconverter
     from rpy2.robjects.packages import importr
 
     HAVE_RPY2 = True
@@ -3516,6 +3518,7 @@ class BioinformaticsWalkthrough(QWidget):
             return False
         try:
             rdata = importr_base.readRDS(file_path)
+            anndata2ri.activate()
         except:
             print(f"Import failed while trying to read {file_path} as an R object.")
             return False
@@ -3532,6 +3535,7 @@ class BioinformaticsWalkthrough(QWidget):
             "SummarizedExperiment",
         ]:  # not clear if SummarizedExperiment will work, but fingers crossed?
             meta_data_slot_name = "colData"
+
         elif classname in ["Seurat"]:
             meta_data_slot_name = "meta.data"
             reductions_slot_name = "reductions"
@@ -3553,22 +3557,24 @@ class BioinformaticsWalkthrough(QWidget):
             "SingleCellExperiment",
             "SummarizedExperiment",
         ]:
+            conv_adata = anndata2ri.rpy2py(rdata)
+            self.data_columns = conv_adata.obs
             # the RS4 object needs a couple more conversion steps
             # i think duplicating this code into 2 cases is the simplest method though a little ugly
-            with (ro.default_converter + pandas2ri.converter).context():
-                temp_data_cols = ro.conversion.get_conversion().rpy2py(metadata)
-            names = tuple(temp_data_cols.names)
-            nrows = tuple(temp_data_cols.slots["nrows"])[0]
-            rownames = tuple(temp_data_cols.slots["rownames"])
-            tempDF = pd.DataFrame()
+            # with (ro.default_converter + pandas2ri.converter).context():
+            #     temp_data_cols = ro.conversion.get_conversion().rpy2py(metadata)
+            # names = tuple(temp_data_cols.names)
+            # nrows = tuple(temp_data_cols.slots["nrows"])[0]
+            # rownames = tuple(temp_data_cols.slots["rownames"])
+            # tempDF = pd.DataFrame()
             # grab one column at a time and write into pandas df
             # takes around 20s
-            for element in np.arange(len(names)):
-                tempDF[names[element]] = list(
-                    tuple(temp_data_cols.slots["listData"])[element]
-                )
-            tempDF.index = rownames
-            self.data_columns = pd.DataFrame(tempDF)
+            # for element in np.arange(len(names)):
+            #     tempDF[names[element]] = list(
+            #         tuple(temp_data_cols.slots["listData"])[element]
+            #     )
+            # tempDF.index = rownames
+            # self.data_columns = pd.DataFrame(tempDF)
 
         elif classname in ["Seurat"]:
             with (ro.default_converter + pandas2ri.converter).context():
