@@ -3534,51 +3534,16 @@ class BioinformaticsWalkthrough(QWidget):
             "SingleCellExperiment",
             "SummarizedExperiment",
         ]:  # not clear if SummarizedExperiment will work, but fingers crossed?
-            meta_data_slot_name = "colData"
-
+            conv_adata = anndata2ri.rpy2py(rdata)
+            self.import_from_converted_anndata(conv_adata)
         elif classname in ["Seurat"]:
-            meta_data_slot_name = "meta.data"
-            reductions_slot_name = "reductions"
+            r("library(Seurat)")
+            r(f'x<-readRDS("{file_path}")')
+            conv_adata = r("as.SingleCellExperiment(x)")
+            self.import_from_converted_anndata(conv_adata)
         else:
             print(f"Class {classname} not recognized. Cannot import R object.")
             return False
-
-        try:
-            metadata = rdata.slots[meta_data_slot_name]
-        except:
-            print(f"Failed to read metadata from {file_path}.")
-            print(
-                f"Slot {meta_data_slot_name} not among slots found: {tuple(rdata.slotnames())}"
-            )
-            return False
-
-        print("Converting to pandas dataframe...")
-        if classname in [
-            "SingleCellExperiment",
-            "SummarizedExperiment",
-        ]:
-            conv_adata = anndata2ri.rpy2py(rdata)
-            self.data_columns = conv_adata.obs
-            # the RS4 object needs a couple more conversion steps
-            # i think duplicating this code into 2 cases is the simplest method though a little ugly
-            # with (ro.default_converter + pandas2ri.converter).context():
-            #     temp_data_cols = ro.conversion.get_conversion().rpy2py(metadata)
-            # names = tuple(temp_data_cols.names)
-            # nrows = tuple(temp_data_cols.slots["nrows"])[0]
-            # rownames = tuple(temp_data_cols.slots["rownames"])
-            # tempDF = pd.DataFrame()
-            # grab one column at a time and write into pandas df
-            # takes around 20s
-            # for element in np.arange(len(names)):
-            #     tempDF[names[element]] = list(
-            #         tuple(temp_data_cols.slots["listData"])[element]
-            #     )
-            # tempDF.index = rownames
-            # self.data_columns = pd.DataFrame(tempDF)
-
-        elif classname in ["Seurat"]:
-            with (ro.default_converter + pandas2ri.converter).context():
-                self.data_columns = ro.conversion.get_conversion().rpy2py(metadata)
 
         print("------------R data file loaded-------------")
         try:
@@ -3588,21 +3553,21 @@ class BioinformaticsWalkthrough(QWidget):
 
         return_val = True  # at this point, we will consider the import successful, regardless of what happens below
 
-        self.data_vis_arrays = {}
-        if reductions_slot_name is not None:
-            try:
-                reductions = rdata.slots[reductions_slot_name]
-            except:
-                print(f"Failed to read reductions from {file_path}.")
-                print(
-                    f"Slot {reductions_slot_name} not among slots found: {tuple(rdata.slotnames())}"
-                )
-                return return_val
+        # self.data_vis_arrays = {}
+        # if reductions_slot_name is not None:
+        #     try:
+        #         reductions = rdata.slots[reductions_slot_name]
+        #     except:
+        #         print(f"Failed to read reductions from {file_path}.")
+        #         print(
+        #             f"Slot {reductions_slot_name} not among slots found: {tuple(rdata.slotnames())}"
+        #         )
+        #         return return_val
 
-        # self.data_vis_arrays = rdata.slots["reductions"] # not sure yet how to handle this
-        self.search_for_r_spatial_data()
+        # # self.data_vis_arrays = rdata.slots["reductions"] # not sure yet how to handle this
+        # self.search_for_r_spatial_data()
 
-        return True
+        return return_val
 
     def search_for_r_spatial_data(self):
         self.spatial_data_found = False
@@ -3645,6 +3610,12 @@ class BioinformaticsWalkthrough(QWidget):
 
         print("------------anndata object loaded-------------")
 
+        self.search_for_h5ad_spatial_data()
+        return True
+
+    def import_from_converted_anndata(self, adata):
+        self.data_columns = adata.obs
+        self.data_vis_arrays = adata.obsm
         self.search_for_h5ad_spatial_data()
         return True
 
