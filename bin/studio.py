@@ -1463,11 +1463,25 @@ def main():
         sys.exit(-1)
 
     # fix the "missing" checkmarks when Paul does: ln -s ./studio/bin/studio.py pcs 
-    if os.path.islink(__file__):
+    if not hasattr(sys.modules[__name__], "__file__"):
+        print("studio.py:-------- __file__ is missing!!!")
+        for attr in dir(sys.modules[__name__]):
+            if attr.startswith("__julia_localvar_"):
+                sys.modules[__name__].__file__ = getattr(sys.modules[__name__], attr)[0]
+                print(f"sys.modules[__name__].__file__ = {sys.modules[__name__].__file__}")
+                print(f"__file__ = {__file__}")
+    else:
+        print(f"__file__ exists and is {__file__}")
+    print(f"currently in {os.getcwd()}")
+    print(sys.modules[__name__])
+    # print fields of sys.modules[__name__]
+    if hasattr(sys.modules[__name__], "__file__") and os.path.islink(__file__):
+    # if os.path.islink(__file__):
         print("studio.py:-------- __file__ is a symlink!!!")
         print("symlink = ",os.readlink(__file__))
         root = os.path.dirname(os.path.abspath(os.readlink(__file__)))
     else:
+        print("studio.py:-------- __file__ is NOT a symlink!!!")
         root = os.path.dirname(os.path.abspath(__file__))
 
     # QDir.addSearchPath('themes', os.path.join(root, 'themes'))
