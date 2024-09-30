@@ -223,9 +223,13 @@ def populate_tree_cell_defs(cell_def_tab, skip_validate):
 
                 sval = rate.text
                 if is_duration:
-                    sval = invertf2s(sval) # work with the transition RATE value
-                cell_def_tab.param_d[cell_def_name][f"{key_with_phase}_trate"] = sval
-                cell_def_tab.param_d[cell_def_name][f"{key_with_phase}_duration"] = invertf2s(sval)
+                    rate_val = invertf2s(sval)
+                    duration_val = sval
+                else:
+                    rate_val = sval
+                    duration_val = invertf2s(sval)
+                cell_def_tab.param_d[cell_def_name][f"{key_with_phase}_trate"] = rate_val
+                cell_def_tab.param_d[cell_def_name][f"{key_with_phase}_duration"] = duration_val
 
                 bval = rate.attrib['fixed_duration'].lower() == "true"
                 cell_def_tab.param_d[cell_def_name][f"{key_with_phase}_fixed_trate"] = bval
@@ -471,7 +475,7 @@ def populate_tree_cell_defs(cell_def_tab, skip_validate):
                     cell_def_tab.param_d[cell_def_name]["necrosis_cyto_rate"] = params_uep.find("cytoplasmic_biomass_change_rate").text
                     cell_def_tab.param_d[cell_def_name]["necrosis_nuclear_rate"] = params_uep.find("nuclear_biomass_change_rate").text
                     cell_def_tab.param_d[cell_def_name]["necrosis_calcif_rate"] = params_uep.find("calcification_rate").text
-                    cell_def_tab.param_d[cell_def_name]["necrosis_rel_rupture_rate"] = params_uep.find("relative_rupture_volume").text
+                    cell_def_tab.param_d[cell_def_name]["necrosis_rel_rupture_volume"] = params_uep.find("relative_rupture_volume").text
 
 
             # # ---------  volume 

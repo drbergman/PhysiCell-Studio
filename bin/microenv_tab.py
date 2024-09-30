@@ -309,19 +309,7 @@ class SubstrateDef(QWidget):
         self.vbox.addLayout(hbox)
 
         #--------------------------
-# <!--
-# 			<Dirichlet_options>
-# 				<boundary_value ID="xmin" enabled="false">0</boundary_value>
-# 				<boundary_value ID="xmax" enabled="false">0</boundary_value>
-# 				<boundary_value ID="ymin" enabled="false">0</boundary_value>
-# 				<boundary_value ID="ymax" enabled="false">0</boundary_value>
-# 				<boundary_value ID="zmin" enabled="false">1</boundary_value>
-# 				<boundary_value ID="zmax" enabled="false">0</boundary_value>
-# 			</Dirichlet_options>
-# -->			
-#  		</variable>
         dirichlet_options_bdy = QLabel("Dirichlet options per boundary:")
-        # units.setFixedWidth(units_width)
         self.vbox.addWidget(dirichlet_options_bdy)
 
         #----
@@ -887,52 +875,25 @@ class SubstrateDef(QWidget):
 
 
     #----------------------------------------------------------------------
-# 		<variable name="substrate" units="dimensionless" ID="0">
-# 			<physical_parameter_set>
-# 				<diffusion_coefficient units="micron^2/min">100000.0</diffusion_coefficient>
-# 				<decay_rate units="1/min">10</decay_rate>  
-# 			</physical_parameter_set>
-# 			<initial_condition units="mmHg">0</initial_condition>
-# 			<Dirichlet_boundary_condition units="mmHg" enabled="true">0</Dirichlet_boundary_condition>
-# <!-- use this block to set Dirichlet boundary conditions on individual boundaries --> 
-# <!--
-# 			<Dirichlet_options>
-# 				<boundary_value ID="xmin" enabled="false">0</boundary_value>
-# 				<boundary_value ID="xmax" enabled="false">0</boundary_value>
-# 				<boundary_value ID="ymin" enabled="false">0</boundary_value>
-# 				<boundary_value ID="ymax" enabled="false">0</boundary_value>
-# 				<boundary_value ID="zmin" enabled="false">1</boundary_value>
-# 				<boundary_value ID="zmax" enabled="false">0</boundary_value>
-# 			</Dirichlet_options>
-# -->
-#  		</variable>
     def populate_tree(self):
         logging.debug(f'=======================  microenv populate_tree  ======================= ')
         uep = self.xml_root.find(".//microenvironment_setup")
         if uep:
-            # self.substrate.clear()
-            # self.param[substrate_name] = {}  # a dict of dicts
 
             self.tree.clear()
             idx = 0
-            # <microenvironment_setup>
-		    #   <variable name="food" units="dimensionless" ID="0">
             for var in uep:
-                # print(cell_def.attrib['name'])
                 if var.tag == 'variable':
                     substrate_name = var.attrib['name']
                     self.current_substrate = substrate_name  # do this for the callback methods (rf. BEWARE below)
                     if idx == 0:
-                        # self.current_substrate = substrate_name
                         substrate_0th = substrate_name
                     self.param_d[substrate_name] = {}
 
-                    # self.param_d[substrate_name]["name"] = substrate_name
 
                     treeitem = QTreeWidgetItem([substrate_name])
                     treeitem.setFlags(treeitem.flags() | QtCore.Qt.ItemIsEditable)
 
-                    # self.substrate[var_name] = {}  # a dict of dicts
                     self.tree.insertTopLevelItem(idx,treeitem)
                     if idx == 0:  # select the 1st (0th) entry
                         self.tree.setCurrentItem(treeitem)
@@ -986,13 +947,6 @@ class SubstrateDef(QWidget):
                         #     self.dirichlet_bc_enabled.setChecked(False)
                     else:
                         self.param_d[substrate_name]["dirichlet_enabled"] = True
-                        # if idx == 1:
-                        #     self.dirichlet_bc_enabled.setChecked(True)
-                        # self.dirichlet_bc_enabled.setChecked(self.param_d[self.current_substrate]["dirichlet_enabled"])
-
-                    # 			<Dirichlet_options>
-                    # 				<boundary_value ID="xmin" enabled="false">0</boundary_value>
-                    # 				<boundary_value ID="xmax" enabled="false">0</boundary_value>
 
                     self.param_d[substrate_name]["dirichlet_xmin"] = "0"
                     self.param_d[substrate_name]["dirichlet_xmax"] = "0"
@@ -1010,7 +964,6 @@ class SubstrateDef(QWidget):
                     self.dirichlet_options_exist = True  # rwh/todo - how to handle this?
                     options_path = var_path.find('.//Dirichlet_options')
                     if options_path:
-                        # self.dirichlet_options_exist = True
                         for bv in options_path:
                             logging.debug(f'bv = {bv}')
                             if "xmin" in bv.attrib['ID'].lower():
@@ -1118,85 +1071,6 @@ class SubstrateDef(QWidget):
         if uep:
                 return(uep.attrib['name'])
 
-
-            #----------------------------------------------------------------------------
-            # Read values from the params_d and generate XML
-
-            # 	<microenvironment_setup>
-            # 	<variable name="director signal" units="dimensionless" ID="0">
-            # 		<physical_parameter_set>
-            # 			<diffusion_coefficient units="micron^2/min">1000</diffusion_coefficient>
-            # 			<decay_rate units="1/min">.1</decay_rate>  
-            # 		</physical_parameter_set>
-            # 		<initial_condition units="dimensionless">0</initial_condition>
-            # 		<Dirichlet_boundary_condition units="dimensionless" enabled="false">1</Dirichlet_boundary_condition>
-            # 	</variable>
-                
-            # 	<variable name="cargo signal" units="dimensionless" ID="1">
-            # 		<physical_parameter_set>
-            # 			<diffusion_coefficient units="micron^2/min">1000</diffusion_coefficient>
-            # 			<decay_rate units="1/min">.4</decay_rate>  
-            # 		</physical_parameter_set>
-            # 		<initial_condition units="dimensionless">0</initial_condition>
-            # 		<Dirichlet_boundary_condition units="dimensionless" enabled="false">1</Dirichlet_boundary_condition>
-            # 	</variable>
-                
-            # 	<options>
-            # 		<calculate_gradients>true</calculate_gradients>
-            # 		<track_internalized_substrates_in_each_agent>false</track_internalized_substrates_in_each_agent>
-                    
-            # 		<initial_condition type="matlab" enabled="false">
-            # 			<filename>./config/initial.mat</filename>
-            # 		</initial_condition>
-                    
-            # 		<dirichlet_nodes type="matlab" enabled="false">
-            # 			<filename>./config/dirichlet.mat</filename>
-            # 		</dirichlet_nodes>
-            # 	</options>
-            # </microenvironment_setup>
-
-
-    # <microenvironment_setup>
-	# 	<variable name="oxygen" units="mmHg" ID="0">
-	# 		<physical_parameter_set>
-	# 			<diffusion_coefficient units="micron^2/min">421.0</diffusion_coefficient>
-	# 			<decay_rate units="1/min">.41</decay_rate>  
-	# 		</physical_parameter_set>
-	# 		<initial_condition units="mmHg">41.0</initial_condition>
-	# 		<Dirichlet_boundary_condition units="mmHg" enabled="true">41.1</Dirichlet_boundary_condition>
-    #         <Dirichlet_options>
- 	# 			<boundary_value ID="xmin" enabled="false">1</boundary_value>
- 	# 			<boundary_value ID="xmax" enabled="true">2</boundary_value>
- 	# 			<boundary_value ID="ymin" enabled="false">3</boundary_value>
- 	# 			<boundary_value ID="ymax" enabled="true">4</boundary_value>
- 	# 			<boundary_value ID="zmin" enabled="false">5</boundary_value>
- 	# 			<boundary_value ID="zmax" enabled="true">6</boundary_value>
- 	# 		</Dirichlet_options>
-	# 	</variable>
-	
-	# 	<variable name="glue" units="dimensionless" ID="1">
-	# 		<physical_parameter_set>
-	# 			<diffusion_coefficient units="micron^2/min">422.0</diffusion_coefficient>
-	# 			<decay_rate units="1/min">.42</decay_rate>  
-	# 		</physical_parameter_set>
-	# 		<initial_condition units="mmHg">42.0</initial_condition>
-	# 		<Dirichlet_boundary_condition units="mmHg" enabled="false">42.1</Dirichlet_boundary_condition>
-	# 	</variable>
-		
-	# 	<options>
-	# 		<calculate_gradients>true</calculate_gradients>
-	# 		<track_internalized_substrates_in_each_agent>false</track_internalized_substrates_in_each_agent>
-			 
-	# 		<initial_condition type="matlab" enabled="false">
-	# 			<filename>./config/initial.mat</filename>
-	# 		</initial_condition>
-			 
-	# 		<dirichlet_nodes type="matlab" enabled="false">
-	# 			<filename>./config/dirichlet.mat</filename>
-	# 		</dirichlet_nodes>
-	# 	</options>
-	# </microenvironment_setup>	
-
     def iterate_tree(self, node, count, subs):
         for idx in range(count):
             item = node.child(idx)
@@ -1214,8 +1088,6 @@ class SubstrateDef(QWidget):
             # Begin by removing all previously defined substrates in the .xml
             for var in uep.findall('variable'):
                 uep.remove(var)
-                # vp.append(var)
-        # self.tree_status()
 
         # Obtain a list of all substrates in self.tree (QTreeWidget()). Used below.
         substrates_in_tree = []
@@ -1235,22 +1107,6 @@ class SubstrateDef(QWidget):
             logging.debug(f'microrenv_tab.py: key in param_d.keys() = {substrate}')
             if substrate in substrates_in_tree:
                 logging.debug(f'matched! {substrate}')
-	# 	<variable name="glue" units="dimensionless" ID="1">
-	# 		<physical_parameter_set>
-	# 			<diffusion_coefficient units="micron^2/min">422.0</diffusion_coefficient>
-	# 			<decay_rate units="1/min">.42</decay_rate>  
-	# 		</physical_parameter_set>
-	# 		<initial_condition units="mmHg">42.0</initial_condition>
-	# 		<Dirichlet_boundary_condition units="mmHg" enabled="false">42.1</Dirichlet_boundary_condition>
-                # elm = ET.Element(substrate)
-                # elm = ET.Element(substrate+'\n', {'foo':'bar'})
-
-
-        # self.param_d[self.current_substrate]["diffusion_coef"] = text
-        # self.param_d[self.current_substrate]["decay_rate"] = text
-        # self.param_d[self.current_substrate]["init_cond"] = text
-        # self.param_d[self.current_substrate]["dirichlet_bc"] = text
-        # self.param_d[self.current_substrate]["dirichlet_enabled"] = self.dirichlet_bc_enabled.isChecked()
                 elm = ET.Element("variable", 
                         {"name":substrate, "units":"dimensionless", "ID":str(idx)})
                 elm.tail = '\n' + indent6
@@ -1267,8 +1123,6 @@ class SubstrateDef(QWidget):
                 subelm2.text = self.param_d[substrate]["decay_rate"]
                 subelm2.tail = indent8
 
-                    # self.param_d[substrate_name]["init_cond_units"] = dc_ic_units
-                # subelm = ET.SubElement(elm, 'initial_condition', {"units":"mmHg"})
                 subelm = ET.SubElement(elm, 'initial_condition', {"units":self.param_d[substrate]["init_cond_units"]})
                 subelm.text = self.param_d[substrate]["init_cond"]
                 subelm.tail = indent8
@@ -1325,26 +1179,6 @@ class SubstrateDef(QWidget):
                 # uep.append(elm)
                 uep.insert(idx,elm)
                 idx += 1
-
-        # print(prettify(self.xml_root))
-
-	# 	<variable name="oxygen" units="mmHg" ID="0">
-	# 		<physical_parameter_set>
-	# 			<diffusion_coefficient units="micron^2/min">421.0</diffusion_coefficient>
-	# 			<decay_rate units="1/min">.41</decay_rate>  
-	# 		</physical_parameter_set>
-	# 		<initial_condition units="mmHg">41.0</initial_condition>
-	# 		<Dirichlet_boundary_condition units="mmHg" enabled="true">41.1</Dirichlet_boundary_condition>
-    #         <Dirichlet_options>
- 	# 			<boundary_value ID="xmin" enabled="false">1</boundary_value>
- 	# 			<boundary_value ID="xmax" enabled="true">2</boundary_value>
- 	# 			<boundary_value ID="ymin" enabled="false">3</boundary_value>
- 	# 			<boundary_value ID="ymax" enabled="true">4</boundary_value>
- 	# 			<boundary_value ID="zmin" enabled="false">5</boundary_value>
- 	# 			<boundary_value ID="zmax" enabled="true">6</boundary_value>
- 	# 		</Dirichlet_options>
-	# 	</variable>
-
 
         # ------ Finally, append the flags that apply to all substrates
         if self.gradients.isChecked():

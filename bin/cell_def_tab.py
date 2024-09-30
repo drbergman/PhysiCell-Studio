@@ -1361,7 +1361,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         idr += 1
         glayout.addWidget(label, idr,0, 1,1) # w, row, column, rowspan, colspan
 
-        self.necrosis_relative_rupture_volume = QLineEdit(objectName="necrosis_rel_rupture_rate")
+        self.necrosis_relative_rupture_volume = QLineEdit(objectName="necrosis_rel_rupture_volume")
         self.necrosis_relative_rupture_volume.textChanged.connect(self.cell_def_param_changed)
         self.necrosis_relative_rupture_volume.setValidator(QtGui.QDoubleValidator())
         glayout.addWidget(self.necrosis_relative_rupture_volume, idr,1, 1,1) # w, row, column, rowspan, colspan
@@ -5847,7 +5847,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         self.param_d[cdname]["necrosis_cyto_rate"] = '5.33333e-05'
         self.param_d[cdname]["necrosis_nuclear_rate"] = '2.16667e-4'
         self.param_d[cdname]["necrosis_calcif_rate"] = '7e-05'
-        self.param_d[cdname]["necrosis_rel_rupture_rate"] = '2.0'
+        self.param_d[cdname]["necrosis_rel_rupture_volume"] = '2.0'
 
     def new_volume_params(self, cdname):   # rf. core/*_phenotype.cpp
         sval = self.default_sval
@@ -6093,7 +6093,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         self.necrosis_cytoplasmic_biomass_change_rate.setText(self.param_d[cdname]["necrosis_cyto_rate"])
         self.necrosis_nuclear_biomass_change_rate.setText(self.param_d[cdname]["necrosis_nuclear_rate"])
         self.necrosis_calcification_rate.setText(self.param_d[cdname]["necrosis_calcif_rate"])
-        self.necrosis_relative_rupture_volume.setText(self.param_d[cdname]["necrosis_rel_rupture_rate"])
+        self.necrosis_relative_rupture_volume.setText(self.param_d[cdname]["necrosis_rel_rupture_volume"])
         # print("\n\n ~~~~~~~~~~~~~~~~~~~~~~~~~  leaving  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
 
 
@@ -6540,31 +6540,6 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
     #-------------------------------------------------------------------
     # Read values from the GUI widgets and generate/write a new XML
     def fill_xml_cycle(self,pheno,cdef):
-        # ------- cycle ------- 
-        # <cycle code="5" name="live">  
-        # <cycle code="6" name="Flow cytometry model (separated)">  
-
-
-        # self.cycle_dropdown.addItem("live cells")   # 0 -> 0
-        # self.cycle_dropdown.addItem("basic Ki67")   # 0 -> 1, 1 -> 0
-        # self.cycle_dropdown.addItem("advanced Ki67")  # 0 -> 1, 1 -> 2, 2 -> 0
-        # self.cycle_dropdown.addItem("flow cytometry") # 0 -> 1, 1 -> 2, 2 -> 0
-        # self.cycle_dropdown.addItem("flow cytometry separated") # 0->1, 1->2, 2->3, 3->0
-        # self.cycle_dropdown.addItem("cycling quiescent") # 0 -> 1, 1 -> 0
-
-        # static const int advanced_Ki67_cycle_model= 0;
-        # static const int basic_Ki67_cycle_model=1;
-        # static const int flow_cytometry_cycle_model=2;
-        # static const int live_apoptotic_cycle_model=3;
-        # static const int total_cells_cycle_model=4;
-        # static const int live_cells_cycle_model = 5; 
-        # static const int flow_cytometry_separated_cycle_model = 6; 
-        # static const int cycling_quiescent_model = 7; 
-
-        # self.cycle_combo_idx_code = {0:"5", 1:"1", 2:"0", 3:"2", 4:"6", 5:"7"}
-        # TODO: check if these names must be specific in the C++ 
-        # self.cycle_combo_idx_name = {0:"live", 1:"basic Ki67", 2:"advanced Ki67", 3:"flow cytometry", 4:"Flow cytometry model (separated)", 5:"cycling quiescent"}
-
         combo_widget_idx = self.param_d[cdef]["cycle_choice_idx"]
         cycle = ET.SubElement(pheno, "cycle",
             {"code":self.cycle_combo_idx_code[combo_widget_idx],
@@ -6573,7 +6548,6 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         cycle.tail = "\n" + self.indent10
 
         #-- duration
-        # if self.cycle_duration_flag:
         if self.param_d[cdef]['cycle_duration_flag']:
             subelm = ET.SubElement(cycle, "phase_durations",{"units":self.default_time_units})
             subelm.text = self.indent14
@@ -6971,7 +6945,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         subelm.tail = self.indent16
 
         subelm = ET.SubElement(elm, "relative_rupture_volume",{"units":"dimensionless"})
-        subelm.text = self.param_d[cdname]["necrosis_rel_rupture_rate"]
+        subelm.text = self.param_d[cdname]["necrosis_rel_rupture_volume"]
         subelm.tail = self.indent14
 
 
@@ -7724,21 +7698,6 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
                 if cdef in cdefs_in_tree or self.pytest_flag:
                     logging.debug(f'matched! {cdef}')
 
-            # <cell_definition name="round cell" ID="0">
-            # 	<phenotype>
-            # 		<cycle code="5" name="live">  
-            # 			<phase_transition_rates units="1/min"> 
-            # 				<rate start_index="0" end_index="0" fixed_duration="true">0.000072</rate>
-            # 			</phase_transition_rates>
-            # 		</cycle>
-            # vs.
-                        # <phase_durations units="min"> 
-                        # 	<duration index="0" fixed_duration="false">300.0</duration>
-                        # 	<duration index="1" fixed_duration="true">480</duration>
-                        # 	<duration index="2" fixed_duration="true">240</duration>
-                        # 	<duration index="3" fixed_duration="true">60</duration>
-                        # </phase_durations>
-                    # print("cell_def_tab.py: fill_xml(): --> ",var.attrib['ID'])
                     if self.auto_number_IDs_checkbox.isChecked():
                         elm = ET.Element("cell_definition", 
                                 {"name":cdef, "ID":str(idx)})
