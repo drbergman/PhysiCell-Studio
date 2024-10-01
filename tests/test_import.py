@@ -29,7 +29,7 @@ class StudioTest:
 
         self.launch_studio(**kwargs)
 
-        self.create_config_tab_radiobuttons()
+        self.create_config_tab_widget_dicts()
         print("Studio launched")
 
     def launch_studio(self, config_file=False, studio_flag=True, skip_validate_flag=False, rules_flag=True, model3D_flag=False, tensor_flag=False, exec_file="project", nanohub_flag=False, is_movable_flag=False, pytest_flag=False, biwt_flag=False):
@@ -222,19 +222,22 @@ class StudioTest:
             assert (duration.attrib['fixed_duration'].lower() == 'true') == self.xml_creator.celldef_tab.param_d[name][f'{cycle_key_base}_fixed_duration']
             assert value == self.xml_creator.celldef_tab.param_d[name][f'{cycle_key_base}_duration']
 
-    def check_cycle_durations(self, name, cycle, short_name):
-        self.check_durations(name, cycle, f"cycle_{short_name}")
-    
-    def check_cycle_transition_rates(self, name, cycle, short_name):
-        phase_transition_rates = cycle.find('phase_transition_rates')
+    def check_transition_rates(self, name, model, prefix):
+        phase_transition_rates = model.find('phase_transition_rates')
         rates = phase_transition_rates.findall('rate')
         for rate in rates:
             start_index = int(rate.attrib['start_index'])
             end_index = int(rate.attrib['end_index'])
             value = rate.text
-            cycle_key_base = f'cycle_{short_name}_{start_index}{end_index}'
-            assert (rate.attrib['fixed_duration'].lower() == 'true') == self.xml_creator.celldef_tab.param_d[name][f'{cycle_key_base}_fixed_trate']
-            assert value == self.xml_creator.celldef_tab.param_d[name][f'{cycle_key_base}_trate']
+            key_base = f'{prefix}_{start_index}{end_index}'
+            assert (rate.attrib['fixed_duration'].lower() == 'true') == self.xml_creator.celldef_tab.param_d[name][f'{key_base}_fixed_trate']
+            assert float(value) == float(self.xml_creator.celldef_tab.param_d[name][f'{key_base}_trate'])
+
+    def check_cycle_durations(self, name, cycle, short_name):
+        self.check_durations(name, cycle, f"cycle_{short_name}")
+    
+    def check_cycle_transition_rates(self, name, cycle, short_name):
+        self.check_transition_rates(name, cycle, f"cycle_{short_name}")
     
     def check_death(self, name, phenotype):
         death = phenotype.find('death')
@@ -257,7 +260,7 @@ class StudioTest:
         self.check_durations(name, model, model_name, cyclic=False)
 
     def check_death_transition_rates(self, name, model, model_name):
-        raise NotImplementedError
+        self.check_transition_rates(name, model, model_name)
         
     def check_death_parameters(self, name, model, model_name):
         parameters = model.find('parameters')
@@ -464,7 +467,14 @@ class StudioTest:
         t2_is_nothing = t2 is None or t2.strip() == ''
         if (t1_is_nothing != t2_is_nothing) or (t1 != t2):
             print(f"Content does not match: {t1} != {t2}")
-            return False
+            # check if t1 and t2 are numbers
+            try:
+                if float(t1) != float(t2):
+                    print("Content is floats and does not match")
+                    return False
+            except ValueError:
+                print("Content does not match and is not floats")
+                return False
         if elem1.attrib != elem2.attrib:
             # make sure the dicts have the same keys
             if set(elem1.attrib.keys()) != set(elem2.attrib.keys()):
@@ -487,7 +497,6 @@ class StudioTest:
             return False
         paths_to_check = list(values_to_check.keys())
         for child1, child2 in zip(elem1, elem2):
-            print(f"{values_to_check = }")
             if child1.tag in values_to_check.keys():
                 index = paths_to_check.index(child1.tag)
                 print(f"Checking {child1.tag} for {values_to_check[child1.tag]}")
@@ -503,28 +512,30 @@ class StudioTest:
                 print(f"Value in xml2: {child2.text}, expected value: {values_to_check}")
                 _attributes_to_check[attrib_name] = values_to_check[paths_to_check[index]]
             _values_to_check = {'//'.join(k.split('//')[1:]): v for k, v in values_to_check.items() if k.startswith(child1.tag)}
-            print(f"{_values_to_check = }")
             if not self.compare_elements(child1, child2, _values_to_check, attributes_to_check=_attributes_to_check):
                 return False
         return True
 
     ########### perturb in gui and check xml ############
-    config_tab_text_fields = {'xmin': 'domain//x_min', 'xmax': 'domain//x_max', 'ymin': 'domain//y_min', 'ymax': 'domain//y_max', 'zmin': 'domain//z_min', 'zmax': 'domain//z_max', 'xdel': 'domain//dx', 'ydel': 'domain//dy', 'zdel': 'domain//dz',
-                              'max_time': 'overall//max_time', 'diffusion_dt': 'overall//dt_diffusion', 'mechanics_dt': 'overall//dt_mechanics', 'phenotype_dt': 'overall//dt_phenotype',
-                              'num_threads': 'parallel//omp_num_threads', 'folder': 'save//folder', 'full_interval': 'save//full_data//interval', 'svg_interval': 'save//SVG//interval',
-                              'svg_substrate_min': 'save//SVG//plot_substrate//min_conc', 'svg_substrate_max': 'save//SVG//plot_substrate//max_conc', 'random_seed_integer': 'options//random_seed',
-                              'csv_folder': 'initial_conditions//cell_positions//folder', 'csv_file': 'initial_conditions//cell_positions//filename'}
-    config_tab_text_fields = {k: {'xml_path': v, 'new_value': "12321"} for k, v in config_tab_text_fields.items()}
-    config_tab_text_fields["zmin"]["new_value"] = "0.12321"
-    config_tab_text_fields["zmax"]["new_value"] = "0.12321"
-    config_tab_text_fields["full_interval"]["extra_values_to_check"] = {"save//SVG//interval": "12321"}
-    config_tab_text_fields["svg_interval"]["extra_values_to_check"] = {"save//full_data//interval": "12321"}
 
-    config_tab_checkboxes = {'save_full': 'save//full_data//enable', 'save_svg': 'save//SVG//enable', 
+    def create_config_tab_text_fields(self):
+        self.config_tab_text_fields = {'xmin': 'domain//x_min', 'xmax': 'domain//x_max', 'ymin': 'domain//y_min', 'ymax': 'domain//y_max', 'zmin': 'domain//z_min', 'zmax': 'domain//z_max', 'xdel': 'domain//dx', 'ydel': 'domain//dy', 'zdel': 'domain//dz',
+                                'max_time': 'overall//max_time', 'diffusion_dt': 'overall//dt_diffusion', 'mechanics_dt': 'overall//dt_mechanics', 'phenotype_dt': 'overall//dt_phenotype',
+                                'num_threads': 'parallel//omp_num_threads', 'folder': 'save//folder', 'full_interval': 'save//full_data//interval', 'svg_interval': 'save//SVG//interval',
+                                'svg_substrate_min': 'save//SVG//plot_substrate//min_conc', 'svg_substrate_max': 'save//SVG//plot_substrate//max_conc', 'random_seed_integer': 'options//random_seed',
+                                'csv_folder': 'initial_conditions//cell_positions//folder', 'csv_file': 'initial_conditions//cell_positions//filename'}
+        self.config_tab_text_fields = {k: {'xml_path': v, 'new_value': "12321"} for k, v in self.config_tab_text_fields.items()}
+        self.config_tab_text_fields["zmin"]["new_value"] = "0.12321"
+        self.config_tab_text_fields["zmax"]["new_value"] = "0.12321"
+        self.config_tab_text_fields["full_interval"]["extra_values_to_check"] = {"save//SVG//interval": "12321"}
+        self.config_tab_text_fields["svg_interval"]["extra_values_to_check"] = {"save//full_data//interval": "12321"}
+
+    def create_config_tab_checkboxes(self):
+        self.config_tab_checkboxes = {'save_full': 'save//full_data//enable', 'save_svg': 'save//SVG//enable', 
                              'plot_substrate_svg': 'save//SVG//plot_substrate/@enabled', 
                              'plot_substrate_limits': 'save//SVG//plot_substrate/@limits', 
                              'virtual_walls': 'options//virtual_wall_at_domain_edge', 'cells_csv': 'initial_conditions//cell_positions/@enabled'}
-    config_tab_checkboxes = {k: {'xml_path': v, 'new_value': lambda original_value: str(not original_value).lower()} for k, v in config_tab_checkboxes.items()}
+        self.config_tab_checkboxes = {k: {'xml_path': v, 'new_value': lambda original_value: str(not original_value).lower()} for k, v in self.config_tab_checkboxes.items()}
     
     def create_config_tab_radiobuttons(self):
         self.config_tab_radiobuttons = {'random_seed_integer_button': 'options//random_seed', 'random_seed_random_button': 'options//random_seed'}
@@ -534,12 +545,60 @@ class StudioTest:
         self.config_tab_radiobuttons["random_seed_integer_button"]["toggle_fn"] = self.toggle_random_seed_gp
         self.config_tab_radiobuttons["random_seed_random_button"]["toggle_fn"] = self.toggle_random_seed_gp
 
+    def create_config_tab_comboboxes(self):
+        self.config_tab_comboboxes = {'svg_substrate_colormap_dropdown': 'save//SVG//plot_substrate//colormap'}
+
+    def test_config_tab_text_fields(self):
+        for field, d in studio_test.config_tab_text_fields.items():
+            print(f"Checking {field}")
+            original_value = config_tab.__getattribute__(field).text()
+            config_tab.__getattribute__(field).setText(d['new_value'])
+            studio_test.save_xml()
+            values_to_check = {d['xml_path']: d['new_value']}
+            if 'extra_values_to_check' in d.keys():
+                values_to_check.update(d['extra_values_to_check'])
+            assert studio_test.compare_xml(studio_test.path_to_xml, "./config/__test__.xml", values_to_check)
+            config_tab.__getattribute__(field).setText(original_value)
+
+        for field, d in studio_test.config_tab_text_fields.items():
+            print(f"Checking {field}")
+            original_value = config_tab.__getattribute__(field).text()
+            config_tab.__getattribute__(field).setText(d['new_value'])
+            studio_test.save_xml()
+            values_to_check = {d['xml_path']: d['new_value']}
+            if 'extra_values_to_check' in d.keys():
+                values_to_check.update(d['extra_values_to_check'])
+            assert studio_test.compare_xml(studio_test.path_to_xml, "./config/__test__.xml", values_to_check)
+            config_tab.__getattribute__(field).setText(original_value)
+            
+        for field, d in studio_test.config_tab_checkboxes.items():
+            print(f"Checking {field}")
+            original_value = config_tab.__getattribute__(field).isChecked()
+            config_tab.__getattribute__(field).setChecked(not original_value)
+            studio_test.save_xml()
+            values_to_check = {d['xml_path']: d['new_value'](original_value)}
+            assert studio_test.compare_xml(studio_test.path_to_xml, "./config/__test__.xml", values_to_check)
+            config_tab.__getattribute__(field).setChecked(original_value)
+
+        for field, d in studio_test.config_tab_radiobuttons.items():
+            print(f"Checking {field}")
+            original_value = config_tab.__getattribute__(field).isChecked()
+            d["toggle_fn"]()
+            studio_test.save_xml()
+            values_to_check = {d['xml_path']: d['new_value'](original_value)}
+            assert studio_test.compare_xml(studio_test.path_to_xml, "./config/__test__.xml", values_to_check)
+            d["toggle_fn"]()
+
+    def create_config_tab_widget_dicts(self):
+        self.create_config_tab_text_fields()
+        self.create_config_tab_checkboxes()
+        self.create_config_tab_radiobuttons()
+        self.create_config_tab_comboboxes()
+
     def toggle_random_seed_gp(self):
         current_id = self.xml_creator.config_tab.random_seed_gp.checkedId()
         self.xml_creator.config_tab.random_seed_gp.button((current_id+1) % 2).click()
 
-    config_tab_combo_boxes = ['svg_substrate_to_plot_dropdown']
-    
     def __del__(self):
         self.studio_app.quit()
 
@@ -549,32 +608,5 @@ if __name__ == "__main__":
     studio_test.check_import()
     # search through this file for all 
     config_tab = studio_test.xml_creator.config_tab
-    for field, d in studio_test.config_tab_text_fields.items():
-        print(f"Checking {field}")
-        original_value = config_tab.__getattribute__(field).text()
-        config_tab.__getattribute__(field).setText(d['new_value'])
-        studio_test.save_xml()
-        values_to_check = {d['xml_path']: d['new_value']}
-        if 'extra_values_to_check' in d.keys():
-            values_to_check.update(d['extra_values_to_check'])
-        assert studio_test.compare_xml(studio_test.path_to_xml, "./config/__test__.xml", values_to_check)
-        config_tab.__getattribute__(field).setText(original_value)
-
-    for field, d in studio_test.config_tab_checkboxes.items():
-        print(f"Checking {field}")
-        original_value = config_tab.__getattribute__(field).isChecked()
-        config_tab.__getattribute__(field).setChecked(not original_value)
-        studio_test.save_xml()
-        values_to_check = {d['xml_path']: d['new_value'](original_value)}
-        assert studio_test.compare_xml(studio_test.path_to_xml, "./config/__test__.xml", values_to_check)
-        config_tab.__getattribute__(field).setChecked(original_value)
-
-    for field, d in studio_test.config_tab_radiobuttons.items():
-        print(f"Checking {field}")
-        original_value = config_tab.__getattribute__(field).isChecked()
-        d["toggle_fn"]()
-        studio_test.save_xml()
-        values_to_check = {d['xml_path']: d['new_value'](original_value)}
-        assert studio_test.compare_xml(studio_test.path_to_xml, "./config/__test__.xml", values_to_check)
-        d["toggle_fn"]()
-
+    studio_test.test_config_tab_text_fields()
+    
