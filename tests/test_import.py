@@ -7,9 +7,8 @@ import contextlib
 import xml.etree.ElementTree as ET  # https://docs.python.org/2/library/xml.etree.elementtree.html
 
 # Add the directory containing the module to sys.path
-# root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../bin'))
-# sys.path.append(root_dir)
-root_dir = '/Users/danielbergman/PhysiCell-Studio_git/bin'
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '../bin'))
+# root_dir = '/Users/danielbergman/PhysiCell-Studio_git/bin'
 sys.path.append(root_dir)
 
 # Now you can import the module
@@ -149,11 +148,11 @@ class StudioTest:
         assert full_data.find('interval').text == self.xml_creator.config_tab.full_interval.text()
         assert (full_data.find('enable').text=='true') == self.xml_creator.config_tab.save_full.isChecked()
         SVG = save.find('SVG')
-        if SVG:
+        if SVG is not None:
             assert SVG.find('interval').text == self.xml_creator.config_tab.svg_interval.text()
             assert (SVG.find('enable').text=='true') == self.xml_creator.config_tab.save_svg.isChecked()
             plot_substrate = SVG.find('plot_substrate')
-            if plot_substrate:
+            if plot_substrate is not None:
                 assert (plot_substrate.attrib['enabled']=='true') == self.xml_creator.config_tab.plot_substrate_svg.isChecked()
                 assert plot_substrate.find('substrate').text == self.xml_creator.config_tab.svg_substrate_to_plot_dropdown.currentText()
                 limits_enabled = plot_substrate.attrib['limits']=='true'
@@ -166,7 +165,7 @@ class StudioTest:
         options = root.find('options')
         assert (options.find('virtual_wall_at_domain_edge').text=='true') == self.xml_creator.config_tab.virtual_walls.isChecked()
         random_seed = options.find('random_seed')
-        if random_seed:
+        if random_seed is not None:
             xml_text = random_seed.text
             # check if the seed is an integer
             if xml_text.isdigit():
@@ -181,7 +180,7 @@ class StudioTest:
         for variable in microenvironment_setup.findall('variable'):
             self.check_microenvironment_variable(variable)
         options = microenvironment_setup.find('options')
-        if options:
+        if options is not None:
             self.check_microenvironment_options(options)
 
     def check_microenvironment_variable(self, variable):
@@ -194,7 +193,7 @@ class StudioTest:
         assert (Dirichlet_boundary_condition.attrib['enabled'].lower()=='true') == self.xml_creator.microenv_tab.param_d[name]['dirichlet_enabled']
         assert Dirichlet_boundary_condition.text == self.xml_creator.microenv_tab.param_d[name]['dirichlet_bc']
         Dirichlet_options = variable.find('Dirichlet_options')
-        if Dirichlet_options:
+        if Dirichlet_options is not None:
             for boundary_value in Dirichlet_options.findall('boundary_value'):
                 id = boundary_value.attrib['ID']
                 assert (boundary_value.attrib['enabled'].lower() == 'true') == self.xml_creator.microenv_tab.param_d[name][f'enable_{id}']
@@ -202,20 +201,20 @@ class StudioTest:
             
     def check_microenvironment_options(self, options):
         calculate_gradients = options.find('calculate_gradients')
-        if calculate_gradients:
+        if calculate_gradients is not None:
             do_calculate_gradients = calculate_gradients.text.lower() == 'true'
             assert do_calculate_gradients == self.xml_creator.microenv_tab.gradients.isChecked()
             assert do_calculate_gradients == self.xml_creator.microenv_tab.param_d["gradients"]
         track_internalized_substrates_in_each_agent = options.find('track_internalized_substrates_in_each_agent')
-        if track_internalized_substrates_in_each_agent:
+        if track_internalized_substrates_in_each_agent is not None:
             do_track_internalized_substrates = track_internalized_substrates_in_each_agent.text.lower() == 'true'
             assert do_track_internalized_substrates == self.xml_creator.microenv_tab.track_in_agents.isChecked()
             assert do_track_internalized_substrates == self.xml_creator.microenv_tab.param_d["track_in_agents"]
         initial_condition = options.find('initial_condition')
-        if initial_condition and (initial_condition.attrib['enabled'].lower() == 'true'):
+        if (initial_condition is not None) and (initial_condition.attrib['enabled'].lower() == 'true'):
             self.check_microenvironment_initial_condition(initial_condition)
         dirichlet_nodes = options.find('dirichlet_nodes')
-        if dirichlet_nodes and (dirichlet_nodes.attrib['enabled'].lower() == 'true'):
+        if (dirichlet_nodes is not None) and (dirichlet_nodes.attrib['enabled'].lower() == 'true'):
             self.check_microenvironment_dirichlet_nodes(dirichlet_nodes)
 
     def check_microenvironment_initial_condition(self, initial_condition):
@@ -237,10 +236,10 @@ class StudioTest:
         phenotype = cell_definition.find('phenotype')
         self.check_phenotype(name, phenotype)
         custom_data = cell_definition.find('custom_data')
-        if custom_data:
+        if custom_data is not None:
             self.check_custom_data(custom_data, name)
         initial_parameter_distributions = cell_definition.find('initial_parameter_distributions')
-        if initial_parameter_distributions:
+        if initial_parameter_distributions is not None:
             self.check_initial_parameter_distributions(initial_parameter_distributions, name)
         
     def check_phenotype(self, name, phenotype):
@@ -267,7 +266,7 @@ class StudioTest:
         assert xml_name == studio_name
         is_durations = cycle.find('phase_durations')
         assert (is_durations is not None) == self.xml_creator.celldef_tab.param_d[name]['cycle_duration_flag']
-        if is_durations:
+        if is_durations is not None:
             self.check_cycle_durations(name, cycle, cycle_code_dict[int(xml_code)]["short_name"])
         else:
             self.check_cycle_transition_rates(name, cycle, cycle_code_dict[int(xml_code)]["short_name"])
@@ -313,7 +312,7 @@ class StudioTest:
         assert model.find('death_rate').text == self.xml_creator.celldef_tab.param_d[name][f'{model_name}_death_rate']
         is_durations = model.find('phase_durations')
         assert (is_durations is not None) == self.xml_creator.celldef_tab.param_d[name][f'{model_name}_duration_flag']
-        if is_durations:
+        if is_durations is not None:
             self.check_death_durations(name, model, model_name)
         else:
             self.check_death_transition_rates(name, model, model_name)
@@ -346,10 +345,10 @@ class StudioTest:
         for xml_tag, key in zip(xml_tags, keys):
             assert mechanics.find(xml_tag).text == self.xml_creator.celldef_tab.param_d[name][key]
         cell_adhesion_affinities = mechanics.find('cell_adhesion_affinities')
-        if cell_adhesion_affinities:
+        if cell_adhesion_affinities is not None:
             self.check_cell_adhesion_affinities(name, cell_adhesion_affinities)
         options = mechanics.find('options')
-        if options:
+        if options is not None:
             self.check_mechanics_options(name, options)
 
     def check_cell_adhesion_affinities(self, name, cell_adhesion_affinities):
@@ -373,17 +372,17 @@ class StudioTest:
         for tag in xml_tags:
             assert motility.find(tag).text == self.xml_creator.celldef_tab.param_d[name][tag]
         options = motility.find('options')
-        if options:
+        if options is not None:
             self.check_motility_options(name, options)
     
     def check_motility_options(self, name, options):
         assert (options.find('enabled').text.lower() == 'true') == self.xml_creator.celldef_tab.param_d[name]['motility_enabled']
         assert (options.find('use_2D').text.lower() == 'true') == self.xml_creator.celldef_tab.param_d[name]['motility_use_2D']
         chemotaxis = options.find('chemotaxis')
-        if chemotaxis:
+        if chemotaxis is not None:
             self.check_chemotaxis(name, chemotaxis)
         advanced_chemotaxis = options.find('advanced_chemotaxis')
-        if advanced_chemotaxis:
+        if advanced_chemotaxis is not None:
             self.check_advanced_chemotaxis(name, advanced_chemotaxis)
     
     def check_chemotaxis(self, name, chemotaxis):
@@ -395,7 +394,7 @@ class StudioTest:
         assert (advanced_chemotaxis.find('enabled').text.lower() == 'true') == self.xml_creator.celldef_tab.param_d[name]['motility_advanced_chemotaxis']
         assert (advanced_chemotaxis.find('normalize_each_gradient').text.lower() == 'true') == self.xml_creator.celldef_tab.param_d[name]['normalize_each_gradient']
         chemotactic_sensitivities = advanced_chemotaxis.find('chemotactic_sensitivities')
-        if chemotactic_sensitivities:
+        if chemotactic_sensitivities is not None:
             self.check_chemotactic_sensitivities(name, chemotactic_sensitivities)
     
     def check_chemotactic_sensitivities(self, name, chemotactic_sensitivities):
@@ -425,7 +424,7 @@ class StudioTest:
     
     def check_cell_interactions_rates_block(self, name, cell_interactions, tag):
         rates_block = cell_interactions.find(tag)
-        if not rates_block:
+        if rates_block is None:
             return
         key = tag.rstrip('s')
         for rate in rates_block.findall('*'):
