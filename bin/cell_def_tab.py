@@ -580,7 +580,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         # new_name = it.text(col)
         new_name = it.text(0)
         id_num = it.text(1)
-        print("cell_def_tab:  tree_item_changed_cb(): keys=", self.param_d.keys())
+        # print("cell_def_tab:  tree_item_changed_cb(): keys=", self.param_d.keys())
 
         while True:
             if new_name in self.param_d.keys():

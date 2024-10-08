@@ -2,6 +2,7 @@ import pytest
 
 import os
 import sys
+import contextlib
 
 import xml.etree.ElementTree as ET  # https://docs.python.org/2/library/xml.etree.elementtree.html
 
@@ -19,6 +20,67 @@ from pretty_print_xml import pretty_print
 from PyQt5 import QtCore
 from PyQt5.QtWidgets import QApplication
 
+@contextlib.contextmanager
+def suppress_output():
+    with open(os.devnull, 'w') as devnull:
+        with contextlib.redirect_stdout(devnull), contextlib.redirect_stderr(devnull):
+            yield
+            
+class XMLPathValue:
+    def __init__(self, xml_path, value):
+        if isinstance(xml_path, str):
+            self.str = xml_path
+            self.list = self.tokenize_path(xml_path)
+        else:
+            self.str = '//'.join([':'.join(e) for e in xml_path])
+            self.list = xml_path
+        self.value = value
+
+    def tokenize_path(self, path):
+        # 'cell_definitions//cell_definition:name:default' -> [ ['cell_definitions'], ['cell_definition', 'name', 'default'] ]
+        l = path.split('//')
+        ret_val = [self.tokenize_element(e) for e in l]
+        return ret_val
+    
+    def tokenize_element(self, element):
+        # 'cell_definition:name:default' -> ['cell_definition', 'name', 'default']
+        return element.split(':')
+
+    def is_attrib(self):
+        return len(self.list[-1]) != 1
+
+    def is_next_level(self, tag, attrib):
+        # entering this, self.list = [[<current xml level>], [<next xml level>], ...]
+        # we already know the current xml level worked (that's why we just checked it)
+        # now see if we want to keep checking this at the next level down
+        if len(self.list) == 1:
+            # we are done recursing through this path, don't use it deeper
+            return False
+        if self.list[1][0] != tag:
+            # this xml_path does not start with the correct tag, so it is not part of the next level
+            return False
+        if len(self.list[1]) == 1:
+            # this xml_path does not have an attrib, so it is part of the next level
+            return True
+        if self.list[1][1] not in attrib.keys():
+            # this xml_path does not have the correct attrib, so it is not part of the next level
+            return False
+        if len(self.list[1]) == 2:
+            # this xml_path has the correct attrib, but not value, so we will check the value at the next level
+            return True
+        if attrib[self.list[1][1]] == self.list[1][2]:
+            # this xml_path has the correct attrib value, so it is part of the next level
+            return True
+        return False
+
+    def length(self):
+        return len(self.list)
+
+    def next_attrib_value(self):
+        if len(self.list[0]) < 3:
+            return None
+        return self.list[0][2]
+
 class StudioTest:
     def __init__(self, config_file=False, **kwargs):
         self.studio_app = None
@@ -30,6 +92,7 @@ class StudioTest:
         self.launch_studio(**kwargs)
 
         self.create_config_tab_widget_dicts()
+        self.create_celldef_tab_widget_dicts()
         print("Studio launched")
 
     def launch_studio(self, config_file=False, studio_flag=True, skip_validate_flag=False, rules_flag=True, model3D_flag=False, tensor_flag=False, exec_file="project", nanohub_flag=False, is_movable_flag=False, pytest_flag=False, biwt_flag=False):
@@ -434,89 +497,338 @@ class StudioTest:
                 return
     
     ########### test changes in gui and check xml ############
-
     def save_xml(self):
-        self.xml_creator.celldef_tab.check_valid_cell_defs()
-        filepath = os.path.join(self.config_path, '__test__.xml')
+        with suppress_output():
+            self.xml_creator.celldef_tab.check_valid_cell_defs()
+            filepath = os.path.join(self.config_path, '__test__.xml')
+    
+            self.xml_creator.celldef_tab.config_path = self.xml_creator.current_xml_file
+            self.xml_creator.config_tab.fill_xml()
+            self.xml_creator.microenv_tab.fill_xml()
+            self.xml_creator.celldef_tab.fill_xml()
+            self.xml_creator.user_params_tab.fill_xml()
+            if self.xml_creator.rules_flag:
+                self.xml_creator.rules_tab.fill_xml()
+    
+            self.xml_creator.tree.write(filepath)
+            pretty_print(filepath, filepath)
 
-        self.xml_creator.celldef_tab.config_path = self.xml_creator.current_xml_file
-        self.xml_creator.config_tab.fill_xml()
-        self.xml_creator.microenv_tab.fill_xml()
-        self.xml_creator.celldef_tab.fill_xml()
-        self.xml_creator.user_params_tab.fill_xml()
-        if self.xml_creator.rules_flag:
-            self.xml_creator.rules_tab.fill_xml()
-
-        self.xml_creator.tree.write(filepath)
-        pretty_print(filepath, filepath)
-
-    def compare_xml(self, xml1, xml2, values_to_check):
+    def compare_xml(self, xml1, xml2, content_to_compare, attrib_to_compare, terminal_paths, nonexistant_paths=[], rename_dict={}, show_log=False):
         tree1 = ET.parse(xml1)
         tree2 = ET.parse(xml2)
         root1 = tree1.getroot()
         root2 = tree2.getroot()
-        return self.compare_elements(root1, root2, values_to_check)
-    
-    def compare_elements(self, elem1, elem2, values_to_check, attributes_to_check={}):
-        print(f"Comparing {elem1.tag} and {elem2.tag}")
-        if elem1.tag != elem2.tag:
-            return False
+        ret_val = self.compare_elements(root1, root2, content_to_compare, attrib_to_compare, terminal_paths, nonexistant_paths, rename_dict, show_log)
+        if len(nonexistant_paths) > 0:
+            print(f"\tSuccessfully did not find the following paths:")
+            for nep in nonexistant_paths:
+                print(f"\t\t{nep.str}")
+        return ret_val
+
+    def compare_elements(self, elem1, elem2, content_to_compare, attrib_to_compare, terminal_paths, nonexistant_paths, rename_dict, show_log):
+        try:
+            assert all([nep.length()>1 for nep in nonexistant_paths]), f"We reach a path that should be nonexistant at {elem2.tag}"
+        except AssertionError as e:
+            raise e
+        if show_log:
+            # print(f"{elem2.tag = }, {elem2.attrib = }")
+            if len(terminal_paths) > 0:
+                print(f"{[a.list for a in attrib_to_compare] =}")
+                print(f"Terminal paths: {[t.list for t in terminal_paths]}")
+        self.compare_content(elem1, elem2, content_to_compare, show_log)
+        self.compare_attrib(elem1, elem2, attrib_to_compare, rename_dict, show_log)
+        if 'enabled' in elem2.attrib.keys() and elem2.attrib['enabled'].lower() == 'false':
+            if show_log:
+                print(f"Element {elem2.tag} is disabled")
+            return True # if the new element is disabled, once we have checked content and attribs, we can return True
+        if len(terminal_paths)==1 and terminal_paths[0].length()==1:
+            # this path is terminal if and only if there is a single terminal path and it has one element left t
+            print(f"\tTerminating recursion at {':'.join(terminal_paths[0].list[0])}")
+            return True
+        if show_log and elem1.tag == 'cell_definitions':
+            print(f"\tElem1 cell definitions = {[c.attrib['name'] for c in elem1]}")
+            print(f"\tElem2 cell definitions = {[c.attrib['name'] for c in elem2]}")
+            c1, c2 = self.zip_children(elem1, elem2)
+            print(f"\t{[c.attrib['name'] for c in c1] = }")
+            print(f"\t{[c.attrib['name'] for c in c2] = }")
+        for child1, child2 in self.zip_children(elem1, elem2):
+            _content_to_compare = [XMLPathValue(p.list[1:], p.value) for p in content_to_compare if p.is_next_level(child2.tag, child2.attrib)]
+            _attrib_to_compare = [XMLPathValue(p.list[1:], p.value) for p in attrib_to_compare if p.is_next_level(child2.tag, child2.attrib)]
+            _terminal_paths = [XMLPathValue(p.list[1:], None) for p in terminal_paths if p.is_next_level(child2.tag, child2.attrib)]
+            _nonexistant_paths = [XMLPathValue(p.list[1:], None) for p in nonexistant_paths if p.is_next_level(child2.tag, child2.attrib)]
+            assert self.compare_elements(child1, child2, _content_to_compare, _attrib_to_compare, _terminal_paths, _nonexistant_paths, rename_dict, show_log)
+
+        return True
+
+    def zip_children(self, elem1, elem2):
+        if len(elem2) == 0: # if no children in new xml, then return an empty iterator
+            return zip([], [])
+        if 'enabled' in elem1.attrib.keys() and elem1.attrib['enabled'].lower() == 'false':
+            print(f"\t{elem1.tag} is disabled in the old xml. Recursing through new xml to check if values and attribs match those explicitly set.")
+            return zip(elem2, elem2)
+        if 'name' not in elem2[0].attrib.keys():
+            return zip(elem1, elem2)
+        elem2_children = elem2.findall('*')
+        elem1_children = []
+        for child in elem2_children:
+            if child.attrib == {}: # no attribs to compare
+                elem1_child = elem1.find(child.tag)
+            elif 'name' in child.attrib.keys():
+                elem1_child = elem1.find(f".//{child.tag}[@name='{child.attrib['name']}']")
+            elif 'ID' in child.attrib.keys():
+                elem1_child = elem1.find(f".//{child.tag}[@ID='{child.attrib['ID']}']")
+            elif 'index' in child.attrib.keys():
+                elem1_child = elem1.find(f".//{child.tag}[@index='{child.attrib['index']}']")
+            else:
+                elem1_child = elem1.find(child.tag)
+            if elem1_child is not None:
+                elem1_children.append(elem1_child)
+            else:
+                # if no element found in original xml, then "compare" the new one with itself. it should terminate the check
+                elem1_children.append(child)
+        return zip(elem1_children, elem2_children)
+
+    def compare_attrib(self, elem1, elem2, attrib_to_compare: list[XMLPathValue], rename_dict, show_log):
+        # if show_log:
+        #     print(f"Comparing attrib: {xml_path_value.list}")
+        for xml_path_value in attrib_to_compare:
+            if show_log:
+                print(f"\t{xml_path_value.list = }")
+                print(f"\t{xml_path_value.next_attrib_value() = }")
+            if xml_path_value.next_attrib_value() in rename_dict.keys():
+                # on new cell, the attrib of name in cell_definition will not match the "new value" because it is for the next cell def
+                continue
+            if xml_path_value.length()==1:
+                if show_log:
+                    print(f"\t{elem1.attrib = }, \n\t{elem2.attrib = }, \n\t{[a.list for a in attrib_to_compare] = }")
+                print(f"\tAttribute assertion: {elem2.attrib[xml_path_value.list[0][1]]} == {xml_path_value.value}")
+                try:
+                    assert elem2.attrib[xml_path_value.list[0][1]] == xml_path_value.value, f"Attrib {elem2.tag}[@{xml_path_value.list[0][1]}] does not match expected value: {elem2.attrib[xml_path_value.list[0][1]]} != {xml_path_value.value}"
+                except AssertionError as e:
+                    raise e
+                return
+        # otherwise, compare the two elem attribs
+        differs = False
+        # make sure that all elem2 attributes are in elem1
+        differs = any([k not in elem1.attrib.keys() for k in elem2.attrib.keys()])
+        if not differs:
+            for key in elem1.attrib.keys():
+                if key not in elem2.attrib.keys():
+                    differs = True
+                    break
+                if elem1.attrib[key] != elem2.attrib[key]:
+                    # make sure attrib is not renamed
+                    if elem1.attrib[key] in rename_dict.keys() and rename_dict[elem1.attrib[key]] == elem2.attrib[key]:
+                        continue
+                    differs = True
+                    break
+        try:
+            assert not differs, f"Attribs do not match for {elem1.tag}: {elem1.attrib} != {elem2.attrib}"
+        except AssertionError as e:
+            print(f"Attributes to compare: {attrib_to_compare}")
+            raise e
+        return
+
+    def compare_content(self, elem1, elem2, content_to_compare: list[XMLPathValue], show_log):
+        for xml_path_value in content_to_compare:
+            if xml_path_value.length()==1:
+                print(f"\tContent assertion: {elem2.text} == {xml_path_value.value}")
+                assert elem2.text == xml_path_value.value
+                return
+        # otherwise, compare the two elem contents       
+        differs = False
         t1 = elem1.text
         t2 = elem2.text
         t1_is_nothing = t1 is None or t1.strip() == ''
         t2_is_nothing = t2 is None or t2.strip() == ''
         if (t1_is_nothing != t2_is_nothing) or (t1 != t2):
-            print(f"Content does not match: {t1} != {t2}")
             # check if t1 and t2 are numbers
             try:
                 if float(t1) != float(t2):
-                    print("Content is floats and does not match")
-                    return False
+                    differs = True
             except ValueError:
-                print("Content does not match and is not floats")
-                return False
-        if elem1.attrib != elem2.attrib:
-            # make sure the dicts have the same keys
-            if set(elem1.attrib.keys()) != set(elem2.attrib.keys()):
-                print(f"Attribute keys do not match: {elem1.attrib.keys()} != {elem2.attrib.keys()}")
-                return False
-            print(f"Attributes do not match: {elem1.attrib} != {elem2.attrib}")
-            print(f"Attributes to ignore: {attributes_to_check}")
-            for a in elem1.attrib.keys():
-                if (a in attributes_to_check.keys()):
-                    if (elem2.attrib[a] != attributes_to_check[a]):
-                        print("Did not change attribute correctly")
-                        return False
-                elif elem1.attrib[a] != elem2.attrib[a]:
-                    print("Attribute values do not match")
-                    return False 
-        if 'enabled' in elem1.attrib.keys() and elem1.attrib['enabled'].lower() == 'false':
-            return True # don't bother comparing things that are in disabled blocks
-        if len(elem1) != len(elem2):
-            print(f"Lengths do not match: {len(elem1)} != {len(elem2)}")
-            return False
-        paths_to_check = list(values_to_check.keys())
-        for child1, child2 in zip(elem1, elem2):
-            if child1.tag in values_to_check.keys():
-                index = paths_to_check.index(child1.tag)
-                print(f"Checking {child1.tag} for {values_to_check[child1.tag]}")
-                print(f"Value in xml2: {child2.text}, expected value: {values_to_check[child1.tag]}")
-                assert child2.text == values_to_check[child1.tag]
-                continue
-            temp = [k.startswith(f'{child1.tag}/@') for k in paths_to_check]
-            _attributes_to_check = {}
-            if any(temp):
-                print(f"Checking {child1.tag} for {values_to_check}")
-                index = temp.index(True)
-                attrib_name = paths_to_check[index].split('/@')[1]
-                print(f"Value in xml2: {child2.text}, expected value: {values_to_check}")
-                _attributes_to_check[attrib_name] = values_to_check[paths_to_check[index]]
-            _values_to_check = {'//'.join(k.split('//')[1:]): v for k, v in values_to_check.items() if k.startswith(child1.tag)}
-            if not self.compare_elements(child1, child2, _values_to_check, attributes_to_check=_attributes_to_check):
-                return False
-        return True
+                differs = True
+        try:
+            assert not differs, f"Content does not match: {t1} != {t2}"
+        except AssertionError as e:
+            raise e
+        return 
+    
+    def tokenize_path(self, path):
+        return path.split('//')
+    
+    def tokenize_element(self, element):
+        return element.split(':')
+    
+    def test_tab(self, tab_name, tab_path: list[str]):
+        print(f"\n{'-'*10}TESTING {tab_name.upper()}{'-'*10}\n")
+        tab = self.xml_creator
+        for p in tab_path:
+            tab = tab.__getattribute__(p)
+        for suffix in ['text_fields', 'checkboxes', 'radiobuttons', 'comboboxes', 'trees', 'buttons']:
+            if hasattr(self, f"{tab_name}_{suffix}"):
+                testing_fn = getattr(self, f"test_{suffix}")
+                print(f"\n\t-- Testing {tab_name}_{suffix}:\n")
+                items_to_test = getattr(self, f"{tab_name}_{suffix}")
+                testing_fn(items_to_test, tab)
+            else:
+                print(f"No {tab_name}_{suffix} to test")
 
-    ########### perturb in gui and check xml ############
+    def test_text_fields(self, items_to_test, tab):
+        for field, d in items_to_test.items():
+            print(f"Checking {field}")
+            original_value = tab.__getattribute__(field).text()
+            if 'pre_set_fn' in d.keys():
+                d['pre_set_fn']()
+            tab.__getattribute__(field).setText(d['new_value'])
+            self.save_xml()
+            xml_path_value = XMLPathValue('PhysiCell_settings//' + d['xml_path'], d['new_value'])
+            if xml_path_value.is_attrib():
+                attrib_to_compare = [xml_path_value]
+                content_to_compare = []
+            else:
+                content_to_compare = [xml_path_value]
+                attrib_to_compare = []
+            if 'extra_content_to_compare' in d.keys():
+                content_to_compare += [XMLPathValue('PhysiCell_settings//' + k, v) for k, v in d['extra_content_to_compare'].items()]
+            if 'extra_attrib_to_compare' in d.keys():
+                attrib_to_compare += [XMLPathValue('PhysiCell_settings//' + k, v) for k, v in d['extra_attrib_to_compare'].items()]
+            terminal_paths = []
+            assert self.compare_xml(self.path_to_xml, "./config/__test__.xml", content_to_compare, attrib_to_compare, terminal_paths, nonexistant_paths=[], rename_dict={}, show_log=False)
+            if 'post_check_fn' in d.keys():
+                d['post_check_fn']()
+            tab.__getattribute__(field).setText(original_value)
+            
+    def test_checkboxes(self, items_to_test, tab):
+        for field, d in items_to_test.items():
+            print(f"Checking {field}")
+            original_value = tab.__getattribute__(field).isChecked()
+            tab.__getattribute__(field).setChecked(not original_value)
+            self.save_xml()
+            xml_path_value = XMLPathValue('PhysiCell_settings//' + d['xml_path'], d['new_value'](original_value))
+            if xml_path_value.is_attrib():
+                attrib_to_compare = [xml_path_value]
+                content_to_compare = []
+            else:
+                content_to_compare = [xml_path_value]
+                attrib_to_compare = []
+            if 'extra_content_to_compare' in d.keys():
+                content_to_compare += [XMLPathValue('PhysiCell_settings//' + k, v) for k, v in d['extra_content_to_compare'].items()]
+            if 'extra_attrib_to_compare' in d.keys():
+                attrib_to_compare += [XMLPathValue('PhysiCell_settings//' + k, v) for k, v in d['extra_attrib_to_compare'].items()]
+            assert self.compare_xml(self.path_to_xml, "./config/__test__.xml", content_to_compare, attrib_to_compare, [])
+            tab.__getattribute__(field).setChecked(original_value)
+
+    def test_radiobuttons(self, items_to_test, tab):
+        for field, d in items_to_test.items():
+            print(f"Checking {field}")
+            original_value = tab.__getattribute__(field).isChecked()
+            d["toggle_fn"]()
+            self.save_xml()
+            xml_path_value = XMLPathValue('PhysiCell_settings//' + d['xml_path'], d['new_value'](original_value))
+            if xml_path_value.is_attrib():
+                attrib_to_compare = [xml_path_value]
+                content_to_compare = []
+            else:
+                content_to_compare = [xml_path_value]
+                attrib_to_compare = []
+            if 'extra_content_to_compare' in d.keys():
+                content_to_compare += [XMLPathValue('PhysiCell_settings//' + k, v) for k, v in d['extra_content_to_compare'].items()]
+            if 'extra_attrib_to_compare' in d.keys():
+                attrib_to_compare += [XMLPathValue('PhysiCell_settings//' + k, v) for k, v in d['extra_attrib_to_compare'].items()]
+            assert self.compare_xml(self.path_to_xml, "./config/__test__.xml", content_to_compare, attrib_to_compare, [])
+            d["toggle_fn"]()
+
+    def test_comboboxes(self, items_to_test, tab):
+        for field, d in items_to_test.items():
+            print(f"Checking {field}")
+            original_value = tab.__getattribute__(field).currentText()
+            original_index = tab.__getattribute__(field).currentIndex()
+            if 'pre_loop_fn' in d.keys():
+                d['pre_loop_fn']()
+            for i in range(tab.__getattribute__(field).count()):
+                tab.__getattribute__(field).setCurrentIndex((original_index + i) % tab.__getattribute__(field).count())
+                new_value = tab.__getattribute__(field).currentText()
+                self.save_xml()
+                xml_path_value = XMLPathValue('PhysiCell_settings//' + d['xml_path'], new_value)
+                if xml_path_value.is_attrib():
+                    attrib_to_compare = [xml_path_value]
+                    content_to_compare = []
+                else:
+                    content_to_compare = [xml_path_value]
+                    attrib_to_compare = []
+                if 'extra_content_to_compare' in d.keys():
+                    content_to_compare += [XMLPathValue('PhysiCell_settings//' + k, v) for k, v in d['extra_content_to_compare'].items()]
+                if 'extra_attrib_to_compare' in d.keys():
+                    attrib_to_compare += [XMLPathValue('PhysiCell_settings//' + k, v) for k, v in d['extra_attrib_to_compare'].items()]
+                assert self.compare_xml(self.path_to_xml, "./config/__test__.xml", content_to_compare, attrib_to_compare, [], show_log=False)
+            tab.__getattribute__(field).setCurrentText(original_value)
+            tab.__getattribute__(field).setCurrentIndex(original_index)
+            if 'post_loop_fn' in d.keys():
+                d['post_loop_fn']()
+
+    def test_trees(self, items_to_test, tab):
+        for field, d in items_to_test.items():
+            print(f"Checking {field}")
+            tree = tab.__getattribute__(field)
+            for i in range(tab.__getattribute__(field).topLevelItemCount()):
+                original_value = tree.topLevelItem(i).text(0)
+                new_value = f"{original_value}__test__"
+                with suppress_output():
+                    tree.topLevelItem(i).setText(0, new_value)
+                self.save_xml()
+                xml_path_value = XMLPathValue('PhysiCell_settings//' + d['xml_path'], new_value)
+                if xml_path_value.is_attrib():
+                    attrib_to_compare = [xml_path_value]
+                    content_to_compare = []
+                else:
+                    content_to_compare = [xml_path_value]
+                    attrib_to_compare = []
+                if 'extra_content_to_compare' in d.keys():
+                    content_to_compare += [XMLPathValue('PhysiCell_settings//' + k, v) for k, v in d['extra_content_to_compare'].items()]
+                if 'extra_attrib_to_compare' in d.keys():
+                    attrib_to_compare += [XMLPathValue('PhysiCell_settings//' + k, v) for k, v in d['extra_attrib_to_compare'].items()]
+                rename_dict = {original_value: new_value}
+                terminal_paths = []
+                assert self.compare_xml(self.path_to_xml, "./config/__test__.xml", content_to_compare, attrib_to_compare, terminal_paths, nonexistant_paths=[], rename_dict=rename_dict, show_log=False)
+                with suppress_output():
+                    tree.topLevelItem(i).setText(0, original_value)
+
+    def test_buttons(self, items_to_test, tab):
+        for field, d in items_to_test.items():
+            print(f"Checking {field}")
+            with suppress_output():
+                tab.__getattribute__(field).click()
+            if 'post_push_fn' in d.keys():
+                with suppress_output():
+                    d['post_push_fn']()
+            self.save_xml()
+            content_to_compare = []
+            attrib_to_compare = []
+            if 'xml_path' in d.keys():
+                xml_path_value = XMLPathValue('PhysiCell_settings//' + d['xml_path'], d['new_value'])
+                if xml_path_value.is_attrib():
+                    attrib_to_compare = [xml_path_value]
+                else:
+                    content_to_compare = [xml_path_value]
+            if 'extra_content_to_compare' in d.keys():
+                content_to_compare += [XMLPathValue('PhysiCell_settings//' + k, v) for k, v in d['extra_content_to_compare'].items()]
+            if 'extra_attrib_to_compare' in d.keys():
+                attrib_to_compare += [XMLPathValue('PhysiCell_settings//' + k, v) for k, v in d['extra_attrib_to_compare'].items()]
+            terminal_paths = []
+            if 'terminal_paths' in d.keys():
+                terminal_paths += d['terminal_paths']
+            nonexistant_paths = []
+            if 'nonexistant_paths' in d.keys():
+                nonexistant_paths += d['nonexistant_paths']
+            assert self.compare_xml(self.path_to_xml, "./config/__test__.xml", content_to_compare, attrib_to_compare, terminal_paths, nonexistant_paths, show_log=False)
+
+    ########### perturb config tab in gui and check xml ############
+    def create_config_tab_widget_dicts(self):
+        self.create_config_tab_text_fields()
+        self.create_config_tab_checkboxes()
+        self.create_config_tab_radiobuttons()
+        self.create_config_tab_comboboxes()
 
     def create_config_tab_text_fields(self):
         self.config_tab_text_fields = {'xmin': 'domain//x_min', 'xmax': 'domain//x_max', 'ymin': 'domain//y_min', 'ymax': 'domain//y_max', 'zmin': 'domain//z_min', 'zmax': 'domain//z_max', 'xdel': 'domain//dx', 'ydel': 'domain//dy', 'zdel': 'domain//dz',
@@ -527,14 +839,43 @@ class StudioTest:
         self.config_tab_text_fields = {k: {'xml_path': v, 'new_value': "12321"} for k, v in self.config_tab_text_fields.items()}
         self.config_tab_text_fields["zmin"]["new_value"] = "0.12321"
         self.config_tab_text_fields["zmax"]["new_value"] = "0.12321"
-        self.config_tab_text_fields["full_interval"]["extra_values_to_check"] = {"save//SVG//interval": "12321"}
-        self.config_tab_text_fields["svg_interval"]["extra_values_to_check"] = {"save//full_data//interval": "12321"}
+        self.config_tab_text_fields["full_interval"]["extra_content_to_compare"] = {"save//SVG//interval": "12321"}
+        self.config_tab_text_fields["svg_interval"]["extra_content_to_compare"] = {"save//full_data//interval": "12321"}
+        if not self.xml_creator.config_tab.cells_csv.isChecked():
+            pre_set_fn = lambda: self.xml_creator.config_tab.cells_csv.setChecked(True)
+            post_set_fn = lambda: self.xml_creator.config_tab.cells_csv.setChecked(False)
+            for field in ["csv_folder", "csv_file"]:
+                self.config_tab_text_fields[field]["pre_set_fn"] = pre_set_fn
+                self.config_tab_text_fields[field]["extra_attrib_to_compare"] = {"initial_conditions//cell_positions:enabled": "true"}
+                self.config_tab_text_fields[field]["post_check_fn"] = post_set_fn
+        if not self.xml_creator.config_tab.plot_substrate_svg.isChecked():
+            new_extra_content_dict = {"save//SVG//plot_substrate//colormap": "YlOrRd", "save//SVG//plot_substrate//max_conc": None}
+            if "extra_content_to_compare" not in self.config_tab_text_fields["svg_substrate_min"].keys():
+                self.config_tab_text_fields["svg_substrate_min"]["extra_content_to_compare"] = new_extra_content_dict
+            else:
+                self.config_tab_text_fields["svg_substrate_min"]["extra_content_to_compare"].update(new_extra_content_dict)
+            new_extra_content_dict = {"save//SVG//plot_substrate//colormap": "YlOrRd", "save//SVG//plot_substrate//min_conc": None}
+            if "extra_content_to_compare" not in self.config_tab_text_fields["svg_substrate_max"].keys():
+                self.config_tab_text_fields["svg_substrate_max"]["extra_content_to_compare"] = new_extra_content_dict
+            else:
+                self.config_tab_text_fields["svg_substrate_max"]["extra_content_to_compare"].update(new_extra_content_dict)
+            limits_already_enabled = self.xml_creator.config_tab.plot_substrate_limits.isChecked()
+            if limits_already_enabled:
+                pre_set_fn = lambda: self.xml_creator.config_tab.plot_substrate_svg.setChecked(True)
+                post_set_fn = lambda: self.xml_creator.config_tab.plot_substrate_svg.setChecked(False)
+            else:
+                pre_set_fn = lambda: (self.xml_creator.config_tab.plot_substrate_svg.setChecked(True), self.xml_creator.config_tab.plot_substrate_limits.setChecked(True))
+                post_set_fn = lambda: (self.xml_creator.config_tab.plot_substrate_svg.setChecked(False), self.xml_creator.config_tab.plot_substrate_limits.setChecked(False))
+            for field in ["svg_substrate_min", "svg_substrate_max"]:
+                self.config_tab_text_fields[field]["pre_set_fn"] = pre_set_fn
+                self.config_tab_text_fields[field]["extra_attrib_to_compare"] = {"save//SVG//plot_substrate:enabled": "true"}
+                self.config_tab_text_fields[field]["post_check_fn"] = post_set_fn
 
     def create_config_tab_checkboxes(self):
         self.config_tab_checkboxes = {'save_full': 'save//full_data//enable', 'save_svg': 'save//SVG//enable', 
-                             'plot_substrate_svg': 'save//SVG//plot_substrate/@enabled', 
-                             'plot_substrate_limits': 'save//SVG//plot_substrate/@limits', 
-                             'virtual_walls': 'options//virtual_wall_at_domain_edge', 'cells_csv': 'initial_conditions//cell_positions/@enabled'}
+                             'plot_substrate_svg': 'save//SVG//plot_substrate:enabled', 
+                             'plot_substrate_limits': 'save//SVG//plot_substrate:limits', 
+                             'virtual_walls': 'options//virtual_wall_at_domain_edge', 'cells_csv': 'initial_conditions//cell_positions:enabled'}
         self.config_tab_checkboxes = {k: {'xml_path': v, 'new_value': lambda original_value: str(not original_value).lower()} for k, v in self.config_tab_checkboxes.items()}
     
     def create_config_tab_radiobuttons(self):
@@ -547,66 +888,63 @@ class StudioTest:
 
     def create_config_tab_comboboxes(self):
         self.config_tab_comboboxes = {'svg_substrate_colormap_dropdown': 'save//SVG//plot_substrate//colormap'}
-
-    def test_config_tab_text_fields(self):
-        for field, d in studio_test.config_tab_text_fields.items():
-            print(f"Checking {field}")
-            original_value = config_tab.__getattribute__(field).text()
-            config_tab.__getattribute__(field).setText(d['new_value'])
-            studio_test.save_xml()
-            values_to_check = {d['xml_path']: d['new_value']}
-            if 'extra_values_to_check' in d.keys():
-                values_to_check.update(d['extra_values_to_check'])
-            assert studio_test.compare_xml(studio_test.path_to_xml, "./config/__test__.xml", values_to_check)
-            config_tab.__getattribute__(field).setText(original_value)
-
-        for field, d in studio_test.config_tab_text_fields.items():
-            print(f"Checking {field}")
-            original_value = config_tab.__getattribute__(field).text()
-            config_tab.__getattribute__(field).setText(d['new_value'])
-            studio_test.save_xml()
-            values_to_check = {d['xml_path']: d['new_value']}
-            if 'extra_values_to_check' in d.keys():
-                values_to_check.update(d['extra_values_to_check'])
-            assert studio_test.compare_xml(studio_test.path_to_xml, "./config/__test__.xml", values_to_check)
-            config_tab.__getattribute__(field).setText(original_value)
-            
-        for field, d in studio_test.config_tab_checkboxes.items():
-            print(f"Checking {field}")
-            original_value = config_tab.__getattribute__(field).isChecked()
-            config_tab.__getattribute__(field).setChecked(not original_value)
-            studio_test.save_xml()
-            values_to_check = {d['xml_path']: d['new_value'](original_value)}
-            assert studio_test.compare_xml(studio_test.path_to_xml, "./config/__test__.xml", values_to_check)
-            config_tab.__getattribute__(field).setChecked(original_value)
-
-        for field, d in studio_test.config_tab_radiobuttons.items():
-            print(f"Checking {field}")
-            original_value = config_tab.__getattribute__(field).isChecked()
-            d["toggle_fn"]()
-            studio_test.save_xml()
-            values_to_check = {d['xml_path']: d['new_value'](original_value)}
-            assert studio_test.compare_xml(studio_test.path_to_xml, "./config/__test__.xml", values_to_check)
-            d["toggle_fn"]()
-
-    def create_config_tab_widget_dicts(self):
-        self.create_config_tab_text_fields()
-        self.create_config_tab_checkboxes()
-        self.create_config_tab_radiobuttons()
-        self.create_config_tab_comboboxes()
+        self.config_tab_comboboxes = {k: {'xml_path': v} for k, v in self.config_tab_comboboxes.items()}
+        if not self.xml_creator.config_tab.plot_substrate_svg.isChecked():
+            self.config_tab_comboboxes['svg_substrate_colormap_dropdown']['pre_loop_fn'] = lambda: self.xml_creator.config_tab.plot_substrate_svg.setChecked(True)
+            self.config_tab_comboboxes['svg_substrate_colormap_dropdown']['extra_attrib_to_compare'] = {"save//SVG//plot_substrate:enabled": "true"}
+            self.config_tab_comboboxes['svg_substrate_colormap_dropdown']['post_loop_fn'] = lambda: self.xml_creator.config_tab.plot_substrate_svg.setChecked(False)
 
     def toggle_random_seed_gp(self):
         current_id = self.xml_creator.config_tab.random_seed_gp.checkedId()
         self.xml_creator.config_tab.random_seed_gp.button((current_id+1) % 2).click()
 
+    ########### perturb celldef tab in gui and check xml ############
+    def create_celldef_tab_widget_dicts(self):
+        # self.create_celldef_tab_text_fields()
+        # self.create_celldef_tab_checkboxes()
+        # self.create_celldef_tab_comboboxes()
+        # self.create_celldef_tab_radiobuttons()
+        self.create_celldef_tab_trees()
+        self.create_celldef_tab_buttons()
+
+    def create_celldef_tab_text_fields(self):
+        raise NotImplementedError
+    
+    def create_celldef_tab_checkboxes(self):
+        raise NotImplementedError
+    
+    def create_celldef_tab_comboboxes(self):
+        raise NotImplementedError
+    
+    def create_celldef_tab_radiobuttons(self):
+        raise NotImplementedError
+    
+    def create_celldef_tab_trees(self):
+        self.celldef_tab_trees = {'tree': 'cell_definitions//cell_definition:name'}
+        self.celldef_tab_trees = {k: {'xml_path': v} for k, v in self.celldef_tab_trees.items()}
+    
+    def create_celldef_tab_buttons(self):
+        self.celldef_tab_buttons = {}
+        new_button_new_value = "new_cell"
+        self.celldef_tab_buttons['new_button'] = {}
+        self.celldef_tab_buttons['new_button']['new_value'] = {} # no new_values to check. just stop recursing on getting to the new cell def
+        self.celldef_tab_buttons['new_button']['post_push_fn'] = lambda: self.set_current_celldef_name(new_button_new_value)
+        self.celldef_tab_buttons['new_button']['terminal_paths'] = [XMLPathValue(f'PhysiCell_settings//cell_definitions//cell_definition:name:{new_button_new_value}', None)]
+
+        self.celldef_tab_buttons['delete_button'] = {'nonexistant_paths': [XMLPathValue(f'PhysiCell_settings//cell_definitions//cell_definition:name:{new_button_new_value}', None)]}
+
+    def set_current_celldef_name(self, name):
+        with suppress_output():
+            self.xml_creator.celldef_tab.tree.currentItem().setText(0, name)
+
     def __del__(self):
         self.studio_app.quit()
 
 if __name__ == "__main__":
-    studio_test = StudioTest(config_file="./config/PhysiCell_settings.xml")
-    config_tab = studio_test.xml_creator.config_tab
+    with suppress_output():
+        studio_test = StudioTest(config_file="./config/PhysiCell_settings.xml")
     studio_test.check_import()
     # search through this file for all 
-    config_tab = studio_test.xml_creator.config_tab
-    studio_test.test_config_tab_text_fields()
+    studio_test.test_tab("config_tab", ["config_tab"])
+    studio_test.test_tab("celldef_tab", ["celldef_tab"])
     
