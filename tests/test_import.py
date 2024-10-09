@@ -621,7 +621,7 @@ class StudioTest:
             if xml_path_value.length()==1:
                 if show_log:
                     print(f"\t{elem1.attrib = }, \n\t{elem2.attrib = }, \n\t{[a.list for a in attrib_to_compare] = }")
-                print(f"\tAttribute assertion: {elem2.attrib[xml_path_value.list[0][1]]} == {xml_path_value.value}")
+                print(f"\tAttribute assertion for {elem2.tag}[@{xml_path_value.list[0][1]}]: {elem2.attrib[xml_path_value.list[0][1]]} == {xml_path_value.value}")
                 try:
                     assert elem2.attrib[xml_path_value.list[0][1]] == xml_path_value.value, f"Attrib {elem2.tag}[@{xml_path_value.list[0][1]}] does not match expected value: {elem2.attrib[xml_path_value.list[0][1]]} != {xml_path_value.value}"
                 except AssertionError as e:
@@ -656,7 +656,7 @@ class StudioTest:
     def compare_content(self, elem1, elem2, content_to_compare: list[XMLPathValue], show_log):
         for xml_path_value in content_to_compare:
             if xml_path_value.length()==1:
-                print(f"\tContent assertion: {elem2.text} == {xml_path_value.value}")
+                print(f"\tContent assertion for {elem2.tag}: {elem2.text} == {xml_path_value.value}")
                 assert elem2.text == xml_path_value.value
                 return
             else:
@@ -952,6 +952,10 @@ class StudioTest:
 
     def create_celldef_tab_text_fields(self):
         self.celldef_tab_text_fields = {}
+        self.create_celldef_tab_cycle_text_fields()
+
+    def create_celldef_tab_cycle_text_fields(self):
+        new_dict = {}
         cycle_code_dict = {
             'advanced Ki67': {'cycle_code': 0, 'short_name': 'advancedKi67', 'combobox_idx': 2, 'num_phases': 3},
             'basic Ki67': {'cycle_code': 1, 'short_name': 'Ki67', 'combobox_idx': 1, 'num_phases': 2},
@@ -967,11 +971,9 @@ class StudioTest:
             phase_units = '1/min' if suffix == 'trate' else 'min'
             cycle_rb_name = 'cycle_rb1' if suffix == 'trate' else 'cycle_rb2'
             for d in cycle_code_dict.values():
-                print(f"{d['combobox_idx'] = }")
                 pre_set_fn = lambda idx=d['combobox_idx'], rb_name=cycle_rb_name: (self.xml_creator.celldef_tab.tree.itemClicked.emit(self.xml_creator.celldef_tab.tree.topLevelItem(0), 0),
                                                             self.xml_creator.celldef_tab.__getattribute__(rb_name).setChecked(True),
                                                             self.xml_creator.celldef_tab.cycle_dropdown.setCurrentIndex(idx))
-                print(f"{self.xml_creator.celldef_tab.cycle_dropdown.currentIndex() = }")
                 base_name = d['short_name']
                 cycle_base_name = f"cycle_{base_name}"
                 n_phases = d['num_phases']
@@ -984,10 +986,11 @@ class StudioTest:
                                                 f"cell_definitions//cell_definition:name:default//phenotype//cycle:code:{d['cycle_code']}//{phase_block_name}//{phase_name}:{phase_attrib}": str(start_phase_index)}
                     if suffix == 'trate':
                         extra_attrib_to_compare[f"cell_definitions//cell_definition:name:default//phenotype//cycle:code:{d['cycle_code']}//{phase_block_name}//{phase_name}:end_index"] = str(end_phase_index)
-                    self.celldef_tab_text_fields[name] = {'xml_path': f'cell_definitions//cell_definition:name:default//phenotype//cycle:code:{d["cycle_code"]}//{phase_block_name}//{phase_name}:{phase_attrib}:{start_phase_index}',
+                    new_dict[name] = {'xml_path': f'cell_definitions//cell_definition:name:default//phenotype//cycle:code:{d["cycle_code"]}//{phase_block_name}//{phase_name}:{phase_attrib}:{start_phase_index}',
                                                           'new_value': "12321",
                                                           'pre_set_fn': pre_set_fn,
                                                           'extra_attrib_to_compare': extra_attrib_to_compare}
+        self.celldef_tab_text_fields.update(new_dict)
 
     def create_celldef_tab_checkboxes(self):
         raise NotImplementedError
