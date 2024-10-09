@@ -154,16 +154,16 @@ def populate_tree_cell_defs(cell_def_tab, skip_validate):
             # cell_def_tab.cycle_dropdown.addItem("cycling quiescent")  # 7
 
             cycle_code_dict = {
-                0: {'full_name': 'advanced Ki67', 'short_name': 'advancedKi67', 'idx': 2, 'num_phases': 3},
-                1: {'full_name': 'basic Ki67', 'short_name': 'Ki67', 'idx': 1, 'num_phases': 2},
-                2: {'full_name': 'flow cytometry', 'short_name': 'flowcyto', 'idx': 3, 'num_phases': 3},
-                5: {'full_name': 'live cells', 'short_name': 'live', 'idx': 0, 'num_phases': 1},
-                6: {'full_name': 'flow cytometry separated', 'short_name': 'flowcytosep', 'idx': 4, 'num_phases': 4},
-                7: {'full_name': 'cycling quiescent', 'short_name': 'quiescent', 'idx': 5, 'num_phases': 2}
+                0: {'full_name': 'advanced Ki67', 'short_name': 'advancedKi67', 'combobox_idx': 2, 'num_phases': 3},
+                1: {'full_name': 'basic Ki67', 'short_name': 'Ki67', 'combobox_idx': 1, 'num_phases': 2},
+                2: {'full_name': 'flow cytometry', 'short_name': 'flowcyto', 'combobox_idx': 3, 'num_phases': 3},
+                5: {'full_name': 'live cells', 'short_name': 'live', 'combobox_idx': 0, 'num_phases': 1},
+                6: {'full_name': 'flow cytometry separated', 'short_name': 'flowcytosep', 'combobox_idx': 4, 'num_phases': 4},
+                7: {'full_name': 'cycling quiescent', 'short_name': 'quiescent', 'combobox_idx': 5, 'num_phases': 2}
             }
-            cell_def_tab.cycle_dropdown.setCurrentIndex(cycle_code_dict[cycle_code]['idx'])
+            cell_def_tab.cycle_dropdown.setCurrentIndex(cycle_code_dict[cycle_code]['combobox_idx'])
             cell_def_tab.param_d[cell_def_name]['cycle'] = cycle_code_dict[cycle_code]['full_name']
-            cell_def_tab.param_d[cell_def_name]['cycle_choice_idx'] = cycle_code_dict[cycle_code]['idx']
+            cell_def_tab.param_d[cell_def_name]['cycle_choice_idx'] = cycle_code_dict[cycle_code]['combobox_idx']
 
         # rwh: We only use cycle code=5 or 6 in ALL sample projs?!
             # <cell_definition name="cargo cell" ID="2" visible="true">

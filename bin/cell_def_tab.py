@@ -5354,7 +5354,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
         # self.cycle_dropdown.addItem("flow cytometry separated") # 0->1, 1->2, 2->3, 3->0
         # self.cycle_dropdown.addItem("cycling quiescent") # 0 -> 1, 1 -> 0
     def cycle_phase_transition_cb(self):
-
+        
         radioBtn = self.sender()
         if "duration" in radioBtn.text():
             self.cycle_duration_flag = True
@@ -7807,7 +7807,7 @@ Please fix the IDs in the Cell Types tab. Also, be mindful of how this may affec
             setattr(self, name, qle)
 
             name_for_cb = f"{phases_name}_fixed"
-            fixed_attr_name= f"{name_for_cb}_{suffix}"
+            fixed_attr_name = f"{name_for_cb}_{suffix}"
             qcb = QCheckBox_custom("Fixed", maximumWidth=self.fixed_checkbox_column_width, objectName=name_for_cb)
             qcb.clicked.connect(self.cell_def_fixed_clicked)
             glayout.addWidget(qcb, start_phase_index, 3, 1, 1) # w, row, column, rowspan, colspan

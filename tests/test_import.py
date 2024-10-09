@@ -46,7 +46,7 @@ class XMLPathValue:
         return element.split(':')
 
     def is_attrib(self):
-        return len(self.list[-1]) != 1
+        return len(self.list[-1]) == 2
 
     def is_next_level(self, tag, attrib):
         # entering this, self.list = [[<current xml level>], [<next xml level>], ...]
@@ -65,7 +65,12 @@ class XMLPathValue:
             # this xml_path does not have the correct attrib, so it is not part of the next level
             return False
         if len(self.list[1]) == 2:
-            # this xml_path has the correct attrib, but not value, so we will check the value at the next level
+            if self.list[1][1] in ['name', 'ID', 'type', 'index', 'start_index', 'end_index']:
+                # this xml_path has the correct attrib, but the attrib is necessary to match, so check the value
+                # print("HIT NEW CODE FOR SPECIAL ATTRIB")
+                # print(f"{self.list = }, {self.value = }, {tag = }, {attrib = }")
+                return attrib[self.list[1][1]] == self.value
+            # this xml_path has the correct attrib, but no value, so we will check the value at the next level
             return True
         if attrib[self.list[1][1]] == self.list[1][2]:
             # this xml_path has the correct attrib value, so it is part of the next level
@@ -80,6 +85,8 @@ class XMLPathValue:
             return None
         return self.list[0][2]
 
+    def __str__(self):
+        return "//".join([":".join(e) for e in self.list])
 class StudioTest:
     def __init__(self, config_file=False, **kwargs):
         self.studio_app = None
@@ -88,7 +95,8 @@ class StudioTest:
         self.config_path = os.path.join(root_dir, '../config')
         self.path_to_xml = config_file
 
-        self.launch_studio(**kwargs)
+        with suppress_output():
+            self.launch_studio(**kwargs)
 
         self.create_config_tab_widget_dicts()
         self.create_celldef_tab_widget_dicts()
@@ -249,13 +257,13 @@ class StudioTest:
 
     def check_cycle(self, name, phenotype):
         cycle_code_dict = {
-            0: {'full_name': 'advanced Ki67', 'short_name': 'advancedKi67', 'idx': 2, 'num_phases': 3},
-            1: {'full_name': 'basic Ki67', 'short_name': 'Ki67', 'idx': 1, 'num_phases': 2},
-            2: {'full_name': 'flow cytometry', 'short_name': 'flowcyto', 'idx': 3, 'num_phases': 3},
-            5: {'full_name': 'live cells', 'short_name': 'live', 'idx': 0, 'num_phases': 1},
-            6: {'full_name': 'flow cytometry separated', 'short_name': 'flowcytosep', 'idx': 4, 'num_phases': 4},
-            7: {'full_name': 'cycling quiescent', 'short_name': 'quiescent', 'idx': 5, 'num_phases': 2}
-        } # keys are the PhysiCell codes, the idx is the index of the cycle in the combo box
+            0: {'full_name': 'advanced Ki67', 'short_name': 'advancedKi67', 'combobox_idx': 2, 'num_phases': 3},
+            1: {'full_name': 'basic Ki67', 'short_name': 'Ki67', 'combobox_idx': 1, 'num_phases': 2},
+            2: {'full_name': 'flow cytometry', 'short_name': 'flowcyto', 'combobox_idx': 3, 'num_phases': 3},
+            5: {'full_name': 'live cells', 'short_name': 'live', 'combobox_idx': 0, 'num_phases': 1},
+            6: {'full_name': 'flow cytometry separated', 'short_name': 'flowcytosep', 'combobox_idx': 4, 'num_phases': 4},
+            7: {'full_name': 'cycling quiescent', 'short_name': 'quiescent', 'combobox_idx': 5, 'num_phases': 2}
+        } # keys are the PhysiCell codes, the combobox_idx is the index of the cycle in the combo box
         cycle = phenotype.find('cycle')
         xml_code = cycle.attrib['code']
         studio_combo_widget_idx = self.xml_creator.celldef_tab.param_d[name]["cycle_choice_idx"]
@@ -544,15 +552,22 @@ class StudioTest:
             # this path is terminal if and only if there is a single terminal path and it has one element left t
             print(f"\tTerminating recursion at {':'.join(terminal_paths[0].list[0])}")
             return True
-        if show_log and elem1.tag == 'cell_definitions':
-            print(f"\tElem1 cell definitions = {[c.attrib['name'] for c in elem1]}")
-            print(f"\tElem2 cell definitions = {[c.attrib['name'] for c in elem2]}")
-            c1, c2 = self.zip_children(elem1, elem2)
-            print(f"\t{[c.attrib['name'] for c in c1] = }")
-            print(f"\t{[c.attrib['name'] for c in c2] = }")
         for child1, child2 in self.zip_children(elem1, elem2):
             _content_to_compare = [XMLPathValue(p.list[1:], p.value) for p in content_to_compare if p.is_next_level(child2.tag, child2.attrib)]
             _attrib_to_compare = [XMLPathValue(p.list[1:], p.value) for p in attrib_to_compare if p.is_next_level(child2.tag, child2.attrib)]
+            if show_log:
+                if len(_content_to_compare) > 0:
+                    print(f"\t{[c.list for c in _content_to_compare] = }")
+                elif len(content_to_compare) > len(_content_to_compare):
+                    print(f"\t{[c.list for c in content_to_compare] = }")
+                    print(f"\t{child2.tag = }, {child2.attrib = }")
+                if len(_attrib_to_compare) > 0:
+                    print(f"\t{[(a.list, a.value) for a in _attrib_to_compare] = }")
+                elif len(attrib_to_compare) > len(_attrib_to_compare):
+                    print(f"\t{[(a.list, a.value) for a in attrib_to_compare] = }")
+                    print(f"\t{child2.attrib = }")
+                # print(f"\t{[a.list for a in _attrib_to_compare] = }")
+                # print(f"\t{child2.attrib = }")
             _terminal_paths = [XMLPathValue(p.list[1:], None) for p in terminal_paths if p.is_next_level(child2.tag, child2.attrib)]
             _nonexistant_paths = [XMLPathValue(p.list[1:], None) for p in nonexistant_paths if p.is_next_level(child2.tag, child2.attrib)]
             assert self.compare_elements(child1, child2, _content_to_compare, _attrib_to_compare, _terminal_paths, _nonexistant_paths, rename_dict, show_log)
@@ -564,6 +579,9 @@ class StudioTest:
             return zip([], [])
         if 'enabled' in elem1.attrib.keys() and elem1.attrib['enabled'].lower() == 'false':
             print(f"\t{elem1.tag} is disabled in the old xml. Recursing through new xml to check if values and attribs match those explicitly set.")
+            return zip(elem2, elem2)
+        if elem1.tag != elem2.tag:
+            print(f"\telem1.tag != elem2.tag: {elem1.tag} != {elem2.tag}. Recursing through new xml only.")
             return zip(elem2, elem2)
         if 'name' not in elem2[0].attrib.keys():
             return zip(elem1, elem2)
@@ -578,6 +596,8 @@ class StudioTest:
                 elem1_child = elem1.find(f".//{child.tag}[@ID='{child.attrib['ID']}']")
             elif 'index' in child.attrib.keys():
                 elem1_child = elem1.find(f".//{child.tag}[@index='{child.attrib['index']}']")
+            elif 'start_index' in child.attrib.keys():
+                elem1_child = elem1.find(f".//{child.tag}[@start_index='{child.attrib['start_index']}']")
             else:
                 elem1_child = elem1.find(child.tag)
             if elem1_child is not None:
@@ -590,6 +610,7 @@ class StudioTest:
     def compare_attrib(self, elem1, elem2, attrib_to_compare: list[XMLPathValue], rename_dict, show_log):
         # if show_log:
         #     print(f"Comparing attrib: {xml_path_value.list}")
+        attrib_to_ignore = []
         for xml_path_value in attrib_to_compare:
             if show_log:
                 print(f"\t{xml_path_value.list = }")
@@ -605,13 +626,18 @@ class StudioTest:
                     assert elem2.attrib[xml_path_value.list[0][1]] == xml_path_value.value, f"Attrib {elem2.tag}[@{xml_path_value.list[0][1]}] does not match expected value: {elem2.attrib[xml_path_value.list[0][1]]} != {xml_path_value.value}"
                 except AssertionError as e:
                     raise e
-                return
+                attrib_to_ignore.append(xml_path_value.list[0][1])
         # otherwise, compare the two elem attribs
         differs = False
         # make sure that all elem2 attributes are in elem1
-        differs = any([k not in elem1.attrib.keys() for k in elem2.attrib.keys()])
+        differs = any([k not in elem1.attrib.keys() for k in elem2.attrib.keys() if k not in attrib_to_ignore])
+        if differs:
+            print(f"\t{elem2.attrib = }")
+            print(f"\t{elem1.attrib = }")
         if not differs:
             for key in elem1.attrib.keys():
+                if key in attrib_to_ignore:
+                    continue
                 if key not in elem2.attrib.keys():
                     differs = True
                     break
@@ -624,7 +650,6 @@ class StudioTest:
         try:
             assert not differs, f"Attribs do not match for {elem1.tag}: {elem1.attrib} != {elem2.attrib}"
         except AssertionError as e:
-            print(f"Attributes to compare: {attrib_to_compare}")
             raise e
         return
 
@@ -634,6 +659,9 @@ class StudioTest:
                 print(f"\tContent assertion: {elem2.text} == {xml_path_value.value}")
                 assert elem2.text == xml_path_value.value
                 return
+            else:
+                if show_log:
+                    print(f"\t{xml_path_value.list = }")
         # otherwise, compare the two elem contents       
         differs = False
         t1 = elem1.text
@@ -659,7 +687,7 @@ class StudioTest:
     def tokenize_element(self, element):
         return element.split(':')
     
-    def test_tab(self, tab_name, tab_path: list[str]):
+    def test_tab(self, tab_name, tab_path: list[str], show_log=False):
         print(f"\n{'-'*10}TESTING {tab_name.upper()}{'-'*10}\n")
         tab = self.xml_creator
         for p in tab_path:
@@ -669,11 +697,11 @@ class StudioTest:
                 testing_fn = getattr(self, f"test_{suffix}")
                 print(f"\n\t-- Testing {tab_name}_{suffix}:\n")
                 items_to_test = getattr(self, f"{tab_name}_{suffix}")
-                testing_fn(items_to_test, tab)
+                testing_fn(items_to_test, tab, show_log)
             else:
                 print(f"No {tab_name}_{suffix} to test")
 
-    def test_text_fields(self, items_to_test, tab):
+    def test_text_fields(self, items_to_test, tab, show_log):
         for field, d in items_to_test.items():
             print(f"Checking {field}")
             original_value = tab.__getattribute__(field).text()
@@ -682,6 +710,8 @@ class StudioTest:
             tab.__getattribute__(field).setText(d['new_value'])
             self.save_xml()
             xml_path_value = XMLPathValue('PhysiCell_settings//' + d['xml_path'], d['new_value'])
+            if show_log:
+                print(f"{xml_path_value.list = }")
             if xml_path_value.is_attrib():
                 attrib_to_compare = [xml_path_value]
                 content_to_compare = []
@@ -693,12 +723,16 @@ class StudioTest:
             if 'extra_attrib_to_compare' in d.keys():
                 attrib_to_compare += [XMLPathValue('PhysiCell_settings//' + k, v) for k, v in d['extra_attrib_to_compare'].items()]
             terminal_paths = []
-            assert self.compare_xml(self.path_to_xml, "./config/__test__.xml", content_to_compare, attrib_to_compare, terminal_paths, nonexistant_paths=[], rename_dict={}, show_log=False)
+            if show_log:
+                print(f"{[c.list for c in content_to_compare] = }")
+                print(f"{[a.list for a in attrib_to_compare] = }")
+
+            assert self.compare_xml(self.path_to_xml, "./config/__test__.xml", content_to_compare, attrib_to_compare, terminal_paths, nonexistant_paths=[], rename_dict={}, show_log=show_log)
             if 'post_check_fn' in d.keys():
                 d['post_check_fn']()
             tab.__getattribute__(field).setText(original_value)
             
-    def test_checkboxes(self, items_to_test, tab):
+    def test_checkboxes(self, items_to_test, tab, show_log):
         for field, d in items_to_test.items():
             print(f"Checking {field}")
             original_value = tab.__getattribute__(field).isChecked()
@@ -718,27 +752,35 @@ class StudioTest:
             assert self.compare_xml(self.path_to_xml, "./config/__test__.xml", content_to_compare, attrib_to_compare, [])
             tab.__getattribute__(field).setChecked(original_value)
 
-    def test_radiobuttons(self, items_to_test, tab):
+    def test_radiobuttons(self, items_to_test, tab, show_log):
         for field, d in items_to_test.items():
             print(f"Checking {field}")
             original_value = tab.__getattribute__(field).isChecked()
             d["toggle_fn"]()
             self.save_xml()
-            xml_path_value = XMLPathValue('PhysiCell_settings//' + d['xml_path'], d['new_value'](original_value))
-            if xml_path_value.is_attrib():
-                attrib_to_compare = [xml_path_value]
-                content_to_compare = []
-            else:
-                content_to_compare = [xml_path_value]
-                attrib_to_compare = []
+
+            content_to_compare = []
+            attrib_to_compare = []
+            if 'xml_path' in d.keys():
+                xml_path_value = XMLPathValue('PhysiCell_settings//' + d['xml_path'], d['new_value'](original_value))
+                if xml_path_value.is_attrib():
+                    attrib_to_compare = [xml_path_value]
+                else:
+                    content_to_compare = [xml_path_value]
             if 'extra_content_to_compare' in d.keys():
                 content_to_compare += [XMLPathValue('PhysiCell_settings//' + k, v) for k, v in d['extra_content_to_compare'].items()]
             if 'extra_attrib_to_compare' in d.keys():
                 attrib_to_compare += [XMLPathValue('PhysiCell_settings//' + k, v) for k, v in d['extra_attrib_to_compare'].items()]
-            assert self.compare_xml(self.path_to_xml, "./config/__test__.xml", content_to_compare, attrib_to_compare, [])
+            terminal_paths = []
+            if 'terminal_paths' in d.keys():
+                terminal_paths += d['terminal_paths']
+            nonexistant_paths = []
+            if 'nonexistant_paths' in d.keys():
+                nonexistant_paths += d['nonexistant_paths']
+            assert self.compare_xml(self.path_to_xml, "./config/__test__.xml", content_to_compare, attrib_to_compare, terminal_paths, nonexistant_paths, show_log=False)
             d["toggle_fn"]()
 
-    def test_comboboxes(self, items_to_test, tab):
+    def test_comboboxes(self, items_to_test, tab, show_log):
         for field, d in items_to_test.items():
             print(f"Checking {field}")
             original_value = tab.__getattribute__(field).currentText()
@@ -748,6 +790,8 @@ class StudioTest:
             for i in range(tab.__getattribute__(field).count()):
                 tab.__getattribute__(field).setCurrentIndex((original_index + i) % tab.__getattribute__(field).count())
                 new_value = tab.__getattribute__(field).currentText()
+                if 'original_value_transform' in d.keys():
+                    new_value = d['original_value_transform'](new_value)
                 self.save_xml()
                 xml_path_value = XMLPathValue('PhysiCell_settings//' + d['xml_path'], new_value)
                 if xml_path_value.is_attrib():
@@ -766,7 +810,7 @@ class StudioTest:
             if 'post_loop_fn' in d.keys():
                 d['post_loop_fn']()
 
-    def test_trees(self, items_to_test, tab):
+    def test_trees(self, items_to_test, tab, show_log):
         for field, d in items_to_test.items():
             print(f"Checking {field}")
             tree = tab.__getattribute__(field)
@@ -793,7 +837,7 @@ class StudioTest:
                 with suppress_output():
                     tree.topLevelItem(i).setText(0, original_value)
 
-    def test_buttons(self, items_to_test, tab):
+    def test_buttons(self, items_to_test, tab, show_log):
         for field, d in items_to_test.items():
             print(f"Checking {field}")
             with suppress_output():
@@ -867,7 +911,7 @@ class StudioTest:
                 post_set_fn = lambda: (self.xml_creator.config_tab.plot_substrate_svg.setChecked(False), self.xml_creator.config_tab.plot_substrate_limits.setChecked(False))
             for field in ["svg_substrate_min", "svg_substrate_max"]:
                 self.config_tab_text_fields[field]["pre_set_fn"] = pre_set_fn
-                self.config_tab_text_fields[field]["extra_attrib_to_compare"] = {"save//SVG//plot_substrate:enabled": "true"}
+                self.config_tab_text_fields[field]["extra_attrib_to_compare"] = {"save//SVG//plot_substrate:enabled": "true", "save//SVG//plot_substrate:limits": "true"}
                 self.config_tab_text_fields[field]["post_check_fn"] = post_set_fn
 
     def create_config_tab_checkboxes(self):
@@ -899,24 +943,87 @@ class StudioTest:
 
     ########### perturb celldef tab in gui and check xml ############
     def create_celldef_tab_widget_dicts(self):
-        # self.create_celldef_tab_text_fields()
+        self.create_celldef_tab_text_fields()
         # self.create_celldef_tab_checkboxes()
-        # self.create_celldef_tab_comboboxes()
-        # self.create_celldef_tab_radiobuttons()
+        self.create_celldef_tab_comboboxes()
+        self.create_celldef_tab_radiobuttons()
         self.create_celldef_tab_trees()
         self.create_celldef_tab_buttons()
 
     def create_celldef_tab_text_fields(self):
-        raise NotImplementedError
-    
+        self.celldef_tab_text_fields = {}
+        cycle_code_dict = {
+            'advanced Ki67': {'cycle_code': 0, 'short_name': 'advancedKi67', 'combobox_idx': 2, 'num_phases': 3},
+            'basic Ki67': {'cycle_code': 1, 'short_name': 'Ki67', 'combobox_idx': 1, 'num_phases': 2},
+            'flow cytometry': {'cycle_code': 2, 'short_name': 'flowcyto', 'combobox_idx': 3, 'num_phases': 3},
+            'live cells': {'cycle_code': 5, 'short_name': 'live', 'combobox_idx': 0, 'num_phases': 1},
+            'flow cytometry separated': {'cycle_code': 6, 'short_name': 'flowcytosep', 'combobox_idx': 4, 'num_phases': 4},
+            'cycling quiescent': {'cycle_code': 7, 'short_name': 'quiescent', 'combobox_idx': 5, 'num_phases': 2}
+        }
+        for suffix in ['trate', 'duration']:
+            phase_block_name = 'phase_transition_rates' if suffix == 'trate' else 'phase_durations'
+            phase_name = 'rate' if suffix == 'trate' else 'duration'
+            phase_attrib = 'start_index' if suffix == 'trate' else 'index'
+            phase_units = '1/min' if suffix == 'trate' else 'min'
+            cycle_rb_name = 'cycle_rb1' if suffix == 'trate' else 'cycle_rb2'
+            for d in cycle_code_dict.values():
+                print(f"{d['combobox_idx'] = }")
+                pre_set_fn = lambda idx=d['combobox_idx'], rb_name=cycle_rb_name: (self.xml_creator.celldef_tab.tree.itemClicked.emit(self.xml_creator.celldef_tab.tree.topLevelItem(0), 0),
+                                                            self.xml_creator.celldef_tab.__getattribute__(rb_name).setChecked(True),
+                                                            self.xml_creator.celldef_tab.cycle_dropdown.setCurrentIndex(idx))
+                print(f"{self.xml_creator.celldef_tab.cycle_dropdown.currentIndex() = }")
+                base_name = d['short_name']
+                cycle_base_name = f"cycle_{base_name}"
+                n_phases = d['num_phases']
+                for start_phase_index in range(n_phases):
+                    end_phase_index = (start_phase_index + 1) % n_phases
+                    phases_name = f"{cycle_base_name}_{start_phase_index}{end_phase_index}"
+                    name = f"{phases_name}_{suffix}"
+                    # extra_attrib_to_compare = {f"cell_definitions//cell_definition:name:default//phenotype//cycle:code:{d['cycle_code']}//{phase_block_name}:units": phase_units}
+                    extra_attrib_to_compare = {f"cell_definitions//cell_definition:name:default//phenotype//cycle:code:{d['cycle_code']}//{phase_block_name}:units": phase_units,
+                                                f"cell_definitions//cell_definition:name:default//phenotype//cycle:code:{d['cycle_code']}//{phase_block_name}//{phase_name}:{phase_attrib}": str(start_phase_index)}
+                    if suffix == 'trate':
+                        extra_attrib_to_compare[f"cell_definitions//cell_definition:name:default//phenotype//cycle:code:{d['cycle_code']}//{phase_block_name}//{phase_name}:end_index"] = str(end_phase_index)
+                    self.celldef_tab_text_fields[name] = {'xml_path': f'cell_definitions//cell_definition:name:default//phenotype//cycle:code:{d["cycle_code"]}//{phase_block_name}//{phase_name}:{phase_attrib}:{start_phase_index}',
+                                                          'new_value': "12321",
+                                                          'pre_set_fn': pre_set_fn,
+                                                          'extra_attrib_to_compare': extra_attrib_to_compare}
+
     def create_celldef_tab_checkboxes(self):
         raise NotImplementedError
     
     def create_celldef_tab_comboboxes(self):
-        raise NotImplementedError
+        self.celldef_tab_comboboxes = {'cycle_dropdown': 'cell_definitions//cell_definition:name:default//phenotype//cycle:code'}
+        self.celldef_tab_comboboxes = {k: {'xml_path': v} for k, v in self.celldef_tab_comboboxes.items()}
+
+        self.celldef_tab_comboboxes['cycle_dropdown']['pre_loop_fn'] = lambda: self.xml_creator.celldef_tab.tree.itemClicked.emit(self.xml_creator.celldef_tab.tree.topLevelItem(0), 0)
+        self.celldef_tab_comboboxes['cycle_dropdown']['terminal_paths'] = [XMLPathValue('PhysiCell_settings//cell_definitions//cell_definition:name:new_cell//phenotype//cycle', None)]
+
+        cycle_code_dict = {
+            'advanced Ki67': {'cycle_code': 0, 'short_name': 'advancedKi67', 'combobox_idx': 2, 'num_phases': 3},
+            'basic Ki67': {'cycle_code': 1, 'short_name': 'Ki67', 'combobox_idx': 1, 'num_phases': 2},
+            'flow cytometry': {'cycle_code': 2, 'short_name': 'flowcyto', 'combobox_idx': 3, 'num_phases': 3},
+            'live cells': {'cycle_code': 5, 'short_name': 'live', 'combobox_idx': 0, 'num_phases': 1},
+            'flow cytometry separated': {'cycle_code': 6, 'short_name': 'flowcytosep', 'combobox_idx': 4, 'num_phases': 4},
+            'cycling quiescent': {'cycle_code': 7, 'short_name': 'quiescent', 'combobox_idx': 5, 'num_phases': 2}
+        }
+        self.celldef_tab_comboboxes['cycle_dropdown']['original_value_transform'] = lambda original_value: str(cycle_code_dict[original_value]['cycle_code'])
     
     def create_celldef_tab_radiobuttons(self):
-        raise NotImplementedError
+        self.celldef_tab_radiobuttons = {}
+        cycle_rb_names = ['cycle_rb1','cycle_rb2']
+        phase_block_names = ['phase_transition_rates','phase_durations']
+        units = ['1/min','min']
+        if self.xml_creator.celldef_tab.cycle_duration_flag == False:
+            cycle_rb_names.reverse()
+            phase_block_names.reverse()
+            units.reverse()
+        for i, (cycle_rb_name, phase_block_name, units) in enumerate(zip(cycle_rb_names, phase_block_names, units)):
+            self.celldef_tab_radiobuttons[cycle_rb_name] = {}
+            self.celldef_tab_radiobuttons[cycle_rb_name]['toggle_fn'] = self.xml_creator.celldef_tab.__getattribute__(cycle_rb_name).toggle
+            self.celldef_tab_radiobuttons[cycle_rb_name]['extra_attrib_to_compare'] = {f"cell_definitions//cell_definition:name:default//phenotype//cycle//{phase_block_name}:units": units}
+            self.celldef_tab_radiobuttons[cycle_rb_name]['terminal_paths'] = [XMLPathValue(f'PhysiCell_settings//cell_definitions//cell_definition:name:default//phenotype//cycle//{phase_block_name}', None)]            
+            self.celldef_tab_radiobuttons[cycle_rb_name]['nonexistant_paths'] = [XMLPathValue(f'PhysiCell_settings//cell_definitions//cell_definition:name:default//phenotype//cycle//{phase_block_names[(i+1) % 2]}', None)]
     
     def create_celldef_tab_trees(self):
         self.celldef_tab_trees = {'tree': 'cell_definitions//cell_definition:name'}
@@ -930,7 +1037,13 @@ class StudioTest:
         self.celldef_tab_buttons['new_button']['post_push_fn'] = lambda: self.set_current_celldef_name(new_button_new_value)
         self.celldef_tab_buttons['new_button']['terminal_paths'] = [XMLPathValue(f'PhysiCell_settings//cell_definitions//cell_definition:name:{new_button_new_value}', None)]
 
-        self.celldef_tab_buttons['delete_button'] = {'nonexistant_paths': [XMLPathValue(f'PhysiCell_settings//cell_definitions//cell_definition:name:{new_button_new_value}', None)]}
+        copy_button_new_value = "new_cell_copy__"
+        self.celldef_tab_buttons['copy_button'] = {}
+        self.celldef_tab_buttons['copy_button']['new_value'] = {} # no new_values to check. just stop recursing on getting to the new cell def
+        self.celldef_tab_buttons['copy_button']['post_push_fn'] = lambda: self.set_current_celldef_name(copy_button_new_value)
+        self.celldef_tab_buttons['copy_button']['terminal_paths'] = [XMLPathValue(f'PhysiCell_settings//cell_definitions//cell_definition:name:{copy_button_new_value}', None)]
+
+        self.celldef_tab_buttons['delete_button'] = {'nonexistant_paths': [XMLPathValue(f'PhysiCell_settings//cell_definitions//cell_definition:name:{copy_button_new_value}', None)]}
 
     def set_current_celldef_name(self, name):
         with suppress_output():
@@ -940,10 +1053,9 @@ class StudioTest:
         self.studio_app.quit()
 
 if __name__ == "__main__":
-    with suppress_output():
-        studio_test = StudioTest(config_file="./config/PhysiCell_settings.xml")
+    studio_test = StudioTest(config_file="./config/PhysiCell_settings.xml")
     studio_test.check_import()
     # search through this file for all 
     studio_test.test_tab("config_tab", ["config_tab"])
-    studio_test.test_tab("celldef_tab", ["celldef_tab"])
+    studio_test.test_tab("celldef_tab", ["celldef_tab"], show_log=False)
     
