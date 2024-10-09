@@ -565,7 +565,8 @@ class StudioTest:
                     print(f"\t{[(a.list, a.value) for a in _attrib_to_compare] = }")
                 elif len(attrib_to_compare) > len(_attrib_to_compare):
                     print(f"\t{[(a.list, a.value) for a in attrib_to_compare] = }")
-                    print(f"\t{child2.attrib = }")
+                    print(f"\t\t{child2.tag = }")
+                    print(f"\t\t{child2.attrib = }")
                 # print(f"\t{[a.list for a in _attrib_to_compare] = }")
                 # print(f"\t{child2.attrib = }")
             _terminal_paths = [XMLPathValue(p.list[1:], None) for p in terminal_paths if p.is_next_level(child2.tag, child2.attrib)]
@@ -703,6 +704,8 @@ class StudioTest:
 
     def test_text_fields(self, items_to_test, tab, show_log):
         for field, d in items_to_test.items():
+            if 'show_log' in d.keys():
+                show_log = d['show_log']
             print(f"Checking {field}")
             original_value = tab.__getattribute__(field).text()
             if 'pre_set_fn' in d.keys():
@@ -731,6 +734,8 @@ class StudioTest:
             if 'post_check_fn' in d.keys():
                 d['post_check_fn']()
             tab.__getattribute__(field).setText(original_value)
+            if 'show_log' in d.keys():
+                show_log = False
             
     def test_checkboxes(self, items_to_test, tab, show_log):
         for field, d in items_to_test.items():
@@ -953,6 +958,7 @@ class StudioTest:
     def create_celldef_tab_text_fields(self):
         self.celldef_tab_text_fields = {}
         self.create_celldef_tab_cycle_text_fields()
+        self.create_celldef_tab_death_text_fields()
 
     def create_celldef_tab_cycle_text_fields(self):
         new_dict = {}
@@ -977,22 +983,65 @@ class StudioTest:
                 base_name = d['short_name']
                 cycle_base_name = f"cycle_{base_name}"
                 n_phases = d['num_phases']
+                path_to_phase_block = f"cell_definitions//cell_definition:name:default//phenotype//cycle:code:{d['cycle_code']}//{phase_block_name}"
                 for start_phase_index in range(n_phases):
                     end_phase_index = (start_phase_index + 1) % n_phases
                     phases_name = f"{cycle_base_name}_{start_phase_index}{end_phase_index}"
                     name = f"{phases_name}_{suffix}"
-                    # extra_attrib_to_compare = {f"cell_definitions//cell_definition:name:default//phenotype//cycle:code:{d['cycle_code']}//{phase_block_name}:units": phase_units}
-                    extra_attrib_to_compare = {f"cell_definitions//cell_definition:name:default//phenotype//cycle:code:{d['cycle_code']}//{phase_block_name}:units": phase_units,
-                                                f"cell_definitions//cell_definition:name:default//phenotype//cycle:code:{d['cycle_code']}//{phase_block_name}//{phase_name}:{phase_attrib}": str(start_phase_index)}
+                    path_to_phase_name = f"{path_to_phase_block}//{phase_name}"
+                    path_to_phase_attrib = f"{path_to_phase_name}:{phase_attrib}"
+                    extra_attrib_to_compare = {f"{path_to_phase_block}:units": phase_units,
+                                                f"{path_to_phase_attrib}": str(start_phase_index)}
                     if suffix == 'trate':
-                        extra_attrib_to_compare[f"cell_definitions//cell_definition:name:default//phenotype//cycle:code:{d['cycle_code']}//{phase_block_name}//{phase_name}:end_index"] = str(end_phase_index)
-                    new_dict[name] = {'xml_path': f'cell_definitions//cell_definition:name:default//phenotype//cycle:code:{d["cycle_code"]}//{phase_block_name}//{phase_name}:{phase_attrib}:{start_phase_index}',
-                                                          'new_value': "12321",
-                                                          'pre_set_fn': pre_set_fn,
-                                                          'extra_attrib_to_compare': extra_attrib_to_compare}
+                        extra_attrib_to_compare[f"{path_to_phase_name}:end_index"] = str(end_phase_index)
+                    new_dict[name] = {'xml_path': f"{path_to_phase_attrib}:{start_phase_index}",
+                                      'new_value': "12321",
+                                      'pre_set_fn': pre_set_fn,
+                                      'extra_attrib_to_compare': extra_attrib_to_compare}
+        self.celldef_tab_text_fields.update(new_dict)
+
+    def create_celldef_tab_death_text_fields(self):
+        new_dict = {}
+        for death_model in ['necrosis', 'apoptosis']:
+            path_to_model = f'cell_definitions//cell_definition:name:default//phenotype//death//model:name:{death_model}'
+            new_dict[f'{death_model}_death_rate'] = {'xml_path': f'{path_to_model}//death_rate', 'new_value': "12321"}
+
+            num_phases = 2 if death_model == 'necrosis' else 1
+            for suffix in ['trate', 'duration']:
+                for start_phase_index in range(num_phases):
+                    end_phase_index = start_phase_index + 1
+                    name = f"{death_model}_{start_phase_index}{end_phase_index}_{suffix}"
+                    rb_name = f'{death_model}_rb1' if suffix == 'trate' else f'{death_model}_rb2'
+                    phase_block_name = 'phase_transition_rates' if suffix == 'trate' else 'phase_durations'
+                    phase_units = '1/min' if suffix == 'trate' else 'min'
+                    phase_name = 'rate' if suffix == 'trate' else 'duration'
+                    phase_attrib = 'start_index' if suffix == 'trate' else 'index'
+                    path_to_block = f"{path_to_model}//{phase_block_name}"
+                    path_to_phase_name = f"{path_to_block}//{phase_name}"
+                    extra_attrib_to_compare = {f'{path_to_block}:units': phase_units,
+                                            f'{path_to_phase_name}:{phase_attrib}': str(start_phase_index)}
+                    if suffix == 'trate':
+                        extra_attrib_to_compare[f'{path_to_phase_name}:end_index'] = str(end_phase_index)
+                    new_dict[name] = {'xml_path': f'{path_to_phase_name}:{phase_attrib}:{start_phase_index}',
+                                                    'new_value': "12321",
+                                                    'pre_set_fn': lambda rb_name_=rb_name: (self.xml_creator.celldef_tab.tree.itemClicked.emit(self.xml_creator.celldef_tab.tree.topLevelItem(0), 0),
+                                                                        self.xml_creator.celldef_tab.__getattribute__(rb_name_).setChecked(True)),
+                                                    'extra_attrib_to_compare': extra_attrib_to_compare} 
+            
+            path_to_pars = f'{path_to_model}//parameters'
+            apop_par_dict = {f'{death_model}_unlysed_rate': f'{path_to_pars}//unlysed_fluid_change_rate',
+                            f'{death_model}_lysed_rate': f'{path_to_pars}//lysed_fluid_change_rate',
+                            f'{death_model}_cytoplasmic_biomass_change_rate': f'{path_to_pars}//cytoplasmic_biomass_change_rate',
+                            f'{death_model}_nuclear_biomass_change_rate': f'{path_to_pars}//nuclear_biomass_change_rate',
+                            f'{death_model}_calcification_rate': f'{path_to_pars}//calcification_rate',
+                            f'{death_model}_relative_rupture_volume': f'{path_to_pars}//relative_rupture_volume'}
+            new_dict.update({k: {'xml_path': v, 'new_value': "12321"} for k, v in apop_par_dict.items()})
+                                            
+        # new_dict['necrosis_12_trate']['show_log'] = True
         self.celldef_tab_text_fields.update(new_dict)
 
     def create_celldef_tab_checkboxes(self):
+        # Need to do fixed checkboxes for cycle and death models still
         raise NotImplementedError
     
     def create_celldef_tab_comboboxes(self):
@@ -1027,7 +1076,21 @@ class StudioTest:
             self.celldef_tab_radiobuttons[cycle_rb_name]['extra_attrib_to_compare'] = {f"cell_definitions//cell_definition:name:default//phenotype//cycle//{phase_block_name}:units": units}
             self.celldef_tab_radiobuttons[cycle_rb_name]['terminal_paths'] = [XMLPathValue(f'PhysiCell_settings//cell_definitions//cell_definition:name:default//phenotype//cycle//{phase_block_name}', None)]            
             self.celldef_tab_radiobuttons[cycle_rb_name]['nonexistant_paths'] = [XMLPathValue(f'PhysiCell_settings//cell_definitions//cell_definition:name:default//phenotype//cycle//{phase_block_names[(i+1) % 2]}', None)]
-    
+        
+        apoptosis_rb_names = ['apoptosis_rb1','apoptosis_rb2']
+        units = ['1/min','min']
+        if self.xml_creator.celldef_tab.apoptosis_duration_flag == False:
+            apoptosis_rb_names.reverse()
+            phase_block_names.reverse()
+            units.reverse()
+        for i, (apoptosis_rb_name, phase_block_name, units) in enumerate(zip(apoptosis_rb_names, phase_block_names, units)):
+            self.celldef_tab_radiobuttons[apoptosis_rb_name] = {}
+            self.celldef_tab_radiobuttons[apoptosis_rb_name]['toggle_fn'] = self.xml_creator.celldef_tab.__getattribute__(apoptosis_rb_name).toggle
+            self.celldef_tab_radiobuttons[apoptosis_rb_name]['extra_attrib_to_compare'] = {f"cell_definitions//cell_definition:name:default//phenotype//death//model:name:apoptosis//{phase_block_name}:units": units}
+            self.celldef_tab_radiobuttons[apoptosis_rb_name]['terminal_paths'] = [XMLPathValue(f'PhysiCell_settings//cell_definitions//cell_definition:name:default//phenotype//death//model:name:apoptosis//{phase_block_name}', None)]            
+            self.celldef_tab_radiobuttons[apoptosis_rb_name]['nonexistant_paths'] = [XMLPathValue(f'PhysiCell_settings//cell_definitions//cell_definition:name:default//phenotype//death//model:name:apoptosis//{phase_block_names[(i+1) % 2]}', None)]
+
+
     def create_celldef_tab_trees(self):
         self.celldef_tab_trees = {'tree': 'cell_definitions//cell_definition:name'}
         self.celldef_tab_trees = {k: {'xml_path': v} for k, v in self.celldef_tab_trees.items()}
