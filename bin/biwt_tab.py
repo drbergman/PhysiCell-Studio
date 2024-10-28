@@ -39,15 +39,15 @@ from matplotlib.patches import Circle, Patch, Rectangle, Annulus, Wedge
 from matplotlib.collections import PatchCollection
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
-from matplotlib import transforms
 
 from pathlib import Path
 import xml.etree.ElementTree as ET  # https://docs.python.org/2/library/xml.etree.elementtree.html
 from PyQt5 import QtCore, QtGui
-from PyQt5.QtWidgets import QApplication,QWidget,QLineEdit,QHBoxLayout,QVBoxLayout,QRadioButton,QPushButton, QLabel,QCheckBox,QComboBox,QScrollArea,QGridLayout, QFileDialog, QButtonGroup, QSplitter, QSizePolicy, QSpinBox
+from PyQt5.QtWidgets import QApplication,QWidget,QLineEdit,QHBoxLayout,QVBoxLayout,QRadioButton,QPushButton, QLabel,QCheckBox,QComboBox,QScrollArea,QGridLayout, QFileDialog, QButtonGroup, QSplitter, QSizePolicy, QSpinBox, QCompleter
 from PyQt5.QtGui import QIcon
+from PyQt5.QtCore import QStringListModel, Qt
 
-from studio_classes import QHLine, QVLine, QCheckBox_custom, QRadioButton_custom, LegendWindow
+from studio_classes import QHLine, QVLine, QCheckBox_custom, QRadioButton_custom, LegendWindow, ExtendedCombo
 
 class GoBackButton(QPushButton):
     def __init__(self, parent, biwt, pre_cb=None, post_cb=None):
@@ -3101,11 +3101,6 @@ class BioinformaticsWalkthrough(QWidget):
         self.close()
         self.window.close()
         print("BioinformaticsWalkthroughWindow: Colors will likely change in the ICs tab due to previous cell types being present.")
-
-from PyQt5.QtCore import QStringListModel, Qt
-from PyQt5.QtWidgets import QCompleter
-from cell_def_tab import CellDef
-from studio_classes import ExtendedCombo
 
 class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWindow):
     def __init__(self, biwt):
