@@ -3079,12 +3079,14 @@ class BioinformaticsWalkthrough(QWidget):
         self.open_next_window(BioinformaticsWalkthroughWindow_PositionsWindow, show=True)
 
     def continue_from_positions(self):
-        self.write_to_file()
+        self.open_next_window(BioinformaticsWalkthrough_LoadCellParameters, show=True)
 
-    ### Write data
+    def continue_from_parameters(self):
+        self.write_to_file()
+    
     def write_to_file(self):
         self.open_next_window(BioinformaticsWalkthroughWindow_WritePositions, show=True)
-        
+
     ### Finish
     def close_up(self):
         plt.style.use("default")
@@ -3100,7 +3102,79 @@ class BioinformaticsWalkthrough(QWidget):
         self.window.close()
         print("BioinformaticsWalkthroughWindow: Colors will likely change in the ICs tab due to previous cell types being present.")
 
-# helper functions
+from PyQt5.QtCore import QStringListModel, Qt
+from PyQt5.QtWidgets import QCompleter
+from cell_def_tab import CellDef
+from studio_classes import ExtendedCombo
+
+class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWindow):
+    def __init__(self, biwt):
+        super().__init__(biwt)
+        print("----Loading cell parameters----")
+
+        vbox = QVBoxLayout()
+
+        instruction_label = QLabel("Select your cell types:")
+        vbox.addWidget(instruction_label)
+        vbox_scroll_area = QVBoxLayout()
+
+        self.dropdowns = []
+
+        items = ["Template", "Template2", "Template3", "Default"]
+        items.sort()
+        self.model = QStringListModel(items)
+
+        for cell_type in self.biwt.cell_types_list_original:
+            hbox = QHBoxLayout()
+            cell_type_label = QLabel(f"{cell_type} \u21d2 ")
+            hbox.addWidget(cell_type_label)
+
+            dropdown = ExtendedCombo()
+            dropdown.setModel(self.model) 
+            dropdown.setEditable(True)
+
+            completer = QCompleter(self.model, dropdown) 
+            dropdown.setCompleter(completer)
+            completer.setCompletionMode(QCompleter.PopupCompletion)
+            completer.setCaseSensitivity(Qt.CaseInsensitive)
+
+            dropdown.currentIndexChanged.connect(self.handle_dropdown_change)
+            hbox.addWidget(dropdown)
+
+            self.dropdowns.append((cell_type, dropdown))  
+            vbox_scroll_area.addLayout(hbox)
+
+        widget_scroll_area = QWidget()
+        widget_scroll_area.setLayout(vbox_scroll_area)
+        dropdown_scroll_area = QScrollArea()
+        dropdown_scroll_area.setWidget(widget_scroll_area)
+        vbox.addWidget(dropdown_scroll_area)
+
+        go_back_button = GoBackButton(self, self.biwt)
+        continue_button = ContinueButton(self, self.process_window, styleSheet=self.biwt.qpushbutton_style_sheet)
+
+        hbox = QHBoxLayout()
+        hbox.addWidget(go_back_button)
+        hbox.addWidget(continue_button)
+
+        vbox.addLayout(hbox)
+        self.setLayout(vbox)
+        self.resize(400, 600)
+
+    def handle_dropdown_change(self):
+        for cell_type, dropdown in self.dropdowns:
+            if dropdown.currentText() == "Default":
+                self.create_new_cell_definition(cell_type)
+            # elif... handling for other templates
+
+    def create_new_cell_definition(self, cell_name):
+        reset_mapping = True  
+        self.init_default_phenotype_params(cell_name, reset_mapping)
+
+    def process_window(self):
+        self.biwt.continue_from_parameters()
+
+
 def create_checkboxes_for_cell_types(vbox, cell_types):
     checkbox_dict = {}
     for cell_type in cell_types:
