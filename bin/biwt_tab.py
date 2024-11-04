@@ -3103,6 +3103,7 @@ class BioinformaticsWalkthrough(QWidget):
         print("BioinformaticsWalkthroughWindow: Colors will likely change in the ICs tab due to previous cell types being present.")
 
 class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWindow):
+    current_id = 0
     def __init__(self, biwt):
         super().__init__(biwt)
         print("----Loading cell parameters----")
@@ -3115,7 +3116,7 @@ class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWind
 
         self.dropdowns = []
 
-        items = ["Template", "Template2", "Template3", "Default"]
+        items = ["Normal Epithelial", "Default"]
         items.sort()
         self.model = QStringListModel(items)
 
@@ -3159,16 +3160,232 @@ class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWind
     def handle_dropdown_change(self):
         for cell_type, dropdown in self.dropdowns:
             if dropdown.currentText() == "Default":
-                self.create_new_cell_definition(cell_type)
-            # elif... handling for other templates
+                self.create_new_cell_definition(cell_type, template_name="Default")
+            elif dropdown.currentText() == "Normal Epithelial":
+                 self.create_new_cell_definition(cell_type, template_name="Normal Epithelial")
 
-    def create_new_cell_definition(self, cell_name):
-        reset_mapping = True  
-        self.init_default_phenotype_params(cell_name, reset_mapping)
+    def create_new_cell_definition(self, cell_type, template_name="Default"):
+        cell_definition = ET.Element("cell_definition", name=cell_type, ID=str(BioinformaticsWalkthrough_LoadCellParameters.current_id))
+        BioinformaticsWalkthrough_LoadCellParameters.current_id += 1
+
+        if template_name == "Normal Epithelial":
+            self.add_normal_epithelial_cell_parameters(cell_definition)
+
+        if template_name == "Default":
+            self.add_default_cell_parameters(cell_definition)
+
+        self.update_physicell_settings(cell_definition)
+
+    def add_default_cell_parameters(self, cell_definition):
+        phenotype = ET.SubElement(cell_definition, "phenotype")
+
+        cycle = ET.SubElement(phenotype, "cycle", code="6", name="Flow cytometry model (separated)")
+        phase_durations = ET.SubElement(cycle, "phase_durations", units="min")
+        durations = [300.0, 480, 240, 60]
+        for index, duration in enumerate(durations):
+            ET.SubElement(phase_durations, "duration", index=str(index), fixed_duration="true" if index != 0 else "false").text = str(duration)
+
+        death = ET.SubElement(phenotype, "death")
+        
+        apoptosis = ET.SubElement(death, "model", code="100", name="apoptosis")
+        ET.SubElement(apoptosis, "death_rate", units="1/min").text = "5.31667e-05"
+        apoptotic_phase_durations = ET.SubElement(apoptosis, "phase_durations", units="min")
+        ET.SubElement(apoptotic_phase_durations, "duration", index="0", fixed_duration="true").text = "516"
+
+        apoptotic_parameters = ET.SubElement(apoptosis, "parameters")
+        apoptotic_params = {
+            "unlysed_fluid_change_rate": "0.05",
+            "lysed_fluid_change_rate": "0",
+            "cytoplasmic_biomass_change_rate": "1.66667e-02",
+            "nuclear_biomass_change_rate": "5.83333e-03",
+            "calcification_rate": "0",
+            "relative_rupture_volume": "2.0"
+        }
+        for name, value in apoptotic_params.items():
+            ET.SubElement(apoptotic_parameters, name, units="1/min" if "change_rate" in name else "dimensionless").text = value
+
+        necrosis = ET.SubElement(death, "model", code="101", name="necrosis")
+        ET.SubElement(necrosis, "death_rate", units="1/min").text = "0.0"
+        necrotic_phase_durations = ET.SubElement(necrosis, "phase_durations", units="min")
+        ET.SubElement(necrotic_phase_durations, "duration", index="0", fixed_duration="true").text = "0"
+        ET.SubElement(necrotic_phase_durations, "duration", index="1", fixed_duration="true").text = "86400"
+
+        necrotic_parameters = ET.SubElement(necrosis, "parameters")
+        necrotic_params = {
+            "unlysed_fluid_change_rate": "1.11667e-2",
+            "lysed_fluid_change_rate": "8.33333e-4",
+            "cytoplasmic_biomass_change_rate": "5.33333e-5",
+            "nuclear_biomass_change_rate": "2.16667e-3",
+            "calcification_rate": "0",
+            "relative_rupture_volume": "2.0"
+        }
+        for name, value in necrotic_params.items():
+            ET.SubElement(necrotic_parameters, name, units="1/min" if "change_rate" in name else "dimensionless").text = value
+
+        volume = ET.SubElement(phenotype, "volume")
+        ET.SubElement(volume, "total", units="micron^3").text = "2494"
+        ET.SubElement(volume, "fluid_fraction", units="dimensionless").text = "0.75"
+        ET.SubElement(volume, "nuclear", units="micron^3").text = "540"
+        ET.SubElement(volume, "fluid_change_rate", units="1/min").text = "0.05"
+        ET.SubElement(volume, "cytoplasmic_biomass_change_rate", units="1/min").text = "0.0045"
+        ET.SubElement(volume, "nuclear_biomass_change_rate", units="1/min").text = "0.0055"
+        ET.SubElement(volume, "calcified_fraction", units="dimensionless").text = "0"
+        ET.SubElement(volume, "calcification_rate", units="1/min").text = "0"
+        ET.SubElement(volume, "relative_rupture_volume", units="dimensionless").text = "2.0"
+
+        mechanics = ET.SubElement(phenotype, "mechanics")
+        ET.SubElement(mechanics, "cell_cell_adhesion_strength", units="micron/min").text = "0.4"
+        ET.SubElement(mechanics, "cell_cell_repulsion_strength", units="micron/min").text = "10.0"
+        ET.SubElement(mechanics, "relative_maximum_adhesion_distance", units="dimensionless").text = "1.25"
+        
+        cell_adhesion_affinities = ET.SubElement(mechanics, "cell_adhesion_affinities")
+        ET.SubElement(cell_adhesion_affinities, "cell_adhesion_affinity", name="default").text = "1"
+
+        options = ET.SubElement(mechanics, "options")
+        ET.SubElement(options, "set_relative_equilibrium_distance", enabled="false", units="dimensionless").text = "1.8"
+        ET.SubElement(options, "set_absolute_equilibrium_distance", enabled="false", units="micron").text = "15.12"
+        
+        ET.SubElement(mechanics, "attachment_elastic_constant", units="1/min").text = "0.01"
+        ET.SubElement(mechanics, "attachment_rate", units="1/min").text = "0.0"
+        ET.SubElement(mechanics, "detachment_rate", units="1/min").text = "0.0"
+        ET.SubElement(mechanics, "maximum_number_of_attachments").text = "12"
+
+        motility = ET.SubElement(phenotype, "motility")
+        ET.SubElement(motility, "speed", units="micron/min").text = "1"
+        ET.SubElement(motility, "persistence_time", units="min").text = "1"
+        ET.SubElement(motility, "migration_bias", units="dimensionless").text = ".5"
+        
+        motility_options = ET.SubElement(motility, "options")
+        ET.SubElement(motility_options, "enabled").text = "false"
+        ET.SubElement(motility_options, "use_2D").text = "true"
+
+        chemotaxis = ET.SubElement(motility_options, "chemotaxis")
+        ET.SubElement(chemotaxis, "enabled").text = "false"
+        ET.SubElement(chemotaxis, "substrate").text = "substrate"
+        ET.SubElement(chemotaxis, "direction").text = "1"
+
+        advanced_chemotaxis = ET.SubElement(motility_options, "advanced_chemotaxis")
+        ET.SubElement(advanced_chemotaxis, "enabled").text = "false"
+        ET.SubElement(advanced_chemotaxis, "normalize_each_gradient").text = "false"
+        chemotactic_sensitivities = ET.SubElement(advanced_chemotaxis, "chemotactic_sensitivities")
+        ET.SubElement(chemotactic_sensitivities, "chemotactic_sensitivity", substrate="substrate").text = "0.0"
+
+        secretion = ET.SubElement(phenotype, "secretion")
+        substrate = ET.SubElement(secretion, "substrate", name="substrate")
+        ET.SubElement(substrate, "secretion_rate", units="1/min").text = "0"
+        ET.SubElement(substrate, "secretion_target", units="substrate density").text = "1"
+        ET.SubElement(substrate, "uptake_rate", units="1/min").text = "0"
+        ET.SubElement(substrate, "net_export_rate", units="total substrate/min").text = "0"
+
+        cell_interactions = ET.SubElement(phenotype, "cell_interactions")
+        ET.SubElement(cell_interactions, "apoptotic_phagocytosis_rate", units="1/min").text = "0.0"
+        ET.SubElement(cell_interactions, "necrotic_phagocytosis_rate", units="1/min").text = "0.0"
+        ET.SubElement(cell_interactions, "other_dead_phagocytosis_rate", units="1/min").text = "0.0"
+        
+        live_phagocytosis_rates = ET.SubElement(cell_interactions, "live_phagocytosis_rates")
+        ET.SubElement(live_phagocytosis_rates, "phagocytosis_rate", name="default", units="1/min").text = "0"
+        
+        attack_rates = ET.SubElement(cell_interactions, "attack_rates")
+        ET.SubElement(attack_rates, "attack_rate", name="default", units="1/min").text = "0"
+        
+        ET.SubElement(cell_interactions, "attack_damage_rate", units="1/min")
+
+    def add_normal_epithelial_cell_parameters(self, cell_definition):
+        phenotype = ET.SubElement(cell_definition, 'phenotype')
+
+        cycle = ET.SubElement(phenotype, 'cycle', code="5", name="live")
+        phase_transition_rates = ET.SubElement(cycle, 'phase_transition_rates', units="1/min")
+        ET.SubElement(phase_transition_rates, 'rate', start_index="0", end_index="0", fixed_duration="false").text = "0"
+
+        death = ET.SubElement(phenotype, 'death')
+        apoptosis = ET.SubElement(death, 'model', code="100", name="apoptosis")
+        ET.SubElement(apoptosis, 'death_rate', units="1/min").text = "5.31667e-05"
+        phase_durations = ET.SubElement(apoptosis, 'phase_durations', units="min")
+        ET.SubElement(phase_durations, 'duration', index="0", fixed_duration="true").text = "516"
+
+        necrosis = ET.SubElement(death, 'model', code="101", name="necrosis")
+        ET.SubElement(necrosis, 'death_rate', units="1/min").text = "0.0"
+        phase_durations_necrosis = ET.SubElement(necrosis, 'phase_durations', units="min")
+        ET.SubElement(phase_durations_necrosis, 'duration', index="0", fixed_duration="true").text = "0"
+        ET.SubElement(phase_durations_necrosis, 'duration', index="1", fixed_duration="true").text = "86400"
+
+        volume = ET.SubElement(phenotype, 'volume')
+        ET.SubElement(volume, 'total', units="micron^3").text = "2494"
+        ET.SubElement(volume, 'fluid_fraction', units="dimensionless").text = "0.75"
+        ET.SubElement(volume, 'nuclear', units="micron^3").text = "540"
+        ET.SubElement(volume, 'fluid_change_rate', units="1/min").text = "0.05"
+        ET.SubElement(volume, 'cytoplasmic_biomass_change_rate', units="1/min").text = "0.0045"
+        ET.SubElement(volume, 'nuclear_biomass_change_rate', units="1/min").text = "0.0055"
+        ET.SubElement(volume, 'calcified_fraction', units="dimensionless").text = "0"
+        ET.SubElement(volume, 'calcification_rate', units="1/min").text = "0"
+        ET.SubElement(volume, 'relative_rupture_volume', units="dimensionless").text = "2.0"
+
+        mechanics = ET.SubElement(phenotype, 'mechanics')
+        ET.SubElement(mechanics, 'cell_cell_adhesion_strength', units="micron/min").text = "0.4"
+        ET.SubElement(mechanics, 'cell_cell_repulsion_strength', units="micron/min").text = "10.0"
+        ET.SubElement(mechanics, 'relative_maximum_adhesion_distance', units="dimensionless").text = "1.25"
+
+        adhesion_affinities = ET.SubElement(mechanics, 'cell_adhesion_affinities')
+        ET.SubElement(adhesion_affinities, 'cell_adhesion_affinity', name="fibroblast").text = "1.0"
+        ET.SubElement(adhesion_affinities, 'cell_adhesion_affinity', name="epithelial_normal").text = "1"
+        ET.SubElement(adhesion_affinities, 'cell_adhesion_affinity', name="epithelial_tumor").text = "1.0"
+        ET.SubElement(adhesion_affinities, 'cell_adhesion_affinity', name="mesenchymal_normal").text = "1.0"
+        ET.SubElement(adhesion_affinities, 'cell_adhesion_affinity', name="mesenchymal_tumor").text = "1.0"
+
+        options = ET.SubElement(mechanics, 'options')
+        ET.SubElement(options, 'set_relative_equilibrium_distance', enabled="false", units="dimensionless").text = "1.8"
+        ET.SubElement(options, 'set_absolute_equilibrium_distance', enabled="false", units="micron").text = "15.12"
+        ET.SubElement(mechanics, 'attachment_elastic_constant', units="1/min").text = "0.01"
+        ET.SubElement(mechanics, 'attachment_rate', units="1/min").text = "0.0"
+        ET.SubElement(mechanics, 'detachment_rate', units="1/min").text = "0.0"
+
+        motility = ET.SubElement(phenotype, 'motility')
+        ET.SubElement(motility, 'speed', units="micron/min").text = "0"
+        ET.SubElement(motility, 'persistence_time', units="min").text = "1"
+        ET.SubElement(motility, 'migration_bias', units="dimensionless").text = ".5"
+        motility_options = ET.SubElement(motility, 'options')
+        ET.SubElement(motility_options, 'enabled').text = 'false'
+        ET.SubElement(motility_options, 'use_2D').text = 'true'
+
+        secretion = ET.SubElement(phenotype, 'secretion')
+        inflammatory_signal = ET.SubElement(secretion, 'substrate', name="inflammatory_signal")
+        ET.SubElement(inflammatory_signal, 'secretion_rate', units="1/min").text = "0"
+        ET.SubElement(inflammatory_signal, 'secretion_target', units="substrate density").text = "1"
+        ET.SubElement(inflammatory_signal, 'uptake_rate', units="1/min").text = "0"
+        ET.SubElement(inflammatory_signal, 'net_export_rate', units="total substrate/min").text = "0"
+
+        ecm = ET.SubElement(secretion, 'substrate', name="ecm")
+        ET.SubElement(ecm, 'secretion_rate', units="1/min").text = "0.0"
+        ET.SubElement(ecm, 'secretion_target', units="substrate density").text = "0.0"
+        ET.SubElement(ecm, 'uptake_rate', units="1/min").text = "0.0"
+        ET.SubElement(ecm, 'net_export_rate', units="total substrate/min").text = "0.0"
+
+        cell_interactions = ET.SubElement(phenotype, 'cell_interactions')
+        ET.SubElement(cell_interactions, 'dead_phagocytosis_rate', units="1/min").text = "0.0"
+   
+    def update_physicell_settings(self, cell_definition):
+        xml_file_path = '/Users/marwanaji/PhysiCell-Studio.git/config/PhysiCell_settings.xml'
+        
+        if os.path.exists(xml_file_path):
+            tree = ET.parse(xml_file_path)
+            root = tree.getroot()
+            cell_definitions = root.find("cell_definitions")
+            if cell_definitions is None:
+                cell_definitions = ET.SubElement(root, "cell_definitions")
+        else:
+            root = ET.Element('PhysiCell_settings')
+            cell_definitions = ET.SubElement(root, "cell_definitions")
+
+        cell_definitions.append(cell_definition)
+
+        tree = ET.ElementTree(root)
+        try:
+            tree.write(xml_file_path, encoding="utf-8", xml_declaration=True)
+        except Exception as e:
+            print(f"Error writing to file: {e}")
 
     def process_window(self):
         self.biwt.continue_from_parameters()
-
 
 def create_checkboxes_for_cell_types(vbox, cell_types):
     checkbox_dict = {}
