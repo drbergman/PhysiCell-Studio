@@ -42,6 +42,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 
 from pathlib import Path
 import xml.etree.ElementTree as ET  # https://docs.python.org/2/library/xml.etree.elementtree.html
+import xml.dom.minidom as minidom
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import QApplication,QWidget,QLineEdit,QHBoxLayout,QVBoxLayout,QRadioButton,QPushButton, QLabel,QCheckBox,QComboBox,QScrollArea,QGridLayout, QFileDialog, QButtonGroup, QSplitter, QSizePolicy, QSpinBox, QCompleter
 from PyQt5.QtGui import QIcon
@@ -3103,7 +3104,7 @@ class BioinformaticsWalkthrough(QWidget):
         print("BioinformaticsWalkthroughWindow: Colors will likely change in the ICs tab due to previous cell types being present.")
 
 class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWindow):
-    current_id = 0
+    current_id = 1
     def __init__(self, biwt):
         super().__init__(biwt)
         print("----Loading cell parameters----")
@@ -3116,9 +3117,9 @@ class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWind
 
         self.dropdowns = []
 
-        items = ["Normal Epithelial", "Default"]
-        items.sort()
-        self.model = QStringListModel(items)
+        list_cell_types = ["Normal Epithelial", "Default"]
+        list_cell_types.sort()
+        self.model = QStringListModel(list_cell_types)
 
         for cell_type in self.biwt.cell_types_list_original:
             hbox = QHBoxLayout()
@@ -3126,6 +3127,8 @@ class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWind
             hbox.addWidget(cell_type_label)
 
             dropdown = ExtendedCombo()
+            dropdown.objectName=cell_type
+            dropdown.currentIndexChanged.connect(self.handle_dropdown_change)
             dropdown.setModel(self.model) 
             dropdown.setEditable(True)
 
@@ -3134,7 +3137,6 @@ class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWind
             completer.setCompletionMode(QCompleter.PopupCompletion)
             completer.setCaseSensitivity(Qt.CaseInsensitive)
 
-            dropdown.currentIndexChanged.connect(self.handle_dropdown_change)
             hbox.addWidget(dropdown)
 
             self.dropdowns.append((cell_type, dropdown))  
@@ -3158,11 +3160,11 @@ class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWind
         self.resize(400, 600)
 
     def handle_dropdown_change(self):
-        for cell_type, dropdown in self.dropdowns:
-            if dropdown.currentText() == "Default":
-                self.create_new_cell_definition(cell_type, template_name="Default")
-            elif dropdown.currentText() == "Normal Epithelial":
-                 self.create_new_cell_definition(cell_type, template_name="Normal Epithelial")
+        cell_type = self.sender().objectName
+        if self.sender().currentText() == "Default":
+            self.create_new_cell_definition(cell_type, template_name="Default")
+        elif self.sender().currentText() == "Normal Epithelial":
+            self.create_new_cell_definition(cell_type, template_name="Normal Epithelial")
 
     def create_new_cell_definition(self, cell_type, template_name="Default"):
         cell_definition = ET.Element("cell_definition", name=cell_type, ID=str(BioinformaticsWalkthrough_LoadCellParameters.current_id))
@@ -3362,10 +3364,11 @@ class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWind
 
         cell_interactions = ET.SubElement(phenotype, 'cell_interactions')
         ET.SubElement(cell_interactions, 'dead_phagocytosis_rate', units="1/min").text = "0.0"
-   
+
     def update_physicell_settings(self, cell_definition):
         xml_file_path = '/Users/marwanaji/PhysiCell-Studio.git/config/PhysiCell_settings.xml'
-        
+        print(f"Updating config file at {xml_file_path}...")
+
         if os.path.exists(xml_file_path):
             tree = ET.parse(xml_file_path)
             root = tree.getroot()
@@ -3375,9 +3378,7 @@ class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWind
         else:
             root = ET.Element('PhysiCell_settings')
             cell_definitions = ET.SubElement(root, "cell_definitions")
-
         cell_definitions.append(cell_definition)
-
         tree = ET.ElementTree(root)
         try:
             tree.write(xml_file_path, encoding="utf-8", xml_declaration=True)

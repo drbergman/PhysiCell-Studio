@@ -7,7 +7,9 @@ def biwt_dev_mode(biwt):
     # file_name = "./data/cells.csv"
     # file_name = "/Users/danielbergman/seq-to-ic-test/data_all/inputdata_download.Rds"
     # file_name = "/Users/danielbergman/pdac-ecm/image_data/j1568sobj_2.rds"
-    file_name = "~/seq-to-ic-test/data_all/visium_adata.h5ad"
+    # file_name = "~/seq-to-ic-test/data_all/visium_adata.h5ad"
+    file_name = "/Users/marwanaji/PhysiCell-Studio.git/visium_adata.h5ad"
+
     file_name = os.path.expanduser(file_name)
     print(f"Importing {file_name}")
     if "Zhuang" in file_name:
@@ -17,7 +19,7 @@ def biwt_dev_mode(biwt):
     else:
         biwt.column_line_edit.setText("cluster")
     biwt.import_file(file_name)
-    window_to_stop_on = "BioinformaticsWalkthroughWindow_WritePositions"
+    window_to_stop_on = "BioinformaticsWalkthrough_LoadCellParameters"
     while biwt.window.__class__.__name__ != window_to_stop_on:
         print(f"Current window: {str(type(biwt.window))}")
         try: 
