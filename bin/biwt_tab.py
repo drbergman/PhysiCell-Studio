@@ -3121,12 +3121,17 @@ class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWind
         self.model = QStringListModel(items)
 
         for cell_type in self.biwt.cell_types_list_original:
+            print(f"Processing cell type {cell_type}")
             hbox = QHBoxLayout()
             cell_type_label = QLabel(f"{cell_type} \u21d2 ")
             hbox.addWidget(cell_type_label)
 
             dropdown = ExtendedCombo()
+            dropdown.objectName=cell_type
+            dropdown.currentIndexChanged.connect(self.handle_dropdown_change)
+            print(f"\t1. {dropdown.currentText() = }")
             dropdown.setModel(self.model) 
+            print(f"\t2. {dropdown.currentText() = }")
             dropdown.setEditable(True)
 
             completer = QCompleter(self.model, dropdown) 
@@ -3134,7 +3139,6 @@ class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWind
             completer.setCompletionMode(QCompleter.PopupCompletion)
             completer.setCaseSensitivity(Qt.CaseInsensitive)
 
-            dropdown.currentIndexChanged.connect(self.handle_dropdown_change)
             hbox.addWidget(dropdown)
 
             self.dropdowns.append((cell_type, dropdown))  
@@ -3158,11 +3162,16 @@ class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWind
         self.resize(400, 600)
 
     def handle_dropdown_change(self):
-        for cell_type, dropdown in self.dropdowns:
-            if dropdown.currentText() == "Default":
-                self.create_new_cell_definition(cell_type, template_name="Default")
-            elif dropdown.currentText() == "Normal Epithelial":
-                 self.create_new_cell_definition(cell_type, template_name="Normal Epithelial")
+        cell_type = self.sender().objectName
+        if self.sender().currentText() == "Default":
+            self.create_new_cell_definition(cell_type, template_name="Default")
+        elif self.sender().currentText() == "Normal Epithelial":
+            self.create_new_cell_definition(cell_type, template_name="Normal Epithelial")
+        # for cell_type, dropdown in self.dropdowns:
+        #     if dropdown.currentText() == "Default":
+        #         self.create_new_cell_definition(cell_type, template_name="Default")
+        #     elif dropdown.currentText() == "Normal Epithelial":
+        #          self.create_new_cell_definition(cell_type, template_name="Normal Epithelial")
 
     def create_new_cell_definition(self, cell_type, template_name="Default"):
         cell_definition = ET.Element("cell_definition", name=cell_type, ID=str(BioinformaticsWalkthrough_LoadCellParameters.current_id))
@@ -3364,7 +3373,8 @@ class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWind
         ET.SubElement(cell_interactions, 'dead_phagocytosis_rate', units="1/min").text = "0.0"
    
     def update_physicell_settings(self, cell_definition):
-        xml_file_path = '/Users/marwanaji/PhysiCell-Studio.git/config/PhysiCell_settings.xml'
+        xml_file_path = '/Users/danielbergman/PhysiCell-Studio_git/config/PhysiCell_settings.xml'
+        print(f"Updating config file at {xml_file_path}...")
         
         if os.path.exists(xml_file_path):
             tree = ET.parse(xml_file_path)
