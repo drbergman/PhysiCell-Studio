@@ -39,6 +39,8 @@ from matplotlib.patches import Circle, Patch, Rectangle, Annulus, Wedge
 from matplotlib.collections import PatchCollection
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from pretty_print_xml import pretty_print
+from BIWT_parameters.cell_specific_parameters import *
 
 from pathlib import Path
 import xml.etree.ElementTree as ET  # https://docs.python.org/2/library/xml.etree.elementtree.html
@@ -3102,12 +3104,6 @@ class BioinformaticsWalkthrough(QWidget):
         self.window.close()
         print("BioinformaticsWalkthroughWindow: Colors will likely change in the ICs tab due to previous cell types being present.")
 
-#finds absolute path of parent directory (load_cell_parameters), looks in this arent directory for modules (finds epithelial_normal)
-
-base_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..')) 
-sys.path.append(base_path)
-from load_cell_parameters.epithelial_normal import get_epithelial_normal_template
-
 class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWindow):
     current_id = 1
     def __init__(self, biwt):
@@ -3115,15 +3111,13 @@ class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWind
         print("----Loading cell parameters----")
 
         vbox = QVBoxLayout()
-
         instruction_label = QLabel("Select your cell types:")
         vbox.addWidget(instruction_label)
         vbox_scroll_area = QVBoxLayout()
-
         self.dropdowns = []
-
-        list_cell_types = ["Normal Epithelial", "Default"]
-        list_cell_types.sort()
+        list_cell_types = ["Normal Epithelial", "Default", "Normal Mesenchymal", "Fibroblast", "Tumor Epithelial", "Tumor Mesenchymal",
+                           "Macrophage", "CD8 T Cell", "M0 Macrophage", "M1 Macrophage", "Th2 CD4 T cell"]
+        list_cell_types.sort(key=lambda x: (x != 'Default', x))
         self.model = QStringListModel(list_cell_types)
 
         for cell_type in self.biwt.cell_types_list_original:
@@ -3165,140 +3159,33 @@ class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWind
         self.resize(400, 600)
 
     def handle_dropdown_change(self):
-        cell_type = self.sender().objectName
-        if self.sender().currentText() == "Default":
-            self.create_new_cell_definition(cell_type, template_name="Default")
-        elif self.sender().currentText() == "Normal Epithelial":
-            self.create_new_cell_definition(cell_type, template_name="Normal Epithelial")
+        cell_type = self.sender().objectName 
+        selected_text = self.sender().currentText()
+        self.create_new_cell_definition(cell_type, template_name=selected_text)
 
     def create_new_cell_definition(self, cell_type, template_name="Default"):
         cell_definition = ET.Element("cell_definition", name=cell_type, ID=str(BioinformaticsWalkthrough_LoadCellParameters.current_id))
         BioinformaticsWalkthrough_LoadCellParameters.current_id += 1
+        template_functions = {
+            "Normal Epithelial": get_epithelial_normal,
+            "Default": get_default,
+            "Normal Mesenchymal": get_mesenchymal_normal,
+            "Fibroblast": get_fibroblast,
+            "Tumor Epithelial": get_tumor_epithlial,
+            "Tumor Mesenchymal": get_mesenchymal_tumor,
+            "Macrophage": get_machrophage,
+            "CD8 T Cell":  get_CD8_T_cell,
+            "M0 Macrophage": get_M0_macrophage,
+            "M1 Macrophage": get_M1_macrophage,
+            "M2 Macrophage":get_M2_macrophage,
+            "Th2 CD4 T cell": get_Th2_CD4_T_cell
+        }
 
-        if template_name == "Normal Epithelial":
-            epithelial_normal_template = get_epithelial_normal_template()
-
-            #parses epithelial_normal_template into an ElementTree
-            cell_definition.append(ET.fromstring(epithelial_normal_template))
-
-        if template_name == "Default":
-            self.add_default_cell_parameters(cell_definition)
-
+        if template_name in template_functions:
+            template = template_functions[template_name]()
+            cell_definition.append(ET.fromstring(template))
+        
         self.update_physicell_settings(cell_definition)
-
-    def add_default_cell_parameters(self, cell_definition):
-        phenotype = ET.SubElement(cell_definition, "phenotype")
-
-        cycle = ET.SubElement(phenotype, "cycle", code="6", name="Flow cytometry model (separated)")
-        phase_durations = ET.SubElement(cycle, "phase_durations", units="min")
-        durations = [300.0, 480, 240, 60]
-        for index, duration in enumerate(durations):
-            ET.SubElement(phase_durations, "duration", index=str(index), fixed_duration="true" if index != 0 else "false").text = str(duration)
-
-        death = ET.SubElement(phenotype, "death")
-        
-        apoptosis = ET.SubElement(death, "model", code="100", name="apoptosis")
-        ET.SubElement(apoptosis, "death_rate", units="1/min").text = "5.31667e-05"
-        apoptotic_phase_durations = ET.SubElement(apoptosis, "phase_durations", units="min")
-        ET.SubElement(apoptotic_phase_durations, "duration", index="0", fixed_duration="true").text = "516"
-
-        apoptotic_parameters = ET.SubElement(apoptosis, "parameters")
-        apoptotic_params = {
-            "unlysed_fluid_change_rate": "0.05",
-            "lysed_fluid_change_rate": "0",
-            "cytoplasmic_biomass_change_rate": "1.66667e-02",
-            "nuclear_biomass_change_rate": "5.83333e-03",
-            "calcification_rate": "0",
-            "relative_rupture_volume": "2.0"
-        }
-        for name, value in apoptotic_params.items():
-            ET.SubElement(apoptotic_parameters, name, units="1/min" if "change_rate" in name else "dimensionless").text = value
-
-        necrosis = ET.SubElement(death, "model", code="101", name="necrosis")
-        ET.SubElement(necrosis, "death_rate", units="1/min").text = "0.0"
-        necrotic_phase_durations = ET.SubElement(necrosis, "phase_durations", units="min")
-        ET.SubElement(necrotic_phase_durations, "duration", index="0", fixed_duration="true").text = "0"
-        ET.SubElement(necrotic_phase_durations, "duration", index="1", fixed_duration="true").text = "86400"
-
-        necrotic_parameters = ET.SubElement(necrosis, "parameters")
-        necrotic_params = {
-            "unlysed_fluid_change_rate": "1.11667e-2",
-            "lysed_fluid_change_rate": "8.33333e-4",
-            "cytoplasmic_biomass_change_rate": "5.33333e-5",
-            "nuclear_biomass_change_rate": "2.16667e-3",
-            "calcification_rate": "0",
-            "relative_rupture_volume": "2.0"
-        }
-        for name, value in necrotic_params.items():
-            ET.SubElement(necrotic_parameters, name, units="1/min" if "change_rate" in name else "dimensionless").text = value
-
-        volume = ET.SubElement(phenotype, "volume")
-        ET.SubElement(volume, "total", units="micron^3").text = "2494"
-        ET.SubElement(volume, "fluid_fraction", units="dimensionless").text = "0.75"
-        ET.SubElement(volume, "nuclear", units="micron^3").text = "540"
-        ET.SubElement(volume, "fluid_change_rate", units="1/min").text = "0.05"
-        ET.SubElement(volume, "cytoplasmic_biomass_change_rate", units="1/min").text = "0.0045"
-        ET.SubElement(volume, "nuclear_biomass_change_rate", units="1/min").text = "0.0055"
-        ET.SubElement(volume, "calcified_fraction", units="dimensionless").text = "0"
-        ET.SubElement(volume, "calcification_rate", units="1/min").text = "0"
-        ET.SubElement(volume, "relative_rupture_volume", units="dimensionless").text = "2.0"
-
-        mechanics = ET.SubElement(phenotype, "mechanics")
-        ET.SubElement(mechanics, "cell_cell_adhesion_strength", units="micron/min").text = "0.4"
-        ET.SubElement(mechanics, "cell_cell_repulsion_strength", units="micron/min").text = "10.0"
-        ET.SubElement(mechanics, "relative_maximum_adhesion_distance", units="dimensionless").text = "1.25"
-        
-        cell_adhesion_affinities = ET.SubElement(mechanics, "cell_adhesion_affinities")
-        ET.SubElement(cell_adhesion_affinities, "cell_adhesion_affinity", name="default").text = "1"
-
-        options = ET.SubElement(mechanics, "options")
-        ET.SubElement(options, "set_relative_equilibrium_distance", enabled="false", units="dimensionless").text = "1.8"
-        ET.SubElement(options, "set_absolute_equilibrium_distance", enabled="false", units="micron").text = "15.12"
-        
-        ET.SubElement(mechanics, "attachment_elastic_constant", units="1/min").text = "0.01"
-        ET.SubElement(mechanics, "attachment_rate", units="1/min").text = "0.0"
-        ET.SubElement(mechanics, "detachment_rate", units="1/min").text = "0.0"
-        ET.SubElement(mechanics, "maximum_number_of_attachments").text = "12"
-
-        motility = ET.SubElement(phenotype, "motility")
-        ET.SubElement(motility, "speed", units="micron/min").text = "1"
-        ET.SubElement(motility, "persistence_time", units="min").text = "1"
-        ET.SubElement(motility, "migration_bias", units="dimensionless").text = ".5"
-        
-        motility_options = ET.SubElement(motility, "options")
-        ET.SubElement(motility_options, "enabled").text = "false"
-        ET.SubElement(motility_options, "use_2D").text = "true"
-
-        chemotaxis = ET.SubElement(motility_options, "chemotaxis")
-        ET.SubElement(chemotaxis, "enabled").text = "false"
-        ET.SubElement(chemotaxis, "substrate").text = "substrate"
-        ET.SubElement(chemotaxis, "direction").text = "1"
-
-        advanced_chemotaxis = ET.SubElement(motility_options, "advanced_chemotaxis")
-        ET.SubElement(advanced_chemotaxis, "enabled").text = "false"
-        ET.SubElement(advanced_chemotaxis, "normalize_each_gradient").text = "false"
-        chemotactic_sensitivities = ET.SubElement(advanced_chemotaxis, "chemotactic_sensitivities")
-        ET.SubElement(chemotactic_sensitivities, "chemotactic_sensitivity", substrate="substrate").text = "0.0"
-
-        secretion = ET.SubElement(phenotype, "secretion")
-        substrate = ET.SubElement(secretion, "substrate", name="substrate")
-        ET.SubElement(substrate, "secretion_rate", units="1/min").text = "0"
-        ET.SubElement(substrate, "secretion_target", units="substrate density").text = "1"
-        ET.SubElement(substrate, "uptake_rate", units="1/min").text = "0"
-        ET.SubElement(substrate, "net_export_rate", units="total substrate/min").text = "0"
-
-        cell_interactions = ET.SubElement(phenotype, "cell_interactions")
-        ET.SubElement(cell_interactions, "apoptotic_phagocytosis_rate", units="1/min").text = "0.0"
-        ET.SubElement(cell_interactions, "necrotic_phagocytosis_rate", units="1/min").text = "0.0"
-        ET.SubElement(cell_interactions, "other_dead_phagocytosis_rate", units="1/min").text = "0.0"
-        
-        live_phagocytosis_rates = ET.SubElement(cell_interactions, "live_phagocytosis_rates")
-        ET.SubElement(live_phagocytosis_rates, "phagocytosis_rate", name="default", units="1/min").text = "0"
-        
-        attack_rates = ET.SubElement(cell_interactions, "attack_rates")
-        ET.SubElement(attack_rates, "attack_rate", name="default", units="1/min").text = "0"
-        
-        ET.SubElement(cell_interactions, "attack_damage_rate", units="1/min")
 
     def update_physicell_settings(self, cell_definition):
         xml_file_path = '/Users/marwanaji/PhysiCell-Studio.git/config/PhysiCell_settings.xml'
@@ -3316,6 +3203,7 @@ class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWind
         tree = ET.ElementTree(root)
         try:
             tree.write(xml_file_path, encoding="utf-8", xml_declaration=True)
+            pretty_print(xml_file_path, xml_file_path)
         except Exception as e:
             print(f"Error writing to file: {e}")
 
