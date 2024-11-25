@@ -73,19 +73,7 @@ def get_default():
                         <migration_bias units="dimensionless">.5</migration_bias>
                         <options>
                             <enabled>false</enabled>
-                            <use_2D>true</use_2D>
-                            <chemotaxis>
-                                <enabled>false</enabled>
-                                <substrate>substrate</substrate>
-                                <direction>1</direction>
-                            </chemotaxis>
-                            <advanced_chemotaxis>
-                                <enabled>false</enabled>
-                                <normalize_each_gradient>false</normalize_each_gradient>
-                                <chemotactic_sensitivities>
-                                    <chemotactic_sensitivity substrate="substrate">0.0</chemotactic_sensitivity>
-                                </chemotactic_sensitivities>
-                            </advanced_chemotaxis>
+                            <use_2D>true</use_2D>                    
                         </options>
                     </motility>
                     <secretion>
@@ -196,19 +184,6 @@ def get_epithelial_normal():
                     <options>
                         <enabled>false</enabled>
                         <use_2D>true</use_2D>
-                        <chemotaxis>
-                            <enabled>false</enabled>
-                            <substrate>inflammatory_signal</substrate>
-                            <direction>1</direction>
-                        </chemotaxis>
-                        <advanced_chemotaxis>
-                            <enabled>false</enabled>
-                            <normalize_each_gradient>false</normalize_each_gradient>
-                            <chemotactic_sensitivities>
-                                <chemotactic_sensitivity substrate="inflammatory_signal">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="ecm">0.0</chemotactic_sensitivity>
-                            </chemotactic_sensitivities>
-                        </advanced_chemotaxis>
                     </options>
                 </motility>
                 <secretion />
@@ -218,7 +193,7 @@ def get_epithelial_normal():
                     <other_dead_phagocytosis_rate units="1/min">0</other_dead_phagocytosis_rate>
                     <live_phagocytosis_rates />
                     <attack_rates />
-                    <damage_rate units="1/min">1</damage_rate>
+                    <attack_damage_rate units="1/min">1</attack_damage_rate>
                     <fusion_rates />
                 </cell_interactions>
                 <cell_transformations>
@@ -299,19 +274,6 @@ def get_mesenchymal_normal():
                         <options>
                             <enabled>true</enabled>
                             <use_2D>true</use_2D>
-                            <chemotaxis>
-                                <enabled>false</enabled>
-                                <substrate>inflammatory_signal</substrate>
-                                <direction>1</direction>
-                            </chemotaxis>
-                            <advanced_chemotaxis>
-                                <enabled>false</enabled>
-                                <normalize_each_gradient>false</normalize_each_gradient>
-                                <chemotactic_sensitivities>
-                                    <chemotactic_sensitivity substrate="inflammatory_signal">0.0</chemotactic_sensitivity>
-                                    <chemotactic_sensitivity substrate="ecm">0.0</chemotactic_sensitivity>
-                                </chemotactic_sensitivities>
-                            </advanced_chemotaxis>
                         </options>
                     </motility>
                     <secretion/>
@@ -319,7 +281,7 @@ def get_mesenchymal_normal():
                         <dead_phagocytosis_rate units="1/min">0</dead_phagocytosis_rate>
                         <live_phagocytosis_rates />
                         <attack_rates />            
-                        <damage_rate units="1/min">1</damage_rate>
+                        <attack_damage_rate units="1/min">1</attack_damage_rate>
                         <fusion_rates />                           
                     </cell_interactions>
                     <cell_transformations>
@@ -399,19 +361,6 @@ def get_fibroblast():
                     <options>
                         <enabled>true</enabled>
                         <use_2D>true</use_2D>
-                        <chemotaxis>
-                            <enabled>false</enabled>
-                            <substrate>inflammatory_signal</substrate>
-                            <direction>1</direction>
-                        </chemotaxis>
-                        <advanced_chemotaxis>
-                            <enabled>false</enabled>
-                            <normalize_each_gradient>false</normalize_each_gradient>
-                            <chemotactic_sensitivities>
-                                <chemotactic_sensitivity substrate="inflammatory_signal">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="ecm">0.0</chemotactic_sensitivity>
-                            </chemotactic_sensitivities>
-                        </advanced_chemotaxis>
                     </options>
                 </motility>
                 <secretion />                           
@@ -419,7 +368,7 @@ def get_fibroblast():
                     <dead_phagocytosis_rate units="1/min">0</dead_phagocytosis_rate>
                     <live_phagocytosis_rates />
                     <attack_rates />
-                    <damage_rate units="1/min">1</damage_rate>
+                    <attack_damage_rate units="1/min">1</attack_damage_rate>
                     <fusion_rates />
                 </cell_interactions>
                 <cell_transformations>
@@ -499,19 +448,6 @@ def get_tumor_epithlial():
                     <options>
                         <enabled>false</enabled>
                         <use_2D>true</use_2D>
-                        <chemotaxis>
-                            <enabled>false</enabled>
-                            <substrate>inflammatory_signal</substrate>
-                            <direction>1</direction>
-                        </chemotaxis>
-                        <advanced_chemotaxis>
-                            <enabled>false</enabled>
-                            <normalize_each_gradient>false</normalize_each_gradient>
-                            <chemotactic_sensitivities>
-                                <chemotactic_sensitivity substrate="inflammatory_signal">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="ecm">0.0</chemotactic_sensitivity>
-                            </chemotactic_sensitivities>
-                        </advanced_chemotaxis>
                     </options>
                 </motility>
                 <secretion />
@@ -519,7 +455,7 @@ def get_tumor_epithlial():
                     <dead_phagocytosis_rate units="1/min">0</dead_phagocytosis_rate>
                     <live_phagocytosis_rates />
                     <attack_rates />                        
-                    <damage_rate units="1/min">1</damage_rate>
+                    <attack_damage_rate units="1/min">1</attack_damage_rate>
                     <fusion_rates />                
                 </cell_interactions>
                 <cell_transformations>
@@ -599,19 +535,6 @@ def get_mesenchymal_tumor():
                     <options>
                         <enabled>true</enabled>
                         <use_2D>true</use_2D>
-                        <chemotaxis>
-                            <enabled>false</enabled>
-                            <substrate>inflammatory_signal</substrate>
-                            <direction>1</direction>
-                        </chemotaxis>
-                        <advanced_chemotaxis>
-                            <enabled>false</enabled>
-                            <normalize_each_gradient>false</normalize_each_gradient>
-                            <chemotactic_sensitivities>
-                                <chemotactic_sensitivity substrate="inflammatory_signal">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="ecm">0.0</chemotactic_sensitivity>
-                            </chemotactic_sensitivities>
-                        </advanced_chemotaxis>
                     </options>
                 </motility>
                 <secretion />
@@ -619,7 +542,7 @@ def get_mesenchymal_tumor():
                     <dead_phagocytosis_rate units="1/min">0</dead_phagocytosis_rate>
                     <live_phagocytosis_rates />
                     <attack_rates />                        
-                    <damage_rate units="1/min">1</damage_rate>
+                    <attack_damage_rate units="1/min">1</attack_damage_rate>
                     <fusion_rates />                
                 </cell_interactions>
                 <cell_transformations>
@@ -703,22 +626,6 @@ def get_machrophage():
                     <options>
                         <enabled>true</enabled>
                         <use_2D>true</use_2D>
-                        <chemotaxis>
-                            <enabled>true</enabled>
-                            <substrate>debris</substrate>
-                            <direction>1</direction>
-                        </chemotaxis>
-                        <advanced_chemotaxis>
-                            <enabled>false</enabled>
-                            <normalize_each_gradient>false</normalize_each_gradient>
-                            <chemotactic_sensitivities >
-                                <chemotactic_sensitivity substrate="oxygen">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="debris">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="pro-inflammatory factor">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="anti-inflammatory factor">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="substrate">0.0</chemotactic_sensitivity>
-                            </chemotactic_sensitivities>
-                        </advanced_chemotaxis>
                     </options>
                 </motility>
                 <secretion />
@@ -728,7 +635,7 @@ def get_machrophage():
                     <other_dead_phagocytosis_rate units="1/min">0.0</other_dead_phagocytosis_rate>
                     <live_phagocytosis_rates />
                     <attack_rates />                        
-                    <damage_rate units="1/min">1</damage_rate>
+                    <attack_damage_rate units="1/min">1</attack_damage_rate>
                     <fusion_rates />                
                 </cell_interactions>
                 <cell_transformations>
@@ -814,22 +721,6 @@ def get_CD8_T_cell():
                     <options>
                         <enabled>true</enabled>
                         <use_2D>true</use_2D>
-                        <chemotaxis>
-                            <enabled>true</enabled>
-                            <substrate>pro-inflammatory factor</substrate>
-                            <direction>1</direction>
-                        </chemotaxis>
-                        <advanced_chemotaxis>
-                            <enabled>false</enabled>
-                            <normalize_each_gradient>false</normalize_each_gradient>
-                            <chemotactic_sensitivities>
-                                <chemotactic_sensitivity substrate="oxygen">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="debris">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="pro-inflammatory factor">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="anti-inflammatory factor">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="substrate">0.0</chemotactic_sensitivity>
-                            </chemotactic_sensitivities>
-                        </advanced_chemotaxis>
                     </options>
                 </motility>
                 <secretion />                
@@ -933,24 +824,6 @@ def get_M0_macrophage():
                     <options>
                         <enabled>true</enabled>
                         <use_2D>true</use_2D>
-                        <chemotaxis>
-                            <enabled>true</enabled>
-                            <substrate>debris</substrate>
-                            <direction>1</direction>
-                        </chemotaxis>
-                        <advanced_chemotaxis>
-                            <enabled>false</enabled>
-                            <normalize_each_gradient>false</normalize_each_gradient>
-                            <chemotactic_sensitivities>
-                                <chemotactic_sensitivity substrate="debris">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="oxygen">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="IFN-gamma">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="IL-10">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="IL-4">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="EGF">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="substrate">0.0</chemotactic_sensitivity>
-                            </chemotactic_sensitivities>
-                        </advanced_chemotaxis>
                     </options>
                 </motility>
                 <secretion />
@@ -1046,24 +919,6 @@ def get_M1_macrophage():
                     <options>
                         <enabled>true</enabled>
                         <use_2D>true</use_2D>
-                        <chemotaxis>
-                            <enabled>true</enabled>
-                            <substrate>debris</substrate>
-                            <direction>1</direction>
-                        </chemotaxis>
-                        <advanced_chemotaxis>
-                            <enabled>false</enabled>
-                            <normalize_each_gradient>false</normalize_each_gradient>
-                            <chemotactic_sensitivities>
-                                <chemotactic_sensitivity substrate="debris">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="oxygen">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="IFN-gamma">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="IL-10">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="IL-4">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="EGF">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="substrate">0.0</chemotactic_sensitivity>
-                            </chemotactic_sensitivities>
-                        </advanced_chemotaxis>
                     </options>
                 </motility>
                 <secretion />
@@ -1159,24 +1014,6 @@ def get_M2_macrophage():
                     <options>
                         <enabled>true</enabled>
                         <use_2D>true</use_2D>
-                        <chemotaxis>
-                            <enabled>true</enabled>
-                            <substrate>debris</substrate>
-                            <direction>1</direction>
-                        </chemotaxis>
-                        <advanced_chemotaxis>
-                            <enabled>false</enabled>
-                            <normalize_each_gradient>false</normalize_each_gradient>
-                            <chemotactic_sensitivities>
-                                <chemotactic_sensitivity substrate="debris">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="oxygen">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="IFN-gamma">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="IL-10">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="IL-4">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="EGF">0.0</chemotactic_sensitivity>
-                                <chemotactic_sensitivity substrate="substrate">0.0</chemotactic_sensitivity>
-                            </chemotactic_sensitivities>
-                        </advanced_chemotaxis>
                     </options>
                 </motility>
                 <secretion />
@@ -1273,16 +1110,6 @@ def get_Th2_CD4_T_cell():
                     <options>
                         <enabled>true</enabled>
                         <use_2D>true</use_2D>
-                        <chemotaxis>
-                            <enabled>false</enabled>
-                            <substrate>debris</substrate>
-                            <direction>1</direction>
-                        </chemotaxis>
-                        <advanced_chemotaxis>
-                            <enabled>false</enabled>
-                            <normalize_each_gradient>false</normalize_each_gradient>
-                            <chemotactic_sensitivities />                              
-                        </advanced_chemotaxis>
                     </options>
                 </motility>
                 <secretion />                  

@@ -1201,7 +1201,8 @@ class BioinformaticsWalkthroughWindow_PositionsWindow(BioinformaticsWalkthroughW
         if self.biwt_plot_window.legend_window is not None:
             self.biwt_plot_window.legend_window.close()
         self.biwt.continue_from_positions()
-        
+
+#THIS IS WHERE WRITNG TO FILE ON FINAL PAGE
 class BioinformaticsWalkthroughWindow_WritePositions(BioinformaticsWalkthroughWindow):
     def __init__(self, biwt):
         super().__init__(biwt)
@@ -1266,6 +1267,7 @@ class BioinformaticsWalkthroughWindow_WritePositions(BioinformaticsWalkthroughWi
                 return
         self.add_cell_positions_to_file()
 
+#THIS IS WHERE NEW CELL DEFS ARE ADDED WHEN OVERWRITE OR APPEND IS PRESSED
     def check_for_new_celldefs(self):
         for cell_type in self.biwt.cell_types_list_final:
             if cell_type in self.biwt.celldef_tab.celltypes_list:
