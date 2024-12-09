@@ -68,7 +68,7 @@ class QCheckBox_custom(QCheckBox):  # it's insane to have to do this!
 
 class ICs(QWidget):
 
-    def __init__(self, config_tab, celldef_tab, biwt_flag):
+    def __init__(self, config_tab, celldef_tab, biwt_flag, xml_creator):
         super().__init__()
         # global self.config_params
 
@@ -76,6 +76,7 @@ class ICs(QWidget):
 
         self.celldef_tab = celldef_tab
         self.config_tab = config_tab
+        self.xml_creator = xml_creator
 
         self.biwt_flag = biwt_flag
 
@@ -217,7 +218,7 @@ class ICs(QWidget):
         self.tab_widget = QTabWidget()
         self.base_tab_id = self.tab_widget.addTab(self.create_base_ics_tab(),"Base")
         if self.biwt_flag:
-            self.biwt_tab = BioinformaticsWalkthrough(self.config_tab, self.celldef_tab, self)
+            self.biwt_tab = BioinformaticsWalkthrough(self.config_tab, self.celldef_tab, self, self.xml_creator)
             self.tab_widget.addTab(self.biwt_tab,"BIWT")
 
         self.layout = QVBoxLayout(self)

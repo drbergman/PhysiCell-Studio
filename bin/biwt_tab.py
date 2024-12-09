@@ -31,9 +31,11 @@ if BIWT_DEV_MODE == 'True':
 BIWT_DEV_MODE = BIWT_DEV_MODE=='True'
 
 import copy
+import platform
 import numpy as np
 import pandas as pd
 import time
+import subprocess
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle, Patch, Rectangle, Annulus, Wedge
 from matplotlib.collections import PatchCollection
@@ -41,6 +43,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from pretty_print_xml import pretty_print
 from BIWT_parameters.cell_specific_parameters import *
+from BIWT_parameters.xml_defaults import xml_defaults
 
 from pathlib import Path
 import xml.etree.ElementTree as ET  # https://docs.python.org/2/library/xml.etree.elementtree.html
@@ -75,6 +78,11 @@ class BioinformaticsWalkthroughWindow(QWidget):
         self.setWindowTitle(f"Bioinformatics Import Walkthrough: Step {biwt.current_window_idx+1}")
         self.biwt = biwt
         self.biwt.stale_futures = True # initializing a window means that any future windows are stale
+
+        self.cell_definitions_preferences = {}
+        if not hasattr(self.biwt, 'cell_definitions_preferences'):
+            self.biwt.cell_definitions_preferences = {}
+        self.cell_definitions_preferences = self.biwt.cell_definitions_preferences
 
 class BioinformaticsWalkthroughWindow_WarningWindow(BioinformaticsWalkthroughWindow):
     def __init__(self, biwt, layout, continue_cb):
@@ -1202,10 +1210,10 @@ class BioinformaticsWalkthroughWindow_PositionsWindow(BioinformaticsWalkthroughW
             self.biwt_plot_window.legend_window.close()
         self.biwt.continue_from_positions()
 
-#THIS IS WHERE WRITNG TO FILE ON FINAL PAGE
 class BioinformaticsWalkthroughWindow_WritePositions(BioinformaticsWalkthroughWindow):
     def __init__(self, biwt):
         super().__init__(biwt)
+        self.cell_definitions_preferences = biwt.cell_definitions_preferences
 
         print("------Writing cell positions to file------")
 
@@ -1256,6 +1264,7 @@ class BioinformaticsWalkthroughWindow_WritePositions(BioinformaticsWalkthroughWi
         with open(self.full_fname, 'w') as f:
             f.write('x,y,z,type\n')
         self.add_cell_positions_to_file()
+        self.rerun_physicell()
 
     def finish_append_button_cb(self):
         self.check_for_new_celldefs()
@@ -1266,17 +1275,61 @@ class BioinformaticsWalkthroughWindow_WritePositions(BioinformaticsWalkthroughWi
                 print(f"{self.full_fname} is not properly formatted for appending.\nIt needs to start with 'x,y,z,type,...'")
                 return
         self.add_cell_positions_to_file()
+        self.rerun_physicell()
 
-#THIS IS WHERE NEW CELL DEFS ARE ADDED WHEN OVERWRITE OR APPEND IS PRESSED
     def check_for_new_celldefs(self):
+        self.append_cell_definition_to_xml()
         for cell_type in self.biwt.cell_types_list_final:
             if cell_type in self.biwt.celldef_tab.celltypes_list:
                 print(f"BioinformaticsWalkthroughPlotWindow: {cell_type} found in current list of cell types. Not appending {cell_type}...")
             else:
                 print(f"BioinformaticsWalkthroughPlotWindow: {cell_type} not found in current list of cell types. Appending {cell_type}...")
-                self.biwt.celldef_tab.new_cell_def_named(cell_type)
+                # self.biwt.celldef_tab.new_cell_def_named(cell_type)
                 self.biwt.ics_tab.update_colors_list()
 
+    def append_cell_definition_to_xml(self):
+        xml_file_path = 'PhysiCell_new.xml'
+
+        if os.path.exists(xml_file_path):
+            tree = ET.parse(xml_file_path)
+            root = tree.getroot()
+
+        else:
+            root = ET.Element('PhysiCell_new', version="devel-version")
+            tree = ET.ElementTree(root)
+
+        self.add_xml_defaults(root)
+        cell_definitions = root.find("cell_definitions")
+
+        for cell_type, template in self.cell_definitions_preferences.items():
+            cell_definitions.append(template)
+        
+        tree.write(xml_file_path, encoding="utf-8", xml_declaration=True)
+        pretty_print(xml_file_path,xml_file_path)
+
+    def add_xml_defaults(self,root):
+        for key, xml_str in xml_defaults.items():
+            wrapped_xml_str = f"<{key}>{xml_str.strip()}</{key}>"
+            xml_element = ET.fromstring(wrapped_xml_str)
+            root.append(xml_element)
+
+    def rerun_physicell(self):
+
+
+        if platform.system() == "Windows":
+            exec_file = 'project.exe'
+        else:
+            exec_file = 'project'  # for template sample
+
+        self.biwt.xml_creator.__init__("PhysiCell_new.xml",self.biwt.xml_creator.studio_flag, self.biwt.xml_creator.skip_validate_flag, self.biwt.xml_creator.rules_flag, self.biwt.xml_creator.model3D_flag, self.biwt.xml_creator.tensor_flag, exec_file, self.biwt.xml_creator.nanohub_flag, False, self.biwt.xml_creator.pytest_flag, self.biwt.xml_creator.biwt_flag, parent = None)
+       
+
+        # directory = str(os.getcwd())
+        # command = [
+        #     "python", os.path.join(directory, "bin", "studio.py"), "--biwt", "-c", "PhysiCell_new.xml"
+        # ]
+        # subprocess.run(command, check=True)
+        
     def set_file_name(self):
         dir_name = self.csv_folder.text()
         if len(dir_name) > 0 and not os.path.isdir(dir_name):
@@ -2624,7 +2677,7 @@ class BioinformaticsWalkthroughPlotWindow(QWidget):
         return collection
 
 class BioinformaticsWalkthrough(QWidget):
-    def __init__(self, config_tab, celldef_tab, ics_tab):
+    def __init__(self, config_tab, celldef_tab, ics_tab, xml_creator):
         super().__init__()
         if HAVE_ANNDATA is False:
             s = "To use this tab to import an anndata object to generate cell initial conditions, you need to have anndata installed."
@@ -2639,6 +2692,7 @@ class BioinformaticsWalkthrough(QWidget):
         self.config_tab = config_tab
         self.celldef_tab = celldef_tab
         self.ics_tab = ics_tab
+        self.xml_creator = xml_creator
 
         self.start_walkthrough()
 
@@ -3117,6 +3171,7 @@ class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWind
         vbox.addWidget(instruction_label)
         vbox_scroll_area = QVBoxLayout()
         self.dropdowns = []
+
         list_cell_types = ["Normal Epithelial", "Default", "Normal Mesenchymal", "Fibroblast", "Tumor Epithelial", "Tumor Mesenchymal",
                            "Macrophage", "CD8 T Cell", "M0 Macrophage", "M1 Macrophage", "Th2 CD4 T cell"]
         list_cell_types.sort(key=lambda x: (x != 'Default', x))
@@ -3128,7 +3183,7 @@ class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWind
             hbox.addWidget(cell_type_label)
 
             dropdown = ExtendedCombo()
-            dropdown.objectName=cell_type
+            dropdown.objectName = cell_type
             dropdown.currentIndexChanged.connect(self.handle_dropdown_change)
             dropdown.setModel(self.model) 
             dropdown.setEditable(True)
@@ -3161,12 +3216,13 @@ class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWind
         self.resize(400, 600)
 
     def handle_dropdown_change(self):
-        cell_type = self.sender().objectName 
-        selected_text = self.sender().currentText()
-        self.create_new_cell_definition(cell_type, template_name=selected_text)
+        cell_type_input = self.sender().objectName
+        selected_template = self.sender().currentText()
+        cell_type_template = self.create_new_cell_definition(cell_type_input, selected_template)
+        self.cell_definitions_preferences[cell_type_input] = cell_type_template
 
-    def create_new_cell_definition(self, cell_type, template_name="Default"):
-        cell_definition = ET.Element("cell_definition", name=cell_type, ID=str(BioinformaticsWalkthrough_LoadCellParameters.current_id))
+    def create_new_cell_definition(self, cell_type_input = "Default", template_name="Default"):
+        cell_definition = ET.Element("cell_definition", name = cell_type_input, ID=str(BioinformaticsWalkthrough_LoadCellParameters.current_id))
         BioinformaticsWalkthrough_LoadCellParameters.current_id += 1
         template_functions = {
             "Normal Epithelial": get_epithelial_normal,
@@ -3186,28 +3242,8 @@ class BioinformaticsWalkthrough_LoadCellParameters(BioinformaticsWalkthroughWind
         if template_name in template_functions:
             template = template_functions[template_name]()
             cell_definition.append(ET.fromstring(template))
-        
-        self.update_physicell_settings(cell_definition)
 
-    def update_physicell_settings(self, cell_definition):
-        xml_file_path = '/Users/marwanaji/PhysiCell-Studio.git/config/PhysiCell_settings.xml'
-
-        if os.path.exists(xml_file_path):
-            tree = ET.parse(xml_file_path)
-            root = tree.getroot()
-            cell_definitions = root.find("cell_definitions")
-            if cell_definitions is None:
-                cell_definitions = ET.SubElement(root, "cell_definitions")
-        else:
-            root = ET.Element('PhysiCell_settings')
-            cell_definitions = ET.SubElement(root, "cell_definitions")
-        cell_definitions.append(cell_definition)
-        tree = ET.ElementTree(root)
-        try:
-            tree.write(xml_file_path, encoding="utf-8", xml_declaration=True)
-            pretty_print(xml_file_path, xml_file_path)
-        except Exception as e:
-            print(f"Error writing to file: {e}")
+        return cell_definition
 
     def process_window(self):
         self.biwt.continue_from_parameters()

@@ -761,6 +761,7 @@ class SubstrateDef(QWidget):
         logging.debug(f'=======================  microenv populate_tree  ======================= ')
         uep = self.xml_root.find(".//microenvironment_setup")
         if uep:
+            print("entering microenvironment setup")
             # self.substrate.clear()
             # self.param[substrate_name] = {}  # a dict of dicts
 
@@ -769,8 +770,9 @@ class SubstrateDef(QWidget):
             # <microenvironment_setup>
 		    #   <variable name="food" units="dimensionless" ID="0">
             for var in uep:
-                # print(cell_def.attrib['name'])
+                print(var.tag)
                 if var.tag == 'variable':
+                    print(var.attrib['name'])
                     substrate_name = var.attrib['name']
                     self.current_substrate = substrate_name  # do this for the callback methods (rf. BEWARE below)
                     if idx == 0:
