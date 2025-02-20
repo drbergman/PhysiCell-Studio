@@ -3,9 +3,10 @@ studio.py - driving module for the PhysiCell Studio to read in a PhysiCell confi
 
 Authors:
 Randy Heiland (heiland@iu.edu): lead designer and developer
-Dr. Vincent Noel, Institut Curie: Cell Types|Intracellular|boolean
-Marco Ruscone, Institut Curie: Cell Types|Intracellular|boolean
-Dr. Daniel Bergman, Johns Hopkins University: ICs bioinformatics
+Dr. Vincent Noel, Institut Curie: Cell Types|Intracellular|boolean, etc.
+Dr. Marco Ruscone, Institut Curie: Cell Types|Intracellular|boolean, etc.
+Dr. Daniel Bergman, University of Maryland, Baltimore: ICs bioinformatics, etc.
+Dr. Heber Rocha, Indiana University: cell type filters, movies, etc.
 Dr. Paul Macklin (macklinp@iu.edu): PI, funding and testing
 
 Macklin Lab members (grads & postdocs): testing, design, code contributions.
@@ -171,10 +172,6 @@ class PhysiCellXMLCreator(QWidget):
 
         self.setLayout(vlayout)
 
-        # do later, otherwise problems sometimes
-        # self.resize(1100, 770)  # width, height (height >= Cell Types|Death params)
-        # self.setMinimumSize(1100, 770)  #width, height of window
-
         self.current_dir = os.getcwd()
         print("self.current_dir = ",self.current_dir)
         logging.debug(f'self.current_dir = {self.current_dir}')
@@ -212,7 +209,7 @@ class PhysiCellXMLCreator(QWidget):
         self.num_models = 0
         self.model = {}  # key: name, value:[read-only, tree]
 
-        self.config_tab = Config(self.studio_flag)
+        self.config_tab = Config(self)
         self.config_tab_index = 0
         self.config_tab.xml_root = self.xml_root
         self.config_tab.fill_gui()
@@ -240,7 +237,7 @@ class PhysiCellXMLCreator(QWidget):
 
         # self.tab2.tree.setCurrentItem(QTreeWidgetItem,0)  # item
 
-        self.celldef_tab = CellDef(self.pytest_flag, self.config_tab)
+        self.celldef_tab = CellDef(self)
         self.celldef_tab.xml_root = self.xml_root
         if is_movable_flag:
             self.celldef_tab.is_movable_w.setEnabled(True)
@@ -272,7 +269,7 @@ class PhysiCellXMLCreator(QWidget):
 
         self.microenv_tab.celldef_tab = self.celldef_tab
 
-        self.user_params_tab = UserParams()
+        self.user_params_tab = UserParams(self)
         self.user_params_tab.xml_root = self.xml_root
         self.user_params_tab.fill_gui()
 
@@ -449,9 +446,9 @@ class PhysiCellXMLCreator(QWidget):
         # self.addTab(self.sbml_tab,"SBML")
 
         # self.setFixedSize(vlayout.sizeHint())  # manually force/fix size to fit all of GUI widgets!!
-        self.resize(1100, 770)  # width, height (height >= Cell Types|Death params)
+        self.resize(1100, 790)  # width, height (height >= Cell Types|Death params)
         if self.fix_min_size:
-            self.setMinimumSize(1100, 770)  #width, height of window
+            self.setMinimumSize(1100, 790)  #width, height of window
 
         if self.model3D_flag:
             self.tabWidget.setCurrentIndex(self.plot_tab_index)
@@ -463,10 +460,6 @@ class PhysiCellXMLCreator(QWidget):
         # self.tabWidget.setCurrentIndex(2)  # rwh/debug: select Cell Types
 
     def tab_change_cb(self,index: int):
-        # print("\nstudio.py: -------- tab index=",index)
-        # if index == 0:
-        #     studio_app.resize(1101,770) # recall: print("size=",ex.size())  # = PyQt5.QtCore.QSize(1100, 770)
-        #     studio_app.resize(1101,970) # recall: print("size=",ex.size())  # = PyQt5.QtCore.QSize(1100, 770)
         if index == self.microenv_tab_index: # microenv_tab
             self.microenv_tab.update_3D()
 
@@ -1510,15 +1503,11 @@ def main():
     palette.setColor(QPalette.ToolTipBase, Qt.black)
     palette.setColor(QPalette.ToolTipText, Qt.white)
 
-    # for QLineEdit()
     palette.setColor(QPalette.Base, Qt.white)
     palette.setColor(QPalette.Text, Qt.black)
 
-    # palette.setColor(QPalette.Button, QColor(230, 230, 0))  # light yellow: affects tree widget header and table headers
     palette.setColor(QPalette.Button, QColor(255, 255, 255))  # white: affects tree widget header and table headers
 
-    # palette.setColor(QPalette.ButtonText, Qt.white)  # e.g., header for tree widgets??
-    # palette.setColor(QPalette.ButtonText, Qt.green)  # e.g., header for tree widgets??
     palette.setColor(QPalette.ButtonText, Qt.black)  # e.g., header for tree widget too?!
 
     palette.setColor(QPalette.BrightText, Qt.red)
@@ -1528,8 +1517,6 @@ def main():
     palette.setColor(QPalette.HighlightedText, Qt.black)
 
     studio_app.setPalette(palette)
-    # studio_app.setStyleSheet("QCheckBox { background-color: red }")
-    # studio_app.setStyleSheet("QLineEdit { background-color: white }; QComboBox { height: 34 } ")  # doesn't seem to always work, forcing us to take different approach in, e.g., Cell Types sub-tabs
 
     studio_app.setStyleSheet("QLineEdit { background-color: white };")  # doesn't seem to always work, forcing us to take different approach in, e.g., Cell Types sub-tabs
 
@@ -1554,10 +1541,7 @@ def main():
     # print("calling PhysiCellXMLCreator with rules_flag= ",rules_flag)
     ex = PhysiCellXMLCreator(config_file, studio_flag, skip_validate_flag, rules_flag, model3D_flag, tensor_flag, exec_file, nanohub_flag, is_movable_flag, pytest_flag, biwt_flag
                              )
-    print("size=",ex.size())  # = PyQt5.QtCore.QSize(1100, 770)
-    # ex.setFixedWidth(1101)  # = PyQt5.QtCore.QSize(1100, 770)
-    # print("width=",ex.size())
-
+    print("size=",ex.size())
 
     # -- Insanity. Trying/failing to force the proper display of (default) checkboxes
     # ex.config_tab.config_params.update()  # attempt to refresh, to show checkboxes!
@@ -1571,11 +1555,11 @@ def main():
     # -- Insanity. Just trying to refresh the initial Config tab so the checkboxes will render properly :/
     # ex.config_tab.update()  # attempt to refresh, to show checkboxes!
     # ex.config_tab.repaint()  # attempt to refresh, to show checkboxes!
-    # ex.resize(1101,770)
+    # ex.resize(xblah,yblah)
     # ex.update()
     # ex.repaint()
     # ex.show()
-    # print("size 2=",ex.size())  # = PyQt5.QtCore.QSize(1100, 770)
+    # print("size 2=",ex.size())
 
     # startup_notice()
     sys.exit(studio_app.exec_())

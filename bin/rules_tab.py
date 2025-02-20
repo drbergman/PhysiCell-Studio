@@ -17,7 +17,7 @@ from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import QFrame,QApplication,QWidget,QTabWidget,QLineEdit, QGroupBox,QHBoxLayout,QVBoxLayout,QRadioButton,QLabel,QCheckBox,QComboBox,QScrollArea,QGridLayout,QPushButton,QFileDialog,QTableWidget,QTableWidgetItem,QHeaderView
 from PyQt5.QtWidgets import QMessageBox, QCompleter, QSizePolicy
 from PyQt5.QtCore import QSortFilterProxyModel, Qt, QRect
-from PyQt5.QtGui import QStandardItem, QStandardItemModel
+from PyQt5.QtGui import QStandardItem, QStandardItemModel, QRegExpValidator
 # from PyQt5.QtGui import QTextEdit
 from PyQt5 import QtWidgets
 
@@ -28,8 +28,8 @@ import numpy as np
 import pandas as pd
 
 from multivariate_rules import Window_plot_rules
-from studio_classes import ExtendedCombo
-from studio_functions import show_warning
+from studio_classes import ExtendedCombo, HoverWarning, QVLine, QLineEdit_custom, HoverQuestion
+from studio_functions import show_studio_warning_window
 
 class RulesPlotWindow(QWidget):
     def __init__(self):
@@ -57,7 +57,7 @@ class RulesPlotWindow(QWidget):
 #---------------------
 
 # Overloading the QCheckBox widget 
-class MyQCheckBox(QCheckBox):  # it's insane to have to do this!
+class MyQCheckBox(QCheckBox):  # leaving this here since (and not replacing with QCheckBox_custom since this also introduces new fields)
     def __init__(self,name=""):
         super(QCheckBox, self).__init__(name)
 
@@ -188,57 +188,37 @@ class Rules(QWidget):
         # -- damage
         # -- dead
         # -- total attack time
+        # -- damage delivered
         # -- time
         self.signal_l = []
 
         self.response_l = []
 
+        top_half_hbox = QHBoxLayout()
+        top_left_half_vbox = QVBoxLayout()
+        top_right_half_vbox = QVBoxLayout()
+        top_half_hbox.addLayout(top_left_half_vbox)
+        top_half_hbox.addWidget(QVLine())
+        top_half_hbox.addLayout(top_right_half_vbox)
+        self.rules_tab_layout.addLayout(top_half_hbox)
 
-        idx_row = 0
-        # self.check1 = QCheckBox("")
-        # self.rules_tab_layout.addWidget(self.check1, idx_row,1,1,1)
         hlayout = QHBoxLayout()
-        # hlayout.addStretch(0)
-
-        # hbox1 = QHBoxLayout()
-        # hbox1.addWidget(QLabel("                 "))
-        # hlayout.addWidget(QLabel("                 "))
 
         label = QLabel("Cell Type")
         label.setFixedWidth(60)
-        # label.setAlignment(QtCore.Qt.AlignRight)
         label.setAlignment(QtCore.Qt.AlignCenter)
-        # label.setFixedHeight(25)
 
-        # label.setFixedWidth(300)
-        # hlayout.addWidget(label,1)
         hlayout.addWidget(label)
 
         self.celltype_combobox = QComboBox()
         self.celltype_combobox.setFixedWidth(200)
         self.celltype_combobox.currentIndexChanged.connect(self.celltype_combobox_changed_cb)  
-        # self.celltype_combobox.setFixedWidth(300)
-        # self.celltype_combobox.setAlignment(QtCore.Qt.AlignLeft)
-        # hlayout.addWidget(self.celltype_combobox,1) # w, expand, align
-        # hlayout.addWidget(self.celltype_combobox, 0) # w, expand, align
         hlayout.addWidget(self.celltype_combobox) # w, expand, align
-        # hlayout.addWidget(self.celltype_combobox,0,Qt.AlignLeft) # w, expand, align
-        # hlayout.addLayout(hbox1,1) # w, expand, align
-        # hlayout.addLayout(hbox1,0) # w, expand, align
-        # hlayout.addLayout(hbox1) # w, expand, align
-
 
         self.add_rule_button = QPushButton("Add rule")
-        # self.add_rule_button.setFixedWidth(150)
-        # self.add_rule_button.setAlignment(QtCore.Qt.AlignLeft)
-        # self.add_rule_button.setStyleSheet("background-color: rgb(250,100,100)")
         self.add_rule_button.setStyleSheet("background-color: lightgreen")
         self.add_rule_button.clicked.connect(self.add_rule_cb)
-        # idx_row += 1
         hlayout.addWidget(self.add_rule_button,0) 
-        # hlayout.addWidget(self.add_rule_button) 
-
-        # hlayout.addWidget(QLabel("                         ")) 
 
         self.plot_new_rule_button = QPushButton("Plot")
         self.plot_new_rule_button.setStyleSheet("background-color: lightgreen")
@@ -246,14 +226,13 @@ class Rules(QWidget):
         hlayout.addWidget(self.plot_new_rule_button,0) 
 
         self.reuse_plot_flag = True
-        self.reuse_plot_w = QCheckBox("reuse plot window")
+        self.reuse_plot_w = MyQCheckBox("reuse plot window")
         self.reuse_plot_w.setChecked(self.reuse_plot_flag)
         self.reuse_plot_w.setEnabled(False)
-        # hlayout.addWidget(self.reuse_plot_w)
 
         #------------
         hlayout.addStretch(1)
-        self.rules_tab_layout.addLayout(hlayout) 
+        top_left_half_vbox.addLayout(hlayout) 
 
         #--------------
         hlayout = QHBoxLayout()
@@ -262,8 +241,6 @@ class Rules(QWidget):
         label = QLabel("----- Signal -----")
         label.setFixedWidth(lwidth)
         label.setAlignment(QtCore.Qt.AlignCenter)
-        # label.setAlignment(QtCore.Qt.AlignLeft)
-        # label.setAlignment(QtCore.Qt.AlignRight)
         hlayout.addWidget(label) 
 
         label = QLabel("")
@@ -274,32 +251,28 @@ class Rules(QWidget):
         label.setFixedWidth(lwidth)
         label.setFixedWidth(150)
         label.setAlignment(QtCore.Qt.AlignCenter)
-        # label.setAlignment(QtCore.Qt.AlignLeft)
-        # label.setAlignment(QtCore.Qt.AlignRight)
         hlayout.addWidget(label) 
 
         self.up_down_combobox = QComboBox()
         self.up_down_combobox.setFixedWidth(110)
         self.up_down_combobox.addItem("increases")
         self.up_down_combobox.addItem("decreases")
+        self.up_down_combobox.currentIndexChanged.connect(self.up_down_combobox_changed_cb)
         hlayout.addWidget(self.up_down_combobox)
 
         hlayout.addStretch(1)
-        self.rules_tab_layout.addLayout(hlayout) 
+        top_left_half_vbox.addLayout(hlayout) 
 
         #----------------------------
         hlayout = QHBoxLayout()
-        # hlayout.addStretch(0)
 
         wwidth = 300
-        # self.signal_combobox = QComboBox()
         self.signal_model = QStandardItemModel()
         self.signal_combobox = ExtendedCombo()
         self.signal_combobox.setFixedWidth(wwidth)
         self.signal_combobox.setModel(self.signal_model)
         self.signal_combobox.setModelColumn(0)
 
-        # self.signal_combobox.setFixedWidth(300)
         self.signal_combobox.currentIndexChanged.connect(self.signal_combobox_changed_cb)  
         hlayout.addWidget(self.signal_combobox)
 
@@ -312,13 +285,79 @@ class Rules(QWidget):
         self.response_combobox.setModelColumn(0)
         self.response_combobox.currentIndexChanged.connect(self.response_combobox_changed_cb)  
 
-        # self.response_combobox.setFixedWidth(300)
-        # hbox.addWidget(self.response_combobox) 
         hlayout.addWidget(self.response_combobox) 
 
         hlayout.addStretch(1)
-        self.rules_tab_layout.addLayout(hlayout)
+        top_left_half_vbox.addLayout(hlayout)
 
+        top_right_half_vbox.addStretch(1)
+        hlayout = QHBoxLayout()
+        hlayout.addStretch(1)
+        rules_enabled_label = QLabel("Enable rules:")
+        hlayout.addWidget(rules_enabled_label)
+        self.rules_enabled = MyQCheckBox()
+        hlayout.addWidget(self.rules_enabled)
+        hlayout.addStretch(1)
+        top_right_half_vbox.addLayout(hlayout)
+
+        label = QLabel("Make sure to save rules below before running simulations!")
+        hlayout = QHBoxLayout()
+        hlayout.addStretch(1)
+        hlayout.addWidget(label)
+        hlayout.addStretch(1)
+        top_right_half_vbox.addLayout(hlayout)
+
+        hlayout = QHBoxLayout()
+        self.save_button = QPushButton("Save")
+        if self.nanohub_flag:
+            self.save_button.setEnabled(True)
+        self.save_button.setFixedWidth(100)
+        self.save_button.setStyleSheet("background-color: yellow")
+        self.save_button.clicked.connect(self.save_rules_cb)
+        hlayout.addWidget(self.save_button)
+
+        hlayout.addWidget(QLabel("to:"))
+
+        self.rules_folder = QLineEdit()
+        self.rules_folder.setPlaceholderText("folder")
+        if self.nanohub_flag:
+            self.rules_folder.setEnabled(False)
+        # self.rules_folder.setFixedWidth(200)
+        hlayout.addWidget(self.rules_folder)
+
+        hlayout.addWidget(QLabel(os.path.sep))
+
+        self.rules_file = QLineEdit_custom()
+        csv_validator = QRegExpValidator(QtCore.QRegExp(r'^.+\.csv$'))
+        self.rules_file.setValidator(csv_validator)
+        self.rules_file.setPlaceholderText("file.csv")
+        if self.nanohub_flag:
+            self.rules_file.setEnabled(True)
+        # self.rules_file.setFixedWidth(200)
+        hlayout.addWidget(self.rules_file) 
+
+        top_right_half_vbox.addLayout(hlayout)
+
+        hlayout = QHBoxLayout()
+        hlayout.addStretch(1)
+
+        self.import_rules_button = QPushButton("Import")
+        if self.nanohub_flag:
+            self.import_rules_button.setEnabled(True)
+        self.import_rules_button.setFixedWidth(100)
+        self.import_rules_button.setStyleSheet("background-color: yellow")
+        self.import_rules_button.clicked.connect(self.import_rules_cb)
+        hlayout.addWidget(self.import_rules_button) 
+
+        self.import_rules_question_label = HoverQuestion("Open a file dialog to select a new rules file to import.")
+        self.import_rules_question_label.show_icon()
+        hlayout.addWidget(self.import_rules_question_label)
+        
+        hlayout.addStretch(1)
+
+        top_right_half_vbox.addLayout(hlayout)
+
+        top_right_half_vbox.addStretch(1)
         #------------
         lwidth = 30
 
@@ -328,34 +367,30 @@ class Rules(QWidget):
         label = QLabel("")
         lwidth = 300
         label.setFixedWidth(lwidth)
-        # label.setAlignment(QtCore.Qt.AlignRight)
-        # label.setAlignment(QtCore.Qt.AlignCenter)
         hlayout.addWidget(label) 
 
         label = QLabel("Base value")
         lwidth = 72
         label.setFixedWidth(lwidth)
-        # label.setAlignment(QtCore.Qt.AlignRight)
         label.setAlignment(QtCore.Qt.AlignCenter)
         hlayout.addWidget(label) 
 
         self.rule_base_val = QLineEdit()
         self.rule_base_val.setEnabled(False)
         self.rule_base_val.setStyleSheet("background-color: lightgray")
-        # self.rule_base_val.setText('1.e-5')
         self.rule_base_val.setText('0.1')
         self.rule_base_val.setValidator(QtGui.QDoubleValidator())
+        self.rule_base_val.textChanged.connect(self.rule_base_or_max_val_cb)
         hlayout.addWidget(self.rule_base_val)
 
         hlayout.addStretch(1)
-        self.rules_tab_layout.addLayout(hlayout)
+        top_left_half_vbox.addLayout(hlayout)
 
         #-------------------------------------
         hlayout = QHBoxLayout()
         lwidth = 60
         label = QLabel("Half-max")
         label.setFixedWidth(lwidth)
-        # label.setAlignment(QtCore.Qt.AlignRight)
         label.setAlignment(QtCore.Qt.AlignCenter)
         hlayout.addWidget(label) 
 
@@ -374,25 +409,26 @@ class Rules(QWidget):
         #---
         label = QLabel("Saturation value")
         label.setFixedWidth(100)
-        # label.setAlignment(QtCore.Qt.AlignRight)
         label.setAlignment(QtCore.Qt.AlignCenter)
         hlayout.addWidget(label) 
 
         self.rule_max_val = QLineEdit()  # saturation value for behavior
-        # self.rule_max_val.setText('3.e-4')
         self.rule_max_val.setText('1.0')
         self.rule_max_val.setValidator(QtGui.QDoubleValidator())
+        self.rule_max_val.textChanged.connect(self.rule_base_or_max_val_cb)
         hlayout.addWidget(self.rule_max_val)
 
+        self.rule_max_val_warning_label = HoverWarning("")
+        hlayout.addWidget(self.rule_max_val_warning_label)
+
         hlayout.addStretch(1)
-        self.rules_tab_layout.addLayout(hlayout) 
+        top_left_half_vbox.addLayout(hlayout) 
 
         #---------------------
         hlayout = QHBoxLayout()
 
         label = QLabel("Hill power")
         label.setFixedWidth(60)
-        # label.setAlignment(QtCore.Qt.AlignRight)
         label.setAlignment(QtCore.Qt.AlignCenter)
         hlayout.addWidget(label) 
 
@@ -413,77 +449,13 @@ class Rules(QWidget):
         self.dead_cells_checkbox = MyQCheckBox("apply to dead")
         hlayout.addWidget(self.dead_cells_checkbox)
 
-        self.rules_tab_layout.addLayout(hlayout) 
+        top_left_half_vbox.addLayout(hlayout)
 
 
-        #------------------------- OLD -------------------
-        # hlayout = QHBoxLayout()
-
-        # hbox = QHBoxLayout()
-        # label = QLabel("Behavior")
-        # # label.setAlignment(QtCore.Qt.AlignLeft)
-        # label.setAlignment(QtCore.Qt.AlignCenter)
-        # hbox.addWidget(label) 
-
-        # # self.response_combobox = QComboBox()
-        # self.response_model = QStandardItemModel()
-        # self.response_combobox = ExtendedCombo()
-        # self.response_combobox.setModel(self.response_model)
-        # self.response_combobox.setModelColumn(0)
-
-        # # self.response_combobox.setFixedWidth(300)
-        # hbox.addWidget(self.response_combobox) 
-        # # self.response_combobox.currentIndexChanged.connect(self.signal_combobox_changed_cb)  
-
-        # hlayout.addLayout(hbox)
-
-        # # self.celltype_combobox.currentIndexChanged.connect(self.celltype_combobox_changed_cb)  
-        # #--------------
-        # self.up_down_combobox = QComboBox()
-        # self.up_down_combobox.setFixedWidth(110)
-        # self.up_down_combobox.addItem("increases")
-        # self.up_down_combobox.addItem("decreases")
-        # hlayout.addWidget(self.up_down_combobox)
-
-        # lwidth = 60
-        # label = QLabel("Half-max")
-        # label.setFixedWidth(lwidth)
-        # # label.setAlignment(QtCore.Qt.AlignRight)
-        # label.setAlignment(QtCore.Qt.AlignCenter)
-        # hlayout.addWidget(label) 
-
-        # self.rule_half_max = QLineEdit()
-        # self.rule_half_max.setText('0.5')
-        # self.rule_half_max.setFixedWidth(100)
-        # self.rule_half_max.setValidator(QtGui.QDoubleValidator())
-        # hlayout.addWidget(self.rule_half_max)
-
-        # label = QLabel("Hill power")
-        # label.setFixedWidth(lwidth)
-        # # label.setAlignment(QtCore.Qt.AlignRight)
-        # label.setAlignment(QtCore.Qt.AlignCenter)
-        # hlayout.addWidget(label) 
-
-        # self.rule_hill_power = QLineEdit()
-        # self.rule_hill_power.setText('4')
-        # self.rule_hill_power.setFixedWidth(30)
-        # self.rule_hill_power.setValidator(QtGui.QIntValidator())
-        # hlayout.addWidget(self.rule_hill_power)
-
-        # self.dead_cells_rule = False
-        # self.dead_cells_checkbox = MyQCheckBox("applies to dead cells")
-        # hlayout.addWidget(self.dead_cells_checkbox)
-
-        # self.rules_tab_layout.addLayout(hlayout) 
-
-        #---------------------------------------------------------
         #----------------------
         rules_table_vbox = self.create_rules_table()
-        # self.create_rules_table()
 
         self.rules_tab_layout.addLayout(rules_table_vbox) 
-        # self.rules_tab_layout.addWidget(rules_table) 
-        # self.rules_tab_layout.addWidget(self.rules_table) 
 
         #----------------------
         hlayout = QHBoxLayout()
@@ -496,27 +468,17 @@ class Rules(QWidget):
 
         delete_rule_btn = QPushButton("Delete rule")
         delete_rule_btn.setFixedWidth(150)
-        # delete_rule_btn.setAlignment(QtCore.Qt.AlignLeft)
         delete_rule_btn.clicked.connect(self.delete_rule_cb)
         delete_rule_btn.setStyleSheet("background-color: yellow")
         hlayout.addWidget(delete_rule_btn)
 
         plot_rule_btn = QPushButton("Plot rule")
         plot_rule_btn.setFixedWidth(150)
-        # delete_rule_btn.setAlignment(QtCore.Qt.AlignLeft)
         plot_rule_btn.clicked.connect(self.plot_rule_cb)
         plot_rule_btn.setStyleSheet("background-color: lightgreen")
         hlayout.addWidget(plot_rule_btn)
 
         hlayout.addStretch(1)
-
-        # btn_frame = QFrame()
-        # btn_frame.setGeometry(QRect(10,10,500,20))
-        # btn_frame.setStyleSheet("QFrame{ border : 1px solid black; }")
-        # btn_frame.setLayout(hlayout)
-        # btn_frame.setFixedWidth(500)  # omg
-        # self.vbox_cycle.addWidget(radio_frame)
-
         #-------
         hlayout2 = QHBoxLayout()
         hlayout2.addWidget(groupbox) 
@@ -533,118 +495,8 @@ class Rules(QWidget):
         self.clear_button.clicked.connect(self.clear_rules)
         hlayout2.addWidget(self.clear_button) 
 
-        # self.validate_button = QPushButton("Validate all")
-        # self.validate_button.setEnabled(False)
-        # self.validate_button.setFixedWidth(150)
-        # self.validate_button.setStyleSheet("background-color: lightgreen")
-        # self.validate_button.clicked.connect(self.validate_rules_cb)
-        # hlayout.addWidget(self.validate_button) 
-
         self.rules_tab_layout.addLayout(hlayout2) 
         #----------------------
-        hlayout = QHBoxLayout()
-
-        groupbox = QGroupBox()
-        # hbox = QHBoxLayout()
-        # groupbox.setLayout(hbox)
-        groupbox.setLayout(hlayout)
-        # person_groupbox.setLayout(form_layout)
-
-        self.import_rules_button = QPushButton("Import")
-        if self.nanohub_flag:
-            self.import_rules_button.setEnabled(True)
-        self.import_rules_button.setFixedWidth(100)
-        # self.import_rules_button.setStyleSheet("background-color: lightgreen")
-        self.import_rules_button.setStyleSheet("background-color: yellow")
-        self.import_rules_button.clicked.connect(self.import_rules_cb)
-        hlayout.addWidget(self.import_rules_button) 
-        # hbox.addWidget(self.load_rules_button) 
-
-        # self.load_button = QPushButton("Load")
-        # self.load_button.setFixedWidth(100)
-        # self.load_button.setStyleSheet("background-color: lightgreen")
-        # self.load_button.clicked.connect(self.load_rules_cb)
-        # hlayout.addWidget(self.load_button) 
-
-        self.save_button = QPushButton("Save")
-        if self.nanohub_flag:
-            self.save_button.setEnabled(True)
-        self.save_button.setFixedWidth(100)
-        # self.save_button.setStyleSheet("background-color: lightgreen")
-        self.save_button.setStyleSheet("background-color: yellow")
-        self.save_button.clicked.connect(self.save_rules_cb)
-        # hbox.addWidget(self.save_button) 
-        hlayout.addWidget(self.save_button) 
-
-        hbox1 = QHBoxLayout()
-        label = QLabel("folder")
-        label.setFixedWidth(40)
-        # label.setAlignment(QtCore.Qt.AlignRight)
-        label.setAlignment(QtCore.Qt.AlignCenter)
-        hbox1.addWidget(label) 
-        self.rules_folder = QLineEdit()
-        if self.nanohub_flag:
-            self.rules_folder.setEnabled(False)
-        self.rules_folder.setFixedWidth(200)
-        # self.rules_folder.setAlignment(QtCore.Qt.AlignLeft)
-        hbox1.addWidget(self.rules_folder) 
-        hlayout.addLayout(hbox1) 
-
-        hbox2 = QHBoxLayout()
-        label = QLabel("file")
-        label.setFixedWidth(20)
-        label.setAlignment(QtCore.Qt.AlignRight)
-        label.setAlignment(QtCore.Qt.AlignCenter)
-        hbox2.addWidget(label) 
-        self.rules_file = QLineEdit()
-        if self.nanohub_flag:
-            self.rules_file.setEnabled(True)
-        self.rules_file.setFixedWidth(200)
-        hbox2.addWidget(self.rules_file) 
-        hlayout.addLayout(hbox2) 
-
-        # hlayout.addLayout(hbox) 
-        # hlayout.addWidget(groupbox) 
-        groupbox.setStyleSheet("QGroupBox { border: 1px solid black;}")
-
-        #-------
-        # self.save_button = QPushButton("Save")
-        # self.save_button.setFixedWidth(100)
-        # self.save_button.setStyleSheet("background-color: lightgreen")
-        # self.save_button.clicked.connect(self.save_rules_cb)
-        # hlayout.addWidget(self.save_button) 
-
-        # self.rules_tab_layout.addLayout(hlayout) 
-        self.rules_tab_layout.addWidget(groupbox) 
-
-        self.rules_enabled = QCheckBox("enable")
-        self.rules_tab_layout.addWidget(self.rules_enabled) 
-
-        #----------------------
-        # try:
-        #     # with open("config/cell_rules.csv", 'rU') as f:
-        #     with open("config/rules.csv", 'rU') as f:
-        #         text = f.read()
-        #     self.rules_text.setPlainText(text)
-        # except Exception as e:
-        #     # self.dialog_critical(str(e))
-        #     # print("error opening config/cells_rules.csv")
-        #     print("rules_tab.py: error opening config/rules.csv")
-        #     logging.error(f'rules_tab.py: Error opening config/rules.csv')
-        #     # sys.exit(1)
-        # else
-        # else:
-            # update path value
-            # self.path = path
-
-            # update the text
-        # self.rules_text.setPlainText(text)
-            # self.update_title()
-
-
-        # self.vbox.addWidget(self.text)
-
-        #---------
         self.insert_hacky_blank_lines(self.rules_tab_layout)
 
         #==================================================================
@@ -661,24 +513,53 @@ class Rules(QWidget):
 
 
     #--------------------------------------------------------
+    def validate_saturation_value(self):
+        max_val = float(self.rule_max_val.text())
+        try:
+            base_val = float(self.rule_base_val.text())
+        except:
+            return
+        show_warning = False
+        text = ''
+        if self.up_down_combobox.currentText() == "increases":
+            if max_val < base_val:
+                show_warning = True
+                text = "Max value must be >= base value"
+        else:
+            if max_val > base_val:
+                show_warning = True
+                text = "Max value must be <= base value"
+        if show_warning:
+            self.rule_max_val_warning_label.setHoverText(text)
+            self.rule_max_val_warning_label.show_icon()
+        else:
+            self.rule_max_val_warning_label.hide_icon()
+    
+    def up_down_combobox_changed_cb(self, idx):
+        if self.rule_max_val.validator().validate(self.rule_max_val.text(), 0)[0] != QtGui.QValidator.Acceptable:
+            self.rule_max_val_warning_label.hide_icon()
+            return
+        self.validate_saturation_value()
+
+    def rule_base_or_max_val_cb(self, text):
+        if self.sender().validator().validate(text, 0)[0] != QtGui.QValidator.Acceptable:
+            self.rule_max_val_warning_label.hide_icon()
+            return
+        self.validate_saturation_value()
+
+    #--------------------------------------------------------
     def create_rules_table(self):
         rules_table_w = QWidget()
         rules_table_scroll = QScrollArea()
         vlayout = QVBoxLayout()
         self.rules_table = QTableWidget()
-        # self.rules_table.cellClicked.connect(self.rules_cell_was_clicked)
 
-        # self.rules_table.setColumnCount(10)
         self.rules_table.setColumnCount(9)
         self.rules_table.setRowCount(self.max_rule_table_rows)
         self.rules_table.setColumnHidden(8, True) # hidden column base value
 
         header = self.rules_table.horizontalHeader()       
-        # header.setSectionResizeMode(0, QHeaderView.Stretch)
-        # header.setSectionResizeMode(8, QHeaderView.ResizeToContents)  # arg, don't work as expected
-        # header.setSectionResizeMode(9, QHeaderView.ResizeToContents)
 
-        # self.rules_table.setHorizontalHeaderLabels(['CellType','Response','Min','Base','Max', 'Signal','Direction','Half-max','Hill power','Apply to dead'])
         self.rules_table.setHorizontalHeaderLabels(['CellType','Signal','Direction','Behavior', 'Saturation value','Half-max','Hill power','Apply to dead','Base value'])
 
         # Don't like the behavior these offer, e.g., locks down width of 0th column :/
@@ -692,7 +573,7 @@ class Rules(QWidget):
             # ------- CellType
             w_me = MyQLineEdit()
             w_me.setFrame(False)
-            rx_valid_varname = QtCore.QRegExp("^[a-zA-Z][a-zA-Z0-9_]+$")
+            rx_valid_varname = QtCore.QRegExp("^[a-zA-Z][a-zA-Z0-9_ ]+$")
             name_validator = QtGui.QRegExpValidator(rx_valid_varname )
             w_me.setValidator(name_validator)
 
@@ -929,24 +810,24 @@ class Rules(QWidget):
             # print(behavior, cycle_model_idx )
             #{0:"live", 1:"basic Ki67", 2:"advanced Ki67", 3:"flow cytometry", 4:"Flow cytometry model (separated)", 5:"cycling quiescent"}
             if (behavior == 'cycle entry' or behavior == 'exit from cycle phase 0'):
-                if cycle_model_idx == 0 : base_val = self.celldef_tab.param_d[key0]['cycle_live_trate00']
-                elif cycle_model_idx == 1 : base_val = self.celldef_tab.param_d[key0]['cycle_Ki67_trate01']
-                elif cycle_model_idx == 2 : base_val = self.celldef_tab.param_d[key0]['cycle_advancedKi67_trate01']
-                elif cycle_model_idx == 3 : base_val = self.celldef_tab.param_d[key0]['cycle_flowcyto_trate01']
-                elif cycle_model_idx == 4 : base_val = self.celldef_tab.param_d[key0]['cycle_flowcytosep_trate01']
-                elif cycle_model_idx == 5 : base_val = self.celldef_tab.param_d[key0]['cycle_quiescent_trate01']
+                if cycle_model_idx == 0 : base_val = self.celldef_tab.param_d[key0]['cycle_live_00_trate']
+                elif cycle_model_idx == 1 : base_val = self.celldef_tab.param_d[key0]['cycle_Ki67_01_trate']
+                elif cycle_model_idx == 2 : base_val = self.celldef_tab.param_d[key0]['cycle_advancedKi67_01_trate']
+                elif cycle_model_idx == 3 : base_val = self.celldef_tab.param_d[key0]['cycle_flowcyto_01_trate']
+                elif cycle_model_idx == 4 : base_val = self.celldef_tab.param_d[key0]['cycle_flowcytosep_01_trate']
+                elif cycle_model_idx == 5 : base_val = self.celldef_tab.param_d[key0]['cycle_quiescent_01_trate']
             elif (behavior == 'exit from cycle phase 1'):
-                if cycle_model_idx == 1 : base_val = self.celldef_tab.param_d[key0]['cycle_Ki67_trate10']
-                elif cycle_model_idx == 2 : base_val = self.celldef_tab.param_d[key0]['cycle_advancedKi67_trate12']
-                elif cycle_model_idx == 3 : base_val = self.celldef_tab.param_d[key0]['cycle_flowcyto_trate12']
-                elif cycle_model_idx == 4 : base_val = self.celldef_tab.param_d[key0]['cycle_flowcytosep_trate12']
-                elif cycle_model_idx == 5 : base_val = self.celldef_tab.param_d[key0]['cycle_quiescent_trate10']
+                if cycle_model_idx == 1 : base_val = self.celldef_tab.param_d[key0]['cycle_Ki67_10_trate']
+                elif cycle_model_idx == 2 : base_val = self.celldef_tab.param_d[key0]['cycle_advancedKi67_12_trate']
+                elif cycle_model_idx == 3 : base_val = self.celldef_tab.param_d[key0]['cycle_flowcyto_12_trate']
+                elif cycle_model_idx == 4 : base_val = self.celldef_tab.param_d[key0]['cycle_flowcytosep_12_trate']
+                elif cycle_model_idx == 5 : base_val = self.celldef_tab.param_d[key0]['cycle_quiescent_10_trate']
             elif (behavior == 'exit from cycle phase 2'):
-                if cycle_model_idx == 2 : base_val = self.celldef_tab.param_d[key0]['cycle_advancedKi67_trate20']
-                elif cycle_model_idx == 3 : base_val = self.celldef_tab.param_d[key0]['cycle_flowcyto_trate20']
-                elif cycle_model_idx == 4 : base_val = self.celldef_tab.param_d[key0]['cycle_flowcytosep_trate23']
+                if cycle_model_idx == 2 : base_val = self.celldef_tab.param_d[key0]['cycle_advancedKi67_20_trate']
+                elif cycle_model_idx == 3 : base_val = self.celldef_tab.param_d[key0]['cycle_flowcyto_20_trate']
+                elif cycle_model_idx == 4 : base_val = self.celldef_tab.param_d[key0]['cycle_flowcytosep_23_trate']
             elif (behavior == 'exit from cycle phase 3'):
-                if cycle_model_idx == 4 : base_val = self.celldef_tab.param_d[key0]['cycle_flowcytosep_trate30']
+                if cycle_model_idx == 4 : base_val = self.celldef_tab.param_d[key0]['cycle_flowcytosep_30_trate']
                         
         elif btokens[0] in self.substrates:
             key1 = 'secretion'
@@ -991,9 +872,9 @@ class Rules(QWidget):
         elif behavior == "relative maximum adhesion distance":
             base_val = self.celldef_tab.param_d[key0]['mechanics_relative_equilibrium_distance']
         elif behavior == "cell attachment rate":
-            base_val = self.celldef_tab.param_d[key0]['mechanics_attachment_rate']
+            base_val = self.celldef_tab.param_d[key0]['attachment_rate']
         elif behavior == "cell detachment rate":
-            base_val = self.celldef_tab.param_d[key0]['mechanics_detachment_rate']
+            base_val = self.celldef_tab.param_d[key0]['detachment_rate']
         elif behavior == "maximum number of cell attachments":
             base_val = self.celldef_tab.param_d[key0]['mechanics_max_num_attachments']
 
@@ -1035,6 +916,9 @@ class Rules(QWidget):
             base_val = self.celldef_tab.param_d[key0]["damage_rate"]
         elif behavior == "damage repair rate":
             base_val = self.celldef_tab.param_d[key0]["damage_repair_rate"]
+        elif "asymmetric" == behavior.split()[0]:
+            cell_type = behavior.split()[-1]
+            base_val = self.celldef_tab.param_d[key0]["asymmetric_division_probability"][cell_type]
         elif "custom:" in btokens[0]:
             custom_data_name = btokens[0].split(':')[-1] # return string after colon
             print(custom_data_name, self.celldef_tab.param_d[key0]['custom_data'][custom_data_name])
@@ -1054,20 +938,24 @@ class Rules(QWidget):
             if "decreases" in self.up_down_combobox.currentText(): saturation_val = 0.0
             else: saturation_val = 1.0
         else:
-            if "decreases" in self.up_down_combobox.currentText(): 
-                # Avoid the annoying floating point epsilon (with lots of spurious 0s). Probably a better way.
-                idx_pt = str(float(base_val)).find('.')
-                num_decimal_digits = len(str(float(base_val))[idx_pt+1:])  # number of digits to right of '.'
-                saturation_val = self.scale_base_for_min * float(base_val)
-                saturation_val = round(saturation_val, num_decimal_digits+1) # "+ 1" only relevant for scaling ~= 0.1
-            else: 
-                saturation_val = self.scale_base_for_max * float(base_val)
+            # Silliness to avoid numerical noise appearing in computed saturation_val
+            base_val_p = np.format_float_positional(float(base_val))
+            lbv = len(base_val_p)
 
+            if "decreases" in self.up_down_combobox.currentText(): 
+                saturation_val = self.scale_base_for_min * float(base_val_p)
+                sat_val_p = np.format_float_positional(saturation_val)
+                saturation_val = float(sat_val_p[:lbv+1])
+            else: 
+                saturation_val = self.scale_base_for_max * float(base_val_p)
+                sat_val_p = np.format_float_positional(saturation_val)
+                saturation_val = round(float(sat_val_p), lbv)
 
             # behaviors with max response
             if ( behavior == 'migration bias' and saturation_val > 1 ): saturation_val = 1.0
             if ( behavior == 'is_movable' and saturation_val > 1 ): saturation_val = 1.0
-        self.rule_max_val.setText(str(saturation_val))
+
+        self.rule_max_val.setText(np.format_float_positional(saturation_val))
 
         # print(self.celldef_tab.param_d.keys())
         # for ct in self.celldef_tab.param_d.keys():
@@ -1172,7 +1060,7 @@ class Rules(QWidget):
             except:
                 print("argh, exception opening or reading")
                 msg = "fill_rules(): " + full_rules_fname + " is using v1 syntax. Please upgrade."
-                show_warning(msg)
+                show_studio_warning_window(msg)
                 return
                 # sys.exit(1)
 
@@ -1194,7 +1082,7 @@ class Rules(QWidget):
                             cell_type = elm[0]
                             if cell_type not in self.celldef_tab.param_d.keys():
                                 print(f'ERROR: {cell_type} is not a valid cell type name')
-                                show_warning(f'ERROR: {cell_type} is not a valid cell type name')
+                                show_studio_warning_window(f'ERROR: {cell_type} is not a valid cell type name')
                                 return
 
                                 # self.rules_table.setCellWidget(irow, self.custom_icol_name, w_varname)   # 1st col
@@ -1203,12 +1091,12 @@ class Rules(QWidget):
                         elif len(elm) == 9:   # v1
                             print(f'\n\n  WARNING: fill_rules(): {full_rules_fname} is using v1 syntax. Please upgrade\n')
                             msg = "fill_rules(): " + full_rules_fname + " is using v1 syntax. Please upgrade."
-                            show_warning(msg)
+                            show_studio_warning_window(msg)
                             return
                         else:
                             print(f'\n\n  WARNING: fill_rules(): {full_rules_fname} has unknown syntax\n')
                             msg = f"fill_rules(): {full_rules_fname} has unknown syntax. len(elm)={len(elm)}"
-                            show_warning(msg)
+                            show_studio_warning_window(msg)
                             return
 
                         if elm[self.rules_response_idx] == "phagocytose dead cell":
@@ -1240,14 +1128,14 @@ class Rules(QWidget):
             # self.dialog_critical(str(e))
             # print("error opening config/cells_rules.csv")
                 print(f'rules_tab.py: Error opening or reading {full_rules_fname}')
-                show_warning(f'rules_tab.py: Error opening or reading {full_rules_fname}')
+                show_studio_warning_window(f'rules_tab.py: Error opening or reading {full_rules_fname}')
                 # logging.error(f'rules_tab.py: Error opening or reading {full_rules_fname}')
                 # sys.exit(1)
         else:
             if self.rules_enabled_attr:
                 print(f'\n\n!!!  WARNING: fill_rules(): {full_rules_fname} is not a valid file !!!\n')
                 msg = "fill_rules(): " + full_rules_fname + " not valid"
-                show_warning(msg)
+                show_studio_warning_window(msg)
             # logging.error(f'fill_rules(): {full_rules_fname} is not a valid file')
 
     # else:  # should empty the Rules tab
@@ -1282,12 +1170,12 @@ class Rules(QWidget):
             signal = self.signal_combobox.currentText()
             # print("------------- plot_new_rule_cb(): signal= ",signal)
             if not self.valid_signal(signal):
-                show_warning( "Invalid signal: " + signal)
+                show_studio_warning_window( "Invalid signal: " + signal)
                 return
             behavior = self.response_combobox.currentText()
             # print("n------------- plot_new_rule_cb(): behavior= ",behavior)
             if not self.valid_behavior(behavior):
-                show_warning("Invalid behavior: " + behavior)
+                show_studio_warning_window("Invalid behavior: " + behavior)
                 return
             # Check if saturation value is compatible with increase/decrease behaviour
             direction = self.up_down_combobox.currentText()
@@ -1299,10 +1187,10 @@ class Rules(QWidget):
             saturation_val = float(self.rule_max_val.text())
             # print(base_val,saturation_val, direction)            
             if ( (saturation_val < base_val) and "increases" in self.up_down_combobox.currentText() ): 
-                show_warning(f"Error: Behavior {behavior} cannot be increased with the given [Saturation value]. [Saturation value] must be greater than [Base value].")
+                show_studio_warning_window(f"Error: Behavior {behavior} cannot be increased with the given [Saturation value]. [Saturation value] must be greater than [Base value].")
                 return
             if ( (saturation_val > base_val) and "decreases" in self.up_down_combobox.currentText() ): 
-                show_warning(f"Error: Behavior {behavior} cannot be decreased with the given [Saturation value]. [Saturation value] must be lower than [Base value].")
+                show_studio_warning_window(f"Error: Behavior {behavior} cannot be decreased with the given [Saturation value]. [Saturation value] must be lower than [Base value].")
                 return  
         except:
             print("\n------------- plot_new_rule_cb(): got exception validating signal, behavior. Return.")
@@ -1403,24 +1291,20 @@ class Rules(QWidget):
 
     #-----------------------------------------------------------
     def add_rule_cb(self):
-
         try:
-            # print("\n------------- add_rule_cb()")
             signal = self.signal_combobox.currentText()
-            # print("------------- add_rule_cb(): signal= ",signal)
             if not self.valid_signal(signal):
-                show_warning( "Invalid signal: " + signal)
+                show_studio_warning_window( "Invalid signal: " + signal)
                 return
             behavior = self.response_combobox.currentText()
-            # print("n------------- add_rule_cb(): behavior= ",behavior)
             if not self.valid_behavior(behavior):
-                show_warning("Invalid behavior: " + behavior)
+                show_studio_warning_window("Invalid behavior: " + behavior)
                 return
             direction = self.up_down_combobox.currentText()
             # Avoid this in PhysiCell: "Warning! Signal substrate was already part of the rule. Ignoring input."
             dup_rule = self.check_for_duplicate(self.celltype_combobox.currentText(), signal, behavior, direction)
             if dup_rule >= 0:
-                show_warning(f"Error: You already have this signal-behavior defined for this cell type (row {dup_rule}). Either delete the rule in the table first or edit it manually.")
+                show_studio_warning_window(f"Error: You already have this signal-behavior defined for this cell type (row {dup_rule}). Either delete the rule in the table first or edit it manually.")
                 return
 
 
@@ -1431,15 +1315,12 @@ class Rules(QWidget):
             else: base_val = float(base_val)
             saturation_val = float(self.rule_max_val.text())
 
-            direction = self.up_down_combobox.currentText()
-
             # Check if saturation value is compatible with increase/decrease behaviour
-            # print(base_val,saturation_val, direction)            
             if ( (saturation_val < base_val) and "increases" in self.up_down_combobox.currentText() ): 
-                show_warning(f"Error: Behavior {behavior} cannot be increased with the given [Saturation value]. [Saturation value] must be greater than [Base value].")
+                show_studio_warning_window(f"Error: Behavior {behavior} cannot be increased with the given [Saturation value]. [Saturation value] must be greater than [Base value].")
                 return
             if ( (saturation_val > base_val) and "decreases" in self.up_down_combobox.currentText() ): 
-                show_warning(f"Error: Behavior {behavior} cannot be decreased with the given [Saturation value]. [Saturation value] must be lower than [Base value].")
+                show_studio_warning_window(f"Error: Behavior {behavior} cannot be decreased with the given [Saturation value]. [Saturation value] must be lower than [Base value].")
                 return  
         except:
             print("\n------------- add_rule_cb(): got exception validating signal, behavior. Return.")
@@ -1458,10 +1339,6 @@ class Rules(QWidget):
         rule_str += ','
         rule_str += self.response_combobox.currentText()
         rule_str += ','
-        # rule_str += self.rule_min_val.text()
-        # rule_str += ','
-        # rule_str += self.rule_base_val.text()
-        # rule_str += ','
         rule_str += self.rule_max_val.text()
         rule_str += ','
         rule_str += self.rule_half_max.text()
@@ -1475,7 +1352,6 @@ class Rules(QWidget):
         print("add_rule_cb():---> ",rule_str)
 
         irow = self.num_rules
-        # print("add_rule_cb():self.num_rules= ",self.num_rules)
 
         # v2 synax:
         # cell type, signal, increases/decreases,behavior, param value at max response, half max, hill power, applies to dead?
@@ -1484,13 +1360,12 @@ class Rules(QWidget):
             self.rules_table.cellWidget(irow, self.rules_celltype_idx).setText( self.celltype_combobox.currentText() )
         except:
             msg = f'add_rule_cb() Error: irow={irow}, idx={self.rules_celltype_idx}, widget={self.rules_table.cellWidget(irow, self.rules_celltype_idx)}.'
-            show_warning(msg)
+            show_studio_warning_window(msg)
             return 
 
         self.rules_table.cellWidget(irow, self.rules_signal_idx).setText( self.signal_combobox.currentText() )
         self.rules_table.cellWidget(irow, self.rules_direction_idx).setText( self.up_down_combobox.currentText() )
         self.rules_table.cellWidget(irow, self.rules_response_idx).setText( self.response_combobox.currentText() )  # behavior
-        # self.rules_table.cellWidget(irow, self.rules_minval_idx).setText( self.rule_min_val.text() )
         self.rules_table.cellWidget(irow, self.rules_baseval_idx).setText( self.rule_base_val.text() )
         self.rules_table.cellWidget(irow, self.rules_maxval_idx).setText( self.rule_max_val.text() )
         self.rules_table.cellWidget(irow, self.rules_halfmax_idx).setText( self.rule_half_max.text() )
@@ -1501,9 +1376,8 @@ class Rules(QWidget):
             self.rules_table.cellWidget(irow,self.rules_applydead_idx).setChecked(False)
 
         self.num_rules += 1
-        # print("add_rule_cb(): post-incr, self.num_rules= ",self.num_rules)
 
-        # self.rules_text.appendPlainText(rule_str)
+        self.rules_enabled.setChecked(True)
         return
 
     #--------------------------------------------------------
@@ -1634,7 +1508,7 @@ class Rules(QWidget):
         # if row < 0:
         if (row < 0) or (row+1 > self.num_rules) or (self.num_rules <= 0):
             msg = f'Error: Select a row with a rule before deleting.'
-            show_warning(msg)
+            show_studio_warning_window(msg)
             return
         # varname = self.custom_data_table.cellWidget(row,self.custom_icol_name).text()
         # print(" custom var name= ",varname)
@@ -1661,7 +1535,7 @@ class Rules(QWidget):
                 self.rules_table.cellWidget(irow,self.rules_celltype_idx).wrow -= 1  # sufficient to only decr the "name" column
             except:
                 msg = f'Warning: could not decrement row {irow} from the Rules table. Select a row before deleting.'
-                show_warning(msg)
+                show_studio_warning_window(msg)
                 return
 
             # print(f"   after removing {varname}, master_custom_var_d= ",self.master_custom_var_d)
@@ -1683,7 +1557,7 @@ class Rules(QWidget):
 
         irow = self.rules_table.currentRow()
         if irow < 0:
-            show_warning( "Select (click on) a row to plot.")
+            show_studio_warning_window( "Select (click on) a row to plot.")
             return
 
         try:
@@ -1692,13 +1566,13 @@ class Rules(QWidget):
             # print("\n------------- plot_rule_cb():  signal=",signal)
             # print("------------- plot_rule_cb(): signal= ",signal)
             if not self.valid_signal(signal):
-                show_warning( "Invalid signal: " + signal)
+                show_studio_warning_window( "Invalid signal: " + signal)
                 return
             behavior = self.rules_table.cellWidget(irow, self.rules_response_idx).text()
             # print("\n------------- plot_rule_cb():  behavior=",behavior)
             # print("n------------- plot_rule_cb(): behavior= ",behavior)
             if not self.valid_behavior(behavior):
-                show_warning("Invalid behavior: " + behavior)
+                show_studio_warning_window("Invalid behavior: " + behavior)
                 return
         except:
             print("\n------------- plot_rule_cb(): got exception validating signal, behavior. Return.")
@@ -1708,7 +1582,7 @@ class Rules(QWidget):
         
         if (irow < 0) or (self.num_rules == 0):
             msg = "You need to select a row in the table"
-            show_warning(msg)
+            show_studio_warning_window(msg)
             return
 
         # print("------------- plot_rule_cb(), irow=",irow)
@@ -1747,11 +1621,11 @@ class Rules(QWidget):
         direction_str = self.rules_table.cellWidget(irow, self.rules_direction_idx).text()
         if (saturation_val > base_val) and direction_str == "decreases":
             msg = f'saturation ({saturation_val}) is > base {base_val}, so we will change the Direction to "increases"'
-            show_warning(msg)
+            show_studio_warning_window(msg)
             self.rules_table.cellWidget(irow, self.rules_direction_idx).setText( "increases" )
         elif (saturation_val < base_val) and direction_str == "increases": 
             msg = f'saturation ({saturation_val}) is < base {base_val}, so we will change the Direction to "decreases"'
-            show_warning(msg)
+            show_studio_warning_window(msg)
             self.rules_table.cellWidget(irow, self.rules_direction_idx).setText( "decreases" )
 
         
@@ -1973,7 +1847,7 @@ class Rules(QWidget):
             signal_l.append("contact with " + ct)
 
         # special
-        signal_l += ["contact with live cell","contact with dead cell","contact with BM","damage","dead","total attack time","time","apoptotic","necrotic"]
+        signal_l += ["contact with live cell","contact with dead cell","contact with BM","damage","dead","total attack time","damage delivered","time","apoptotic","necrotic"]
 
         # append all custom data (but *only* for a single cell_def!)
         cell_def0 = list(self.celldef_tab.param_d.keys())[0]
@@ -1994,7 +1868,7 @@ class Rules(QWidget):
         self.response_combobox.addItems(self.response_l)
 
         self.response_combobox.setCurrentIndex(0)
-        self.celldef_tab.fill_responses_widget(self.response_l + ["Volume"]) # everything else is lowercase, but this can stand out because it's not a true behavior, but rather the unique non-behavior that can be set by ICs
+        self.celldef_tab.par_dist_fill_responses_widget(self.response_l + ["Volume"]) # everything else is lowercase, but this can stand out because it's not a true behavior, but rather the unique non-behavior that can be set by ICs
 
     def create_response_list(self):
         # TODO: figure out how best to organize these responses
@@ -2028,7 +1902,7 @@ class Rules(QWidget):
         # special
         response_l += ["relative maximum adhesion distance","cell-cell repulsion","cell-BM adhesion","cell-BM repulsion","phagocytose apoptotic cell","phagocytose necrotic cell","phagocytose other dead cell"]
 
-        for verb in ["phagocytose ","attack ","fuse to ","transform to ","immunogenicity to "]:  # verb
+        for verb in ["phagocytose ","attack ","fuse to ","transform to ","immunogenicity to ","asymmetric division to "]:  # verb
             for ct in self.celldef_tab.param_d.keys():
                 response_l.append(verb + ct)
 
@@ -2089,7 +1963,7 @@ class Rules(QWidget):
                 if folder_name == None:
                     msg += " rules file "
                 msg += " missing from .xml"
-                # show_warning(msg)
+                # show_studio_warning_window(msg)
 
                 self.rules_folder.setText("")
                 self.rules_file.setText("")
@@ -2183,7 +2057,9 @@ class Rules(QWidget):
                 self.xml_root.find(".//cell_rules//rulesets//ruleset").attrib['enabled'] = 'true'
             else:
                 self.xml_root.find(".//cell_rules//rulesets//ruleset").attrib['enabled'] = 'false'
-
+                
+            # force version update for users
+            self.xml_root.find(".//cell_rules//rulesets//ruleset").attrib['version'] = '3.0'
         return
     
     #-------------------------
@@ -2241,8 +2117,8 @@ def find_isolated_string(s, name, start=0):
         return ind
 
 def create_reserved_words():
-    reserved_words_signals = ["contact with", "contact with live cell","contact with dead cell","contact with BM", "total attack time"]
-    reserved_words_behaviors = ["secretion target","cycle entry","attack damage rate","attack duration","damage rate","damage repair rate","migration speed","migration bias","migration persistence time","chemotactic response to","cell-cell adhesion","cell-cell adhesion elastic constant","adhesive affinity to","relative maximum adhesion distance","cell-cell repulsion","cell-BM adhesion","cell-BM repulsion","phagocytose apoptotic cell","phagocytose necrotic cell","phagocytose other dead cell","fuse to","transform to","immunogenicity to","cell attachment rate","cell detachment rate","maximum number of cell attachments"]
+    reserved_words_signals = ["contact with", "contact with live cell","contact with dead cell","contact with BM", "total attack time", "damage delivered"]
+    reserved_words_behaviors = ["secretion target","cycle entry","attack damage rate","attack duration","damage rate","damage repair rate","migration speed","migration bias","migration persistence time","chemotactic response to","cell-cell adhesion","cell-cell adhesion elastic constant","adhesive affinity to","relative maximum adhesion distance","cell-cell repulsion","cell-BM adhesion","cell-BM repulsion","phagocytose apoptotic cell","phagocytose necrotic cell","phagocytose other dead cell","fuse to","transform to","asymmetric division to","immunogenicity to","cell attachment rate","cell detachment rate","maximum number of cell attachments"]
     reserved_words_cycle_phases = [f"exit from cycle phase {i}" for i in range(6)]
     reserved_words = reserved_words_signals + reserved_words_behaviors + reserved_words_cycle_phases
     return reserved_words

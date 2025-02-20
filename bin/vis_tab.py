@@ -2,7 +2,8 @@
 vis_tab.py - provide visualization on Plot tab. Cells can be plotted on top of substrates/signals.
 
 Authors:
-Randy Heiland (heiland@iu.edu)
+Randy Heiland (heiland@iu.edu),
+Daniel Bergman, Vincent Noel, Heber Rocha, Marco Ruscone,
 Dr. Paul Macklin (macklinp@iu.edu)
 Rf. Credits.md
 """
@@ -14,9 +15,6 @@ import time
 # import inspect
 import xml.etree.ElementTree as ET  # https://docs.python.org/2/library/xml.etree.elementtree.html
 from pathlib import Path
-# from ipywidgets import Layout, Label, Text, Checkbox, Button, BoundedIntText, HBox, VBox, Box, \
-    # FloatText, Dropdown, SelectMultiple, RadioButtons, interactive
-# import matplotlib.pyplot as plt
 
 from vis_base import VisBase
 from matplotlib.colors import BoundaryNorm
@@ -25,7 +23,6 @@ from matplotlib.collections import LineCollection
 from matplotlib.patches import Circle, Ellipse, Rectangle
 from matplotlib.collections import PatchCollection
 import matplotlib.colors as mplc
-#import colorcet as cc
 import cmaps
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 from matplotlib import gridspec
@@ -36,9 +33,6 @@ import pandas
 
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import QFrame,QWidget,QCheckBox,QComboBox,QVBoxLayout,QLabel,QMessageBox
-# from PyQt5.QtWidgets import QFrame,QApplication,QWidget,QTabWidget,QFormLayout,QLineEdit, QGroupBox, QHBoxLayout,QVBoxLayout,QRadioButton,QLabel,QCheckBox,QComboBox,QScrollArea,  QMainWindow,QGridLayout, QPushButton, QFileDialog, QMessageBox, QStackedWidget, QSplitter
-# from PyQt5.QtWidgets import QCompleter, QSizePolicy
-# from PyQt5.QtCore import QSortFilterProxyModel
 from PyQt5.QtSvg import QSvgWidget
 from PyQt5.QtGui import QPainter
 from PyQt5.QtCore import QRectF, Qt
@@ -53,10 +47,7 @@ matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-# from PyQt5 import QtCore, QtWidgets
-
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
-# from matplotlib.figure import Figure
 
 #-----------------------------
 #   Future idea of floating Plot window
@@ -147,6 +138,11 @@ class Vis(VisBase, QWidget):
         self.plot_xmax = None
         self.plot_ymin = None
         self.plot_ymax = None
+
+        self.axes_x_center = 0
+        self.axes_y_center = 0
+        self.axes_x_radius = 100
+        self.axes_y_radius = 100
 
         self.use_defaults = True
         self.title_str = ""
@@ -310,6 +306,17 @@ class Vis(VisBase, QWidget):
         csv_file.close()
 
     #--------------------------------------
+    def reset_axes_cb(self):
+        # print("vis_tab.py: reset_axes_cb")
+        # self.axes_x_center, axes_y_center, axes_x_radius, axes_y_radius, 
+        self.plot_xmin = self.axes_x_center - self.axes_x_radius
+        self.plot_xmax = self.axes_x_center + self.axes_x_radius
+
+        self.plot_ymin = self.axes_y_center - self.axes_y_radius
+        self.plot_ymax = self.axes_y_center + self.axes_y_radius
+        self.update_plots()
+
+    #--------------------------------------
     # Dependent on 2D/3D
     def update_plots(self):
         # print("------ vis_tab.py: update_plots()")
@@ -318,6 +325,10 @@ class Vis(VisBase, QWidget):
         self.ax0.cla()
         if self.substrates_checked_flag:  # do first so cells are plotted on top
             self.plot_substrate(self.current_frame)
+        
+        if self.attachments_checked_flag:
+            self.build_attachments(self.current_frame)
+        
         if self.cells_checked_flag:
             if self.plot_cells_svg:
                 self.plot_svg(self.current_frame)
@@ -371,6 +382,19 @@ class Vis(VisBase, QWidget):
 
         self.reset_model()
 
+    def build_attachments(self, frame):
+        fname = "output%08d_spring_attached_cells_graph.txt" % frame
+        path = os.path.join(self.output_dir, fname)
+        self.attachments = set()
+
+        if Path(path).is_file():
+            with open(path, 'r') as attachments_file:
+                for line in attachments_file.readlines()[1:]:
+                    cell, atts = line.split(":")
+                    if len(atts.strip()) > 0:
+                        for att in atts.split(","):
+                            self.attachments.add(tuple(sorted([int(cell), int(att.strip())])))
+            
     #------------------------------------------------------------
     # not currently used, but maybe useful
     def plot_vecs(self):
@@ -564,8 +588,16 @@ class Vis(VisBase, QWidget):
             numChildren += 1
 
         num_cells = 0
-        #  print('------ search cells')
+        if self.celltype_filter:
+            # if the list is not empty, filter the cells
+            filtered_names = [self.cell_dict[str(k)] for k in self.celltype_filter]
+            filter_out = lambda x: x.attrib['type'] not in filtered_names
+        else:
+            filter_out = lambda x: False # don't filter anything out
+
         for child in cells_parent:
+            if filter_out(child):
+                continue
             # print(child.tag, child.attrib)
             # print(f'------ attrib={child.attrib}\n')
             for circle in child:  # two circles in each child: outer + nucleus
@@ -772,6 +804,10 @@ class Vis(VisBase, QWidget):
         else:
             cell_plot = self.circles(xvals,yvals, s=cell_radii, c=cell_scalar, cmap=cbar_name, vmin=vmin, vmax=vmax)
 
+        if self.attachments_checked_flag:
+            for c1,c2 in self.attachments:
+                self.ax0.plot([xvals[c1], xvals[c2]], [yvals[c1], yvals[c2]], 'k-', lw=0.5)
+    
         if self.cax2:
             try:
                 self.cax2.remove()
@@ -813,14 +849,25 @@ class Vis(VisBase, QWidget):
 
         mcds = pyMCDS(xml_file_root, self.output_dir, microenv=False, graph=False, verbose=False)
         total_min = mcds.get_time()  # warning: can return float that's epsilon from integer value
-    
+        # Get the cell data
         try:
-            cell_scalar = mcds.get_cell_df()[cell_scalar_mcds_name]
+            df_all_cells = mcds.get_cell_df()
         except:
-            print("vis_tab.py: plot_cell_scalar(): error performing mcds.get_cell_df()[cell_scalar_mcds_name]")
+            print("vis_tab.py: plot_cell_scalar(): error performing mcds.get_cell_df()")
+            return
+
+        if self.celltype_filter:
+            df_cells = df_all_cells.loc[ df_all_cells['cell_type'].isin(self.celltype_filter) ]
+        else:
+            df_cells = df_all_cells
+
+        try:
+            cell_scalar = df_cells[cell_scalar_mcds_name]
+        except:
+            print("vis_tab.py: plot_cell_scalar(): error performing df_cells[cell_scalar_mcds_name]")
             msgBox = QMessageBox()
             msgBox.setIcon(QMessageBox.Information)
-            msg = "plot_cell_scalar(): error from mcds.get_cell_df()[" + cell_scalar_mcds_name + "]. You may be trying to use out-of-date scalars. Please reset the 'full list' or 'partial'."
+            msg = "plot_cell_scalar(): error from df_cells[" + cell_scalar_mcds_name + "]. You may be trying to use out-of-date scalars. Please reset the 'full list' or 'partial'."
             msgBox.setText(msg)
             msgBox.setStandardButtons(QMessageBox.Ok)
             msgBox.exec()
@@ -833,7 +880,6 @@ class Vis(VisBase, QWidget):
             # self.plot_cells_svg = True
             # self.disable_cell_scalar_widgets()
             return
-    
                 
         if self.fix_cells_cmap_flag:
             vmin = self.cells_cmin_value
@@ -846,15 +892,15 @@ class Vis(VisBase, QWidget):
         # print("  len(cell_scalar) = ",len(cell_scalar))
         # fix_cmap = 0
         # print(f'   cell_scalar.min(), max() = {vmin}, {vmax}')
-        cell_vol = mcds.get_cell_df()['total_volume']
+        cell_vol = df_cells['total_volume']
         # print(f'   cell_vol.min(), max() = {cell_vol.min()}, {cell_vol.max()}')
 
         four_thirds_pi =  4.188790204786391
         cell_radii = np.divide(cell_vol, four_thirds_pi)
         cell_radii = np.power(cell_radii, 0.333333333333333333333333333333333333333)
 
-        xvals = mcds.get_cell_df()['position_x']
-        yvals = mcds.get_cell_df()['position_y']
+        xvals = df_cells['position_x']
+        yvals = df_cells['position_y']
 
         # self.title_str += "   cells: " + svals[2] + "d, " + svals[4] + "h, " + svals[7][:-3] + "m"
         # self.title_str = "(" + str(frame) + ") Current time: " + str(total_min) + "m"
@@ -922,6 +968,7 @@ class Vis(VisBase, QWidget):
         days = int(hrs/24)
         # print(f"mins={mins}, hrs={hrs}, days={days}")
         self.title_str = '%d days, %d hrs, %d mins' % (days, hrs-days*24, mins-hrs*60)
+        # self.title_str = '%f mins' % (total_min)  # rwh: custom
         self.title_str += " (" + str(num_cells) + " agents)"
 
         axes_min = mcds.get_mesh()[0][0][0][0]
@@ -953,7 +1000,10 @@ class Vis(VisBase, QWidget):
         # print("# axes = ",num_axes)
         # if num_axes > 1: 
         # if self.axis_id_cellscalar:
-                
+        if self.attachments_checked_flag:
+            for c1,c2 in self.attachments:
+                self.ax0.plot([xvals[c1], xvals[c2]], [yvals[c1], yvals[c2]], 'k-', lw=0.5)
+    
         if( self.discrete_variable ): # Generic way: if variable is discrete
             # Then we don't need the cax2
             if self.cax2 is not None:
@@ -971,14 +1021,21 @@ class Vis(VisBase, QWidget):
             handles = [lp(self.discrete_variable.index(i)) for i in sorted(list(self.discrete_variable_observed)) if i in self.discrete_variable]
             self.ax0.legend(handles=handles,labels=names_observed, loc='upper center', bbox_to_anchor=(0.5, -0.15),ncols=4)
 
-        else:
+        else:   # Note: vis_tab_ecm.py seems to avoid any memory leak and with simpler code
             # If it's not there, we create it
             if self.cax2 is None:
                 self.cax2 = self.figure.add_subplot(self.gs[1,0])
                 # ax2_divider = make_axes_locatable(self.ax0)
                 # self.cax2 = ax2_divider.append_axes("bottom", size="4%", pad="8%")
-            self.cbar2 = self.figure.colorbar(cell_plot, ticks=None, cax=self.cax2, orientation="horizontal")
-            self.cbar2.ax.tick_params(labelsize=self.fontsize)
+            if self.cbar2 is None:
+                self.cbar2 = self.figure.colorbar(cell_plot, ticks=None, cax=self.cax2, orientation="horizontal")
+                self.cbar2.ax.tick_params(labelsize=self.fontsize)
+            elif self.cell_scalar_updated:
+                self.cbar2 = self.figure.colorbar(cell_plot, ticks=None, cax=self.cax2, orientation="horizontal")
+                self.cell_scalar_updated = False
+            else:
+                self.cbar2.update_normal(cell_plot)  # partial fix for memory leak
+
             self.cbar2.ax.set_xlabel(cell_scalar_humanreadable_name, fontsize=self.cbar_label_fontsize)
    
         self.ax0.set_title(self.title_str, fontsize=self.title_fontsize)
