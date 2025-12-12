@@ -1,9 +1,11 @@
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import QFrame,QApplication,QWidget,QTabWidget,QFormLayout,QLineEdit, QGroupBox, QHBoxLayout,QVBoxLayout,QRadioButton,QLabel,QCheckBox,QComboBox,QScrollArea,  QMainWindow,QGridLayout, QPushButton, QFileDialog, QMessageBox, QStackedWidget, QSplitter
+from studio_classes import DoubleValidatorWidgetBounded, HoverQuestion, QCheckBox_custom
 # from PyQt5.QtWidgets import QCompleter, QSizePolicy
 # from PyQt5.QtCore import QSortFilterProxyModel
 # from PyQt5.QtSvg import QSvgWidget
 # from PyQt5.QtGui import QPainter
+from PyQt5.QtGui import QDoubleValidator
 # from PyQt5.QtCore import QRectF, Qt
 
 class QHLine(QFrame):
@@ -11,33 +13,6 @@ class QHLine(QFrame):
         super(QHLine, self).__init__()
         self.setFrameShape(QFrame.HLine)
         self.setFrameShadow(QFrame.Sunken)
-        # self.setFrameShadow(QFrame.Plain)
-        # self.setStyleSheet("border:1px solid black")
-
-class QCheckBox_custom(QCheckBox):  # it's insane to have to do this!
-    def __init__(self,name):
-        super(QCheckBox, self).__init__(name)
-
-        checkbox_style = """
-                QCheckBox::indicator:checked {
-                    background-color: rgb(255,255,255);
-                    border: 1px solid #5A5A5A;
-                    width : 15px;
-                    height : 15px;
-                    border-radius : 3px;
-                    image: url(images:checkmark.png);
-                }
-                QCheckBox::indicator:unchecked
-                {
-                    background-color: rgb(255,255,255);
-                    border: 1px solid #5A5A5A;
-                    width : 15px;
-                    height : 15px;
-                    border-radius : 3px;
-                }
-                """
-        self.setStyleSheet(checkbox_style)
-
 
 class FilterUI2DWindow(QWidget):
     # def __init__(self, output_dir):
@@ -70,6 +45,7 @@ class FilterUI2DWindow(QWidget):
         #------------
         idx_row = 0
         glayout.addWidget(QLabel("Cells:"), idx_row,0,1,2) # w, row, column, rowspan, colspan
+        # glayout.addWidget(QLabel("Cells:"), idx_row,0,1,4) # w, row, column, rowspan, colspan
 
         idx_row += 1
         self.cell_edge_checkbox = QCheckBox_custom('edge')
@@ -94,6 +70,29 @@ class FilterUI2DWindow(QWidget):
         self.cells_csv_button.clicked.connect(self.cells_csv_cb)
         glayout.addWidget(self.cells_csv_button, idx_row,0,1,2) # w, row, column, rowspan, colspan
         #--------------------------------
+
+        #----------
+        idx_row += 1
+        glayout.addWidget(QHLine(), idx_row,0,1,4) # w, row, column, rowspan, colspan
+
+        idx_row += 1
+        label = QLabel("Graph display:")
+        glayout.addWidget(label, idx_row,0,1,1) # w, row, column, rowspan, colspan
+
+        self.graph_display_combobox = QComboBox()
+        self.graph_display_combobox.addItems(['NONE', 'neighbors', 'attachments', 'spring attachments'])
+        self.graph_display_combobox.currentIndexChanged.connect(self.graph_display_changed_cb)
+        self.graph_display_combobox.setCurrentIndex(0)  # default to NONE
+        glayout.addWidget(self.graph_display_combobox, idx_row,1,1,2) # w, row, column, rowspan, colspan
+
+        msg = """
+This overlays edges representing cell-cell interactions on the Plot tab. Note the following:
+- If plotting with SVG, requires the SVG and full data saves to be synced.
+- If filtering on cell types, ALL edges will still be plotted, including for filtered out cells.
+        """
+        self.attachments_question_label = HoverQuestion(msg)
+        self.attachments_question_label.show_icon()
+        glayout.addWidget(self.attachments_question_label, idx_row,3,1,1) # w, row, column, rowspan, colspan
 
         idx_row += 1
         glayout.addWidget(QHLine(), idx_row,0,1,4) # w, row, column, rowspan, colspan
@@ -121,30 +120,94 @@ class FilterUI2DWindow(QWidget):
         #-----------------------
         idx_row += 1
         glayout.addWidget(QHLine(), idx_row,0,1,4) # w, row, column, rowspan, colspan
-        idx_row += 1
         self.vbox.addLayout(glayout)
+
+        idx_row += 1
         self.aspect_11_checkbox = QCheckBox_custom('1:1 aspect')
         self.aspect_11_checkbox.setChecked(True)
         self.aspect_11_checkbox.clicked.connect(self.aspect_11_cb)
-        # idx_row += 1
         glayout.addWidget(self.aspect_11_checkbox, idx_row,0,1,3) # w, row, column, rowspan, colspan
 
+        idx_row += 1
+        glayout.addWidget(QHLine(), idx_row,0,1,4) # w, row, column, rowspan, colspan
+        self.vbox.addLayout(glayout)
+
+        # idx_row += 1
+        # glayout.addWidget(QLabel("Axes zoom:"), idx_row,0,1,4) # w, row, column, rowspan, colspan
+        idx_row += 1
+        label = QLabel("xCenter")
+        glayout.addWidget(label, idx_row,0, 1,1) # w, row, column, rowspan, colspan
+        self.axes_xc = QLineEdit(str(self.vis_tab.axes_x_center))
+        self.axes_xc.setFixedWidth(70)
+        self.axes_xc.setValidator(QDoubleValidator())
+        self.axes_xc.textChanged.connect(self.axes_xc_changed)
+        glayout.addWidget(self.axes_xc , idx_row,1, 1,1) # w, row, column, rowspan, colspan
+
+        label = QLabel("yCenter")
+        glayout.addWidget(label, idx_row,2, 1,1) # w, row, column, rowspan, colspan
+        self.axes_yc = QLineEdit(str(self.vis_tab.axes_y_center))
+        self.axes_yc.setFixedWidth(70)
+        self.axes_yc.setValidator(QDoubleValidator())
+        self.axes_yc.textChanged.connect(self.axes_yc_changed)
+        glayout.addWidget(self.axes_yc , idx_row,3, 1,1) # w, row, column, rowspan, colspan
+
+        idx_row += 1
+        label = QLabel("xRadius")
+        glayout.addWidget(label, idx_row,0, 1,1) # w, row, column, rowspan, colspan
+        self.axes_xr = QLineEdit(str(self.vis_tab.axes_x_radius))
+        self.axes_xr.setFixedWidth(70)
+        self.axes_xr.setValidator(QDoubleValidator())
+        self.axes_xr.textChanged.connect(self.axes_xr_changed)
+        glayout.addWidget(self.axes_xr , idx_row,1, 1,1) # w, row, column, rowspan, colspan
+
+        label = QLabel("yRadius")
+        glayout.addWidget(label, idx_row,2, 1,1) # w, row, column, rowspan, colspan
+        self.axes_yr = QLineEdit(str(self.vis_tab.axes_y_radius))
+        self.axes_yr.setFixedWidth(70)
+        self.axes_yr.setValidator(QDoubleValidator())
+        self.axes_yr.textChanged.connect(self.axes_yr_changed)
+        glayout.addWidget(self.axes_yr , idx_row,3, 1,1) # w, row, column, rowspan, colspan
+
+        idx_row += 1
+        self.reset_axes_button = QPushButton("Update axes")
+        self.reset_axes_button.setStyleSheet("background-color: lightgreen;")
+        self.reset_axes_button.clicked.connect(self.reset_axes_cb)
+        glayout.addWidget(self.reset_axes_button, idx_row,0,1,2) # w, row, column, rowspan, colspan
+
         #--------------------------
-        self.voxel_grid_checkbox = QCheckBox_custom('voxel grid')
+        idx_row += 1
+        glayout.addWidget(QHLine(), idx_row,0,1,4) # w, row, column, rowspan, colspan
+        idx_row += 1
+        glayout.addWidget(QLabel("Grids:"), idx_row,0,1,2) # w, row, column, rowspan, colspan
+
+        self.voxel_grid_checkbox = QCheckBox_custom('voxel')
         self.voxel_grid_checkbox.clicked.connect(self.voxel_grid_cb)
         idx_row += 1
-        glayout.addWidget(self.voxel_grid_checkbox, idx_row,0,1,2) # w, row, column, rowspan, colspan
+        glayout.addWidget(self.voxel_grid_checkbox, idx_row,0,1,1) # w, row, column, rowspan, colspan
 
         #------
-        self.mech_grid_checkbox = QCheckBox_custom('mech grid')
+        self.mech_grid_checkbox = QCheckBox_custom('mech')
         self.mech_grid_checkbox.clicked.connect(self.mech_grid_cb)
-        glayout.addWidget(self.mech_grid_checkbox, idx_row,2,1,1) # w, row, column, rowspan, colspan
+        glayout.addWidget(self.mech_grid_checkbox, idx_row,1,1,1) # w, row, column, rowspan, colspan
+
+        # self.mech_grid_size = QLineEdit_custom()
+        self.mech_grid_size = QLineEdit("30")
+        self.mech_grid_size.setFixedWidth(30)
+        self.mech_grid_size.textChanged.connect(self.mech_grid_size_changed)
+        self.mech_grid_size.setValidator(DoubleValidatorWidgetBounded(bottom=1, top=999))
+        glayout.addWidget(self.mech_grid_size , idx_row,2, 1,1) # w, row, column, rowspan, colspan
 
         #--------------------------
-        self.save_png_checkbox = QCheckBox_custom('save frame*.png')
-        self.save_png_checkbox.clicked.connect(self.save_png_cb)
+        self.save_frame_checkbox = QCheckBox_custom('save frame*')
+        self.save_frame_checkbox.clicked.connect(self.save_frame_cb)
         idx_row += 1
-        glayout.addWidget(self.save_png_checkbox, idx_row,0,1,2) # w, row, column, rowspan, colspan
+        glayout.addWidget(self.save_frame_checkbox, idx_row,0,1,1) # w, row, column, rowspan, colspan
+
+        self.save_frame_filetype = QComboBox()
+        self.save_frame_filetype.addItems(['.png', '.svg', '.jpg'])
+        self.save_frame_filetype.currentIndexChanged.connect(self.save_frame_filetype_cb)
+        self.save_frame_filetype.setCurrentIndex(0)  # default to png
+        glayout.addWidget(self.save_frame_filetype, idx_row,1,1,1) # w, row, column, rowspan, colspan
 
         #--------------------
         # axes_act = view3D_menu.addAction("Axes")
@@ -177,6 +240,7 @@ class FilterUI2DWindow(QWidget):
 
         self.setLayout(self.vbox)
         self.resize(200, 220)   # try to fix the size
+        # self.resize(250, 220)   # try to fix the size
 
 
     #--------
@@ -221,6 +285,11 @@ class FilterUI2DWindow(QWidget):
         self.vis_tab.phenotype_cb()
         pass
 
+    def graph_display_changed_cb(self):
+        self.vis_tab.graph_display_type = self.graph_display_combobox.currentText()
+        self.vis_tab.update_plots()
+    
+
     def contour_mesh_cb(self):
         bval = self.contour_mesh_checkbox.isChecked()
         if bval:
@@ -241,15 +310,50 @@ class FilterUI2DWindow(QWidget):
         # print("filters2D: aspect_11_cb()  self.aspect_11_checkbox.isChecked()= ",self.aspect_11_checkbox.isChecked())
         self.vis_tab.view_aspect_cb(self.aspect_11_checkbox.isChecked())   # vis_base
 
+    def axes_xc_changed(self,sval):
+        try:
+            self.vis_tab.axes_x_center = float(sval)
+        except:
+            pass
+    def axes_yc_changed(self,sval):
+        try:
+            self.vis_tab.axes_y_center = float(sval)
+        except:
+            pass
+
+    def axes_xr_changed(self,sval):
+        try:
+            self.vis_tab.axes_x_radius = float(sval)
+        except:
+            pass
+    def axes_yr_changed(self,sval):
+        try:
+            self.vis_tab.axes_y_radius = float(sval)
+        except:
+            pass
+    def reset_axes_cb(self):
+        self.vis_tab.reset_axes_cb()
+
+
     def voxel_grid_cb(self):
         self.vis_tab.voxel_grid_cb(self.voxel_grid_checkbox.isChecked())
 
     def mech_grid_cb(self):
         self.vis_tab.mech_grid_cb(self.mech_grid_checkbox.isChecked())
 
-    def save_png_cb(self):
-        self.vis_tab.png_frame = 0
-        self.vis_tab.save_png = self.save_png_checkbox.isChecked()
+    def mech_grid_size_changed(self,sval):
+        # print("size=",sval)
+        try:
+            self.vis_tab.mech_voxel_size = float(sval)
+        except:
+            pass
+
+    def save_frame_cb(self):
+        self.vis_tab.frame_ind = 0
+        self.vis_tab.save_frame = self.save_frame_checkbox.isChecked()
+
+    def save_frame_filetype_cb(self):
+        self.vis_tab.save_frame_filetype = self.save_frame_filetype.currentText()
         
     #--------
     def yz_slice_cb(self):

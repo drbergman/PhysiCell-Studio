@@ -7,6 +7,7 @@ Dr. Paul Macklin (macklinp@iu.edu)
 Rf. Credits.md
 """
 
+import shutil
 import sys
 import os
 import time
@@ -28,10 +29,11 @@ from collections import deque
 import glob
 import csv
 import pandas
+from matplotlib import animation
 
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtWidgets import QFrame,QApplication,QWidget,QTabWidget,QFormLayout,QLineEdit, QGroupBox, QHBoxLayout,QVBoxLayout,QRadioButton,QLabel,QCheckBox,QComboBox,QScrollArea,  QMainWindow,QGridLayout, QPushButton, QFileDialog, QMessageBox, QStackedWidget, QSplitter
-from PyQt5.QtWidgets import QCompleter, QSizePolicy, QSpacerItem
+from PyQt5.QtWidgets import QCompleter, QSizePolicy, QSpacerItem, QDialog
 from PyQt5.QtCore import QSortFilterProxyModel
 from PyQt5.QtSvg import QSvgWidget
 from PyQt5.QtGui import QPainter
@@ -61,35 +63,13 @@ except:
 
 from filters3D import FilterUI3DWindow
 from filters2D import FilterUI2DWindow
+from model_summary import ModelSummaryUIWindow
 from phenotypeSummary import PhenotypeWindow
 
 from populate_tree_cell_defs import populate_tree_cell_defs
 
-class QCheckBox_custom(QCheckBox):  # it's insane to have to do this!
-    def __init__(self,name):
-        super(QCheckBox, self).__init__(name)
-
-        checkbox_style = """
-                QCheckBox::indicator:checked {
-                    background-color: rgb(255,255,255);
-                    border: 1px solid #5A5A5A;
-                    width : 15px;
-                    height : 15px;
-                    border-radius : 3px;
-                    image: url(images:checkmark.png);
-                }
-                QCheckBox::indicator:unchecked
-                {
-                    background-color: rgb(255,255,255);
-                    border: 1px solid #5A5A5A;
-                    width : 15px;
-                    height : 15px;
-                    border-radius : 3px;
-                }
-                QCheckBox:disabled {background-color:lightgray;}
-                QCheckBox:indicator:disabled {background-color:lightgray;}
-                """
-        self.setStyleSheet(checkbox_style)
+from studio_classes import QCheckBox_custom, QRadioButton_custom
+from pyMCDS import xmlfile_to_xmlpathfile
 
 #---------------------------
 class ExtendedComboBox(QComboBox):
@@ -217,6 +197,7 @@ class SvgWidget(QSvgWidget):
 #                 # path = Path(self.current_dir,self.output_dir,"legend.svg")
 #                 time.sleep(1)
 
+
 #------------------------------
 class LegendPlotWindow(QWidget):
     def __init__(self, output_dir):
@@ -326,7 +307,7 @@ class QHLine(QFrame):
 #---------------------------------------------------------------
 class VisBase():
 
-    def __init__(self, studio_flag, rules_flag, nanohub_flag, config_tab, microenv_tab, celldef_tab, user_params_tab, rules_tab, ics_tab, run_tab, model3D_flag, tensor_flag, ecm_flag, **kw):
+    def __init__(self, studio_flag, rules_flag, nanohub_flag, config_tab, microenv_tab, celldef_tab, user_params_tab, rules_tab, ics_tab, run_tab, model3D_flag, tensor_flag, ecm_flag, galaxy_flag, **kw):
         # super().__init__()
         # global self.config_params
         super(VisBase,self).__init__(**kw)
@@ -343,14 +324,16 @@ class VisBase():
         self.rules_tab = rules_tab
         self.ics_tab = ics_tab
 
-        self.png_frame = 0
-        self.save_png= False
+        self.frame_ind = 0
+        self.save_frame_filetype = '.png'
+        self.save_frame= False
 
         # self.vis2D = True
         self.model3D_flag = model3D_flag 
         print("--- VisBase: model3D_flag=",model3D_flag)
         self.tensor_flag = tensor_flag 
         self.ecm_flag = ecm_flag 
+        self.galaxy_flag = galaxy_flag 
 
         if not self.model3D_flag:
             # self.discrete_cell_scalars = ['cell_type', 'cycle_model', 'current_phase','is_motile','current_death_model','dead', 'number_of_nuclei']
@@ -371,6 +354,9 @@ class VisBase():
         self.bgcolor = [1,1,1,1]  # all 1.0 for white 
 
         self.discrete_variable_observed = set()
+        self.cell_scalar_updated = True
+
+        self.cell_scalar_human2mcds_dict = {} # initialize here for vis_tab.py
 
         # self.discrete_scalar_len = {"cell_type":0, "cycle_model":6, "current_phase":4, "is_motile":2,"current_death_model":2, "dead":2, "number_of_nuclei":0 }
 
@@ -467,6 +453,7 @@ class VisBase():
         self.physiboss_population_plot = None
         self.legend_svg_plot = None
         self.filterUI = None
+        self.celltype_filter = []  # if empty all default to all cell types
 
         self.celltype_name = []
         self.celltype_color = []
@@ -502,6 +489,8 @@ class VisBase():
         
         self.fix_cmap_flag = False
         self.cells_edge_checked_flag = True
+
+        self.graph_display_type = 'NONE'
 
         self.contour_mesh = True
         self.contour_lines = False
@@ -574,6 +563,8 @@ class VisBase():
 
         self.cax1 = None
         self.cax2 = None
+
+        self.cbar2 = None
 
         self.figsize_width_2Dplot = basic_length
         self.figsize_height_2Dplot = basic_length
@@ -741,10 +732,10 @@ class VisBase():
         self.cells_hbox.addWidget(self.cells_checkbox) 
 
         # Need to create the following regardless of 2D/3D
-        self.cells_svg_rb = QRadioButton(".svg")
+        self.cells_svg_rb = QRadioButton_custom(".svg")
         self.cells_svg_rb.setChecked(True)
 
-        self.cells_mat_rb = QRadioButton(".mat")
+        self.cells_mat_rb = QRadioButton_custom(".mat")
         # self.cell_edge_checkbox = QCheckBox_custom('edge')
         
         if not self.model3D_flag:  # 2D vis
@@ -774,15 +765,20 @@ class VisBase():
             # self.cells_edge_checked_flag = True
             # hbox.addWidget(self.cell_edge_checkbox) 
 
+        # Filter button
+        self.cell_type_filter_button = QPushButton("Filter")
+        self.cell_type_filter_button.setFixedWidth(70)
+        self.cell_type_filter_button.clicked.connect(self.cell_type_filter_button_cb)
+        self.cells_hbox.addWidget(self.cell_type_filter_button)
 
         self.disable_cell_scalar_cb = False
         # self.cell_scalar_combobox = QComboBox()
         self.cell_scalar_combobox = ExtendedComboBox()
-        self.cell_scalar_combobox.setFixedWidth(270)
+        self.cell_scalar_combobox.setFixedWidth(320)
         self.cell_scalar_combobox.addItem("cell_type")
         # self.cell_scalar_combobox.currentIndexChanged.connect(self.cell_scalar_changed_cb)
 
-        # e.g., dict_keys(['ID', 'position_x', 'position_y', 'position_z', 'total_volume', 'cell_type', 'cycle_model', 'current_phase', 'elapsed_time_in_phase', 'nuclear_volume', 'cytoplasmic_volume', 'fluid_fraction', 'calcified_fraction', 'orientation_x', 'orientation_y', 'orientation_z', 'polarity', 'migration_speed', 'motility_vector_x', 'motility_vector_y', 'motility_vector_z', 'migration_bias', 'motility_bias_direction_x', 'motility_bias_direction_y', 'motility_bias_direction_z', 'persistence_time', 'motility_reserved', 'chemotactic_sensitivities_x', 'chemotactic_sensitivities_y', 'adhesive_affinities_x', 'adhesive_affinities_y', 'dead_phagocytosis_rate', 'live_phagocytosis_rates_x', 'live_phagocytosis_rates_y', 'attack_rates_x', 'attack_rates_y', 'damage_rate', 'fusion_rates_x', 'fusion_rates_y', 'transformation_rates_x', 'transformation_rates_y', 'oncoprotein', 'elastic_coefficient', 'kill_rate', 'attachment_lifetime', 'attachment_rate', 'oncoprotein_saturation', 'oncoprotein_threshold', 'max_attachment_distance', 'min_attachment_distance'])
+        # e.g., dict_keys(['ID', 'position_x', 'position_y', 'position_z', 'total_volume', 'cell_type', 'cycle_model', 'current_phase', 'elapsed_time_in_phase', 'nuclear_volume', 'cytoplasmic_volume', 'fluid_fraction', 'calcified_fraction', 'orientation_x', 'orientation_y', 'orientation_z', 'polarity', 'migration_speed', 'motility_vector_x', 'motility_vector_y', 'motility_vector_z', 'migration_bias', 'motility_bias_direction_x', 'motility_bias_direction_y', 'motility_bias_direction_z', 'persistence_time', 'motility_reserved', 'chemotactic_sensitivities_x', 'chemotactic_sensitivities_y', 'adhesive_affinities_x', 'adhesive_affinities_y', 'apoptotic_phagocytosis_rate', 'necrotic_phagocytosis_rate', 'other_dead_phagocytosis_rate', 'live_phagocytosis_rates_x', 'live_phagocytosis_rates_y', 'attack_rates_x', 'attack_rates_y', 'damage_rate', 'fusion_rates_x', 'fusion_rates_y', 'transformation_rates_x', 'transformation_rates_y', 'oncoprotein', 'elastic_coefficient', 'kill_rate', 'attachment_lifetime', 'attachment_rate', 'oncoprotein_saturation', 'oncoprotein_threshold', 'max_attachment_distance', 'min_attachment_distance'])
 
         self.vbox.addLayout(self.cells_hbox)
 
@@ -795,6 +791,7 @@ class VisBase():
         hbox.addItem(self.hz_stretch_item_2)
         self.vbox.addLayout(hbox)
 
+        self.initialize_cell_dict() # this is used in add_default_cell_vars (but that cb will call this, too (for now), so this just ensures it's initialized now)
         hbox = QHBoxLayout()
         self.full_list_button = QPushButton("full list")   # old: refresh
         self.full_list_button.setFixedWidth(100)
@@ -967,7 +964,7 @@ class VisBase():
 
         #------------------
         self.vbox.addWidget(QHLine())
-
+        
         hbox = QHBoxLayout()
         label = QLabel("folder")
         label.setAlignment(QtCore.Qt.AlignRight)
@@ -992,7 +989,7 @@ class VisBase():
         hbox = QHBoxLayout()
         self.cell_counts_button = QPushButton("Population plot")
         # self.cell_counts_button.setStyleSheet("QPushButton {background-color: lightgreen; color: black;}")
-        bwidth = 120
+        bwidth = 130
         self.cell_counts_button.setFixedWidth(bwidth)
         self.cell_counts_button.clicked.connect(self.cell_counts_cb)
         hbox.addWidget(self.cell_counts_button)
@@ -1018,7 +1015,22 @@ class VisBase():
         self.legend_svg_button.clicked.connect(self.legend_svg_plot_cb)
         self.vbox.addWidget(self.legend_svg_button)
 
-        #-----------
+        if not self.galaxy_flag and not self.model3D_flag:
+            self.vbox.addWidget(QHLine())
+            hbox = QHBoxLayout()
+            self.movie_name_edit = QLineEdit()
+            self.movie_name_edit.setText("movie.mp4")
+            hbox.addWidget(self.movie_name_edit)
+            self.make_movie_button = QPushButton("Make Movie")
+            self.make_movie_button.setFixedWidth(100)
+            self.make_movie_button.clicked.connect(self.make_movie_cb)
+            hbox.addWidget(self.make_movie_button)
+            self.cancel_button = QPushButton("Cancel")
+            self.cancel_button.setFixedWidth(70)
+            self.cancel_button.clicked.connect(self.cancel_movie_cb)
+            hbox.addWidget(self.cancel_button)
+            self.vbox.addLayout(hbox)
+
         self.physiboss_qline = None
         
         self.cells_physiboss_rb = None
@@ -1068,6 +1080,17 @@ class VisBase():
         self.layout = QVBoxLayout(self)
         self.layout.addWidget(splitter)
 
+    def model_summary_cb(self):
+        print("---- vis_base: model_summary_cb()")
+        # print("    filterUI_cb():  vis_filter_init_flag=",self.vis_filter_init_flag)
+        # self.filterUI = FilterUIWindow()
+        self.modelSummaryUI = ModelSummaryUIWindow(self)  # , self.run_tab)
+
+        # hack to bring to foreground
+        # self.filterUI.hide()
+        # self.filterUI.show()
+        self.modelSummaryUI.hide()
+        self.modelSummaryUI.show()
 
     def filterUI_cb(self):
         print("---- vis_base: filterUI_cb()")
@@ -1085,6 +1108,62 @@ class VisBase():
         # hack to bring to foreground
         self.filterUI.hide()
         self.filterUI.show()
+    
+    def show_filter_popup(self):
+        if hasattr(self, 'filter_dialog') and self.filter_dialog is not None:
+            self.filter_dialog.close()
+
+        self.filter_dialog = QDialog(self)
+        self.filter_dialog.setMinimumWidth(300)
+        self.filter_dialog.setWindowTitle("Select Cell Types to Filter")
+        self.filter_dialog.setWindowModality(Qt.NonModal)  # Make the self.filter_dialog non-blocking
+        layout = QVBoxLayout()
+
+        checkboxes = []
+        self.get_cell_types_from_config()
+        
+        for idx, cell_type in enumerate(self.celltype_name):
+            checkbox = QCheckBox_custom(cell_type)
+            # preserve last checked values and if empty, check all
+            if ( (idx in self.celltype_filter) | (not self.celltype_filter) ):
+                checkbox.setChecked(True)
+            checkboxes.append(checkbox)
+            layout.addWidget(checkbox)
+
+        def apply_filters():
+            checked_boxes = [cb for cb in checkboxes if cb.isChecked()]
+            if not checked_boxes:
+                QMessageBox.warning(self.filter_dialog, "Warning", "At least one cell type must be selected.")
+                # Check the box previously checked
+                for idx, cell_type in enumerate(self.celltype_name):
+                    if idx in self.celltype_filter:
+                        checkboxes[idx].setChecked(True)
+                return
+            self.celltype_filter = [itype for itype, cb in enumerate(checkboxes) if cb.isChecked()]
+            self.initialize_cell_dict(config_file=self.run_tab.config_xml_name.text())
+            self.update_plots()
+            # self.filter_dialog.accept() # close self.filter_dialog if press the apply button
+
+        hbox = QHBoxLayout()
+        apply_button = QPushButton("Apply")
+        apply_button.setFixedWidth(75)
+        apply_button.clicked.connect(apply_filters)
+        apply_button.setStyleSheet("background-color: lightgreen")
+        hbox.addWidget(apply_button)
+
+        close_button = QPushButton("Close")
+        close_button.setFixedWidth(75)
+        close_button.clicked.connect(self.filter_dialog.close)
+        close_button.setStyleSheet("background-color: lightgreen")
+        hbox.addWidget(close_button)
+        layout.addLayout(hbox)
+
+        self.filter_dialog.setLayout(layout)
+        self.filter_dialog.show()
+
+    def cell_type_filter_button_cb(self):
+        # print("---- vis_base: cell_type_filter_button_cb()")
+        self.show_filter_popup()
 
     def phenotype_cb(self):
         # print("---- vis_base: phenotype_cb()")
@@ -1097,11 +1176,11 @@ class VisBase():
 
     def get_cell_types_from_config(self):
         config_file = self.run_tab.config_xml_name.text()
-        print("get_cell_types():  config_file=",config_file)
+        # print("get_cell_types():  config_file=",config_file)
         basename = os.path.basename(config_file)
-        print("get_cell_types():  basename=",basename)
+        # print("get_cell_types():  basename=",basename)
         out_config_file = os.path.join(self.output_dir, basename)
-        print("get_cell_types():  out_config_file=",out_config_file)
+        # print("get_cell_types():  out_config_file=",out_config_file)
 
         try:
             self.tree = ET.parse(out_config_file)
@@ -1125,7 +1204,7 @@ class VisBase():
                 for var in uep.findall('cell_definition'):
                     name = var.attrib['name']
                     self.celltype_name.append(name)
-            print("get_cell_types_from_config(): ",self.celltype_name)
+            # print("get_cell_types_from_config(): ",self.celltype_name)
         except:
             msgBox = QMessageBox()
             msgBox.setIcon(QMessageBox.Information)
@@ -1245,9 +1324,7 @@ class VisBase():
         #--------
         if self.discrete_scalar == 'cell_type':   # number not known until run time
             # if not self.population_plot[self.discrete_scalar]:
-            if self.population_plot[self.discrete_scalar] is None:
-                self.population_plot[self.discrete_scalar] = PopulationPlotWindow()
-
+            self.population_plot[self.discrete_scalar] = PopulationPlotWindow() # don't test if already exists!
             self.population_plot[self.discrete_scalar].ax0.cla()
 
             # ctype_plot = []
@@ -1273,20 +1350,22 @@ class VisBase():
                     # print("--- rgb after split=",rgb)
                     ctcolor = [float(rgb[0])/255., float(rgb[1])/255., float(rgb[2])/255.]
                     # print("--- converted rgb=",ctcolor)
-                yval = np.array( [(np.count_nonzero((mcds[idx].data['discrete_cells']['data']['cell_type'] == itype) & (mcds[idx].data['discrete_cells']['data']['cycle_model'] < 100.) == True)) for idx in range(len(mcds))] )
+                if self.celltype_filter:
+                    yval = np.array( [(np.count_nonzero((np.isin(mcds[idx].data['discrete_cells']['data']['cell_type'], self.celltype_filter)) & (mcds[idx].data['discrete_cells']['data']['cell_type'] == itype) & (mcds[idx].data['discrete_cells']['data']['cycle_model'] < 100.) == True)) for idx in range(len(mcds))] )
+                else:
+                    yval = np.array( [(np.count_nonzero((mcds[idx].data['discrete_cells']['data']['cell_type'] == itype) & (mcds[idx].data['discrete_cells']['data']['cycle_model'] < 100.) == True)) for idx in range(len(mcds))] )
                 # yval = np.array( [(np.count_nonzero((mcds[idx].data['discrete_cells']['data']['cell_type'] == itype) == True)) for idx in range(len(mcds))] )
                 # print("  yval=",yval)
-
-                self.population_plot[self.discrete_scalar].ax0.plot(tval, yval, label=ctname, linewidth=lw, color=ctcolor)
+                if yval.sum() > 0: # only plot if there are cells of this type
+                    self.population_plot[self.discrete_scalar].ax0.plot(tval, yval, label=ctname, linewidth=lw, color=ctcolor)
 
 
             self.population_plot[self.discrete_scalar].ax0.set_xlabel('time (mins)')
             self.population_plot[self.discrete_scalar].ax0.set_ylabel('# of cells')
             self.population_plot[self.discrete_scalar].ax0.set_title("cell_type", fontsize=10)
-            self.population_plot[self.discrete_scalar].ax0.legend(loc='center right', prop={'size': 8})
+            self.population_plot[self.discrete_scalar].ax0.legend(loc='center left', prop={'size': 8})
             self.population_plot[self.discrete_scalar].canvas.update()
             self.population_plot[self.discrete_scalar].canvas.draw()
-            # self.population_plot[self.discrete_scalar].ax0.legend(loc='center right', prop={'size': 8})
             self.population_plot[self.discrete_scalar].show()
 
         #--------
@@ -1320,18 +1399,40 @@ class VisBase():
                 # yval = np.array( [(np.count_nonzero((mcds[idx].data['discrete_cells']['data'][self.discrete_scalar] == itype) & True) for idx in range(len(mcds)))] )
 
                 # TODO: fix this hackiness. Do we want to avoid counting dead cells??
-                yval = np.array( [(np.count_nonzero((mcds[idx].data['discrete_cells']['data'][self.discrete_scalar] == itype) & (mcds[idx].data['discrete_cells']['data']['cycle_model'] < 999.) == True)) for idx in range(len(mcds))] )
+                if self.discrete_scalar == 'current_death_model': # Hack: because current_death_model is not working in PhysiCell, using cycle_model instead  
+                    if self.celltype_filter: # Cell type filter applied here
+                        yval = np.array( [(np.count_nonzero((np.isin(mcds[idx].data['discrete_cells']['data']['cell_type'], self.celltype_filter)) & (mcds[idx].data['discrete_cells']['data']['cycle_model'] == itype) & (mcds[idx].data['discrete_cells']['data']['cycle_model'] < 999.) == True)) for idx in range(len(mcds))] )
+                    else:
+                        yval = np.array( [(np.count_nonzero((mcds[idx].data['discrete_cells']['data']['cycle_model'] == itype) & (mcds[idx].data['discrete_cells']['data']['cycle_model'] < 999.) == True)) for idx in range(len(mcds))] )
+                else:
+                    if self.celltype_filter: # Cell type filter applied here
+                        yval = np.array( [(np.count_nonzero((np.isin(mcds[idx].data['discrete_cells']['data']['cell_type'], self.celltype_filter)) & (mcds[idx].data['discrete_cells']['data'][self.discrete_scalar] == itype) & (mcds[idx].data['discrete_cells']['data']['cycle_model'] < 999.) == True)) for idx in range(len(mcds))] )
+                    else:
+                        yval = np.array( [(np.count_nonzero((mcds[idx].data['discrete_cells']['data'][self.discrete_scalar] == itype) & (mcds[idx].data['discrete_cells']['data']['cycle_model'] < 999.) == True)) for idx in range(len(mcds))] )
                 # print("  yval=",yval)
 
+                # if (self.discrete_scalar == 'cycle_model'): mylabel = 
+                # else:
+                # Check if exist any cells in the entire simulation with self.discrete_scalar occuring
                 mylabel = str(itype)
-                self.population_plot[self.discrete_scalar].ax0.plot(tval, yval, label=mylabel, linewidth=lw, color=ctcolor)
+                bool_list = ['is_motile', 'dead']
+                if( yval.sum() > 0 or self.discrete_scalar in bool_list): # only plot if there are cells with this scalar or boolean
+                    if (self.discrete_scalar == 'cycle_model' or self.discrete_scalar == 'current_death_model'): mylabel = self.cycle_models[itype]
+                    elif (self.discrete_scalar == 'current_phase'): mylabel = self.cycle_phases[itype]
+                    elif (self.discrete_scalar in bool_list ): mylabel = str(bool(itype))
+                    # Plot only if there are cells with this scalar
+                    self.population_plot[self.discrete_scalar].ax0.plot(tval, yval, label=mylabel, linewidth=lw, color=ctcolor)
                 # self.population_plot[self.discrete_scalar].ax0.plot(tval, yval, linewidth=lw, color=ctcolor)
+                # print(self.discrete_scalar, itype, mylabel, yval.sum() )
 
-
+            
             self.population_plot[self.discrete_scalar].ax0.set_xlabel('time (mins)')
             self.population_plot[self.discrete_scalar].ax0.set_ylabel('# of cells')
-            self.population_plot[self.discrete_scalar].ax0.set_title(self.discrete_scalar, fontsize=10)
-            self.population_plot[self.discrete_scalar].ax0.legend(loc='center right', prop={'size': 8})
+            if self.celltype_filter:
+                self.population_plot[self.discrete_scalar].ax0.set_title(self.discrete_scalar + " (filtered by cell type)", fontsize=10)
+            else:
+                self.population_plot[self.discrete_scalar].ax0.set_title(self.discrete_scalar, fontsize=10)
+            self.population_plot[self.discrete_scalar].ax0.legend(loc='center left', prop={'size': 8})
             self.population_plot[self.discrete_scalar].canvas.update()
             self.population_plot[self.discrete_scalar].canvas.draw()
             self.population_plot[self.discrete_scalar].show()
@@ -1339,12 +1440,12 @@ class VisBase():
     # ------ overridden for 3D (vis3D_tab.py)
     def build_physiboss_info(self):
         config_file = self.run_tab.config_xml_name.text()
-        print("build_physiboss_info(): get_cell_types():  config_file=",config_file)
+        print("build_physiboss_info():  config_file=",config_file)
         basename = os.path.basename(config_file)
-        print("get_cell_types():  basename=",basename)
+        print("build_physiboss_info():  basename=",basename)
         # out_config_file = os.path.join(self.output_dir, basename)
         out_config_file = config_file
-        print("get_cell_types():  out_config_file=",out_config_file)
+        print("build_physiboss_info():  out_config_file=",out_config_file)
 
         try:
             self.tree = ET.parse(config_file)
@@ -1425,7 +1526,7 @@ class VisBase():
             self.vbox.removeWidget(self.stretch_widget) #removes the placeholder for the "stretcher widget" to place it at the bottom
             self.cells_hbox.removeItem(self.hz_stretch_item_1) #same as above
 
-            self.cells_physiboss_rb = QRadioButton("physiboss")
+            self.cells_physiboss_rb = QRadioButton_custom("physiboss")
             self.cells_physiboss_rb.setChecked(False)
             self.cells_physiboss_rb.clicked.connect(self.cells_svg_mat_cb)
             self.cells_hbox.addWidget(self.cells_physiboss_rb)
@@ -1546,13 +1647,16 @@ class VisBase():
                 print("vis_tab.py: physiboss_state_counts_cb(): error performing mcds.get_cell_df()['cell_type']")
                 return
 
-
-            physiboss_state_file = os.path.join(self.output_dir, "states_%08d.csv" % i_frame)
-
+            physiboss_state_file = os.path.join(self.output_dir, "output%08d_boolean_intracellular.csv" % i_frame)
+        
             if not Path(physiboss_state_file).is_file():
-                print("vis_tab.py: physiboss_state_counts_cb(): error file not found ",physiboss_state_file)
-                return
-    
+                
+                physiboss_state_file = os.path.join(self.output_dir, "states_%08d.csv" % i_frame)
+                
+                if not Path(physiboss_state_file).is_file():
+                    print("vis_tab.py: plot_cell_physiboss(): error file not found ",physiboss_state_file)
+                    return
+        
             name_cellline = list(self.physiboss_node_dict.keys())[self.physiboss_selected_cell_line]
             id_cellline = list(self.celldef_tab.param_d.keys()).index(name_cellline)
     
@@ -1598,10 +1702,7 @@ class VisBase():
     #-------------------------------------
     # def reset_xml_root(self):
     def reset_xml_root(self, config_file):
-        self.celldef_tab.clear_custom_data_tab()
-        self.celldef_tab.param_d.clear()  # seems unnecessary as being done in populate_tree. argh.
-        self.celldef_tab.current_cell_def = None
-        self.celldef_tab.cell_adhesion_affinity_celltype = None
+        self.celldef_tab.reset_to_blank()
 
         self.microenv_tab.param_d.clear()
 
@@ -1666,6 +1767,7 @@ class VisBase():
 
     def cell_scalar_combobox_changed_cb(self, idx):
         self.discrete_variable_observed = set()
+        self.cell_scalar_updated = True
         self.update_plots()
     
     #-------------------------------------
@@ -1683,40 +1785,33 @@ class VisBase():
         # if (len(full_path_model_name) > 0) and Path(full_path_model_name).is_dir():
         if dir_path == "":
             return
-        if Path(dir_path).is_dir():
-            print("select_plot_output_cb():  dir_path is valid")
-            self.output_dir = dir_path
-            self.output_folder.setText(dir_path)
-            # self.legend_tab.output_dir = dir_path
-            legend_file = os.path.join(self.output_dir, 'legend.svg')  # hardcoded filename :(
-            # if Path(legend_file).is_file():
-            #     self.legend_tab.reload_legend()
-            # else:
-            #     self.legend_tab.clear_legend()
-
-            self.reset_model()
-            self.update_plots()
-
-            # June 2023 - also attempt to read PhysiCell_settings.xml and repopulate the Studio 
-            # self.run_tab.config_file = self.current_xml_file
-            config_file = os.path.join(self.output_dir, "PhysiCell_settings.xml")
-            print(f"vis_base.py: select_plot_output_cb():  config_file is {config_file}")
-            if not Path(config_file).is_file():
-                msgBox = QMessageBox()
-                msgBox.setIcon(QMessageBox.Information)
-                msgBox.setText(f"Unable to find a PhysiCell_settings.xml in {self.output_dir}, therefore parameters in the other GUI tabs will not be updated.")
-                msgBox.setStandardButtons(QMessageBox.Ok)
-                msgBox.exec()
-                return
-            else:
-                self.run_tab.config_xml_name.setText(config_file)
-                self.show_sample_model(config_file)
-                # self.vis_tab.update_output_dir(self.config_tab.folder.text())
-
-
-        else:
+        if not Path(dir_path).is_dir():
             print("vis_base.py: output_folder_cb():  full_path_model_name is NOT valid")
 
+        print("select_plot_output_cb():  dir_path is valid")
+        self.output_dir = dir_path
+        self.output_folder.setText(dir_path)
+        legend_file = os.path.join(self.output_dir, 'legend.svg')  # hardcoded filename :(
+
+        self.reset_model()
+        self.update_plots()
+
+        # June 2023 - also attempt to read PhysiCell_settings.xml and repopulate the Studio 
+        # self.run_tab.config_file = self.current_xml_file
+        config_file = os.path.join(self.output_dir, "PhysiCell_settings.xml")
+        print(f"vis_base.py: select_plot_output_cb():  config_file is {config_file}")
+        if not Path(config_file).is_file():
+            msgBox = QMessageBox()
+            msgBox.setIcon(QMessageBox.Information)
+            msgBox.setText(f"Unable to find a PhysiCell_settings.xml in {self.output_dir}, therefore parameters in the other GUI tabs will not be updated.")
+            msgBox.setStandardButtons(QMessageBox.Ok)
+            msgBox.exec()
+            return
+
+        self.run_tab.config_xml_name.setText(config_file)
+        self.show_sample_model(config_file)
+        # self.vis_tab.update_output_dir(self.config_tab.folder.text())
+        self.initialize_cell_dict(config_file)
 
     def disable_cell_scalar_widgets(self):
         self.cell_scalar_combobox.setEnabled(False)
@@ -1924,7 +2019,7 @@ class VisBase():
         xml_file = "initial.xml"
         full_fname = os.path.join(self.output_dir, xml_file)
         if not os.path.exists(full_fname):
-            print(f"vis3D_tab.py: get_domain_params(): full_fname {full_fname} does not exist, leaving!")
+            # print(f"vis_base.py: get_domain_params(): full_fname {full_fname} does not exist, leaving!")
             return
 
         # print("------------- get_domain_params(): pyMCDS reading info from ",full_fname)
@@ -2061,7 +2156,7 @@ class VisBase():
         # tree = ET.parse(self.output_dir + "/" + "initial.xml")
         xml_file = Path(self.output_dir, "initial.xml")
         if not os.path.isfile(xml_file):
-            print("vis_tab:reset_model(): Warning: Expecting initial.xml, but does not exist.")
+            print("vis_base.py: reset_model(): Warning: Expecting initial.xml, but does not exist.")
             # msgBox = QMessageBox()
             # msgBox.setIcon(QMessageBox.Information)
             # msgBox.setText("Did not find 'initial.xml' in the output directory. Will plot a dummy substrate until you run a simulation.")
@@ -2386,7 +2481,6 @@ class VisBase():
         self.show_mechanics_grid = bval
         self.update_plots()
 
-
     #----------------------------------------------
     def cells_toggle_cb(self,bval):
         self.cells_checked_flag = bval
@@ -2564,48 +2658,85 @@ class VisBase():
         self.disable_cell_scalar_cb = True
         self.cell_scalar_combobox.clear()
 
-        # -- old way (limit choices)
-        # default_var_l = ["pressure", "total_volume", "current_phase", "cell_type", "damage"]
-        # for idx in range(len(default_var_l)):
-        #     self.cell_scalar_combobox.addItem(default_var_l[idx])
-        # self.cell_scalar_combobox.insertSeparator(len(default_var_l))
-
         mcds = pyMCDS(xml_file_root, self.output_dir, microenv=False, graph=False, verbose=False)
 
-        # # cell_scalar = mcds.get_cell_df()[cell_scalar_name]
-        # num_keys = len(mcds.data['discrete_cells']['data'].keys())
-        # print("plot_tab: add_default_cell_vars(): num_keys=",num_keys)
-        # keys_l = list(mcds.data['discrete_cells']['data'])
         self.cell_scalars_l.clear()
         self.cell_scalars_l = list(mcds.data['discrete_cells']['data'])
-        # for idx in range(num_keys-1,0,-1):
-        #     if "transformation_rates" in keys_l[idx]:
-        #         print("found transformation_rates at index=",idx)
-        #         break
-        # idx1 = idx + 1
 
-        # Let's remove the ID which seems to be problematic. And reverse the order of vars so custom vars are at the top.
+        # Let's remove the ID which seems to be problematic.
         self.cell_scalars_l.remove('ID')
-        # self.cell_scalars_l.reverse()
         self.cell_scalars_l.sort()
-        # print("plot_tab: add_default_cell_vars(): self.cell_scalars_l =",self.cell_scalars_l)
 
-        # for idx in range(0, len(keys_l)):
-        #     # print("------ add: ",keys_l[idx])
-        #     if keys_l[idx] == "ID":
-        #         continue
-        #     # self.cell_scalar_combobox.addItem(keys_l[idx])
-        #     self.cell_scalars_l.append(keys_l[idx])
+        self.cell_scalar_human2mcds_dict = {x: x for x in self.cell_scalars_l} # default to the name shown in the combobox is the same as the key
 
+        self.replace_ids_with_names(xml_file_root)
         self.cell_scalar_combobox.addItems(self.cell_scalars_l)
-        # items = [self.cell_scalar_combobox.itemText(i) for i in range(self.cell_scalar_combobox.count())]
-        # print(items)
 
         self.disable_cell_scalar_cb = False
 
         self.update_plots()
 
+    def initialize_cell_dict(self, config_file=None):
+        self.cell_dict = {}
+        if config_file is None:
+            for cdname in self.celldef_tab.param_d.keys():
+                self.cell_dict[self.celldef_tab.param_d[cdname]["ID"]] = cdname
+            return
+        
+        tree = ET.parse(config_file)
+        root = tree.getroot()
+        cell_defs = root.find('.//cell_definitions')
+        for cell_def in cell_defs.findall('cell_definition'):
+            name = cell_def.get('name')
+            ID = cell_def.get('ID')
+            self.cell_dict[ID] = name
+        return
 
+    def replace_ids_with_names(self, xml_file_root):
+        xmlpathfile, _ = xmlfile_to_xmlpathfile(xml_file_root, self.output_dir)
+        tree = ET.parse(xmlpathfile)
+        root = tree.getroot()
+        variables_node = root.find('microenvironment').find('domain').find('variables')
+        variables = variables_node.findall('variable')
+        variable_dict = {}
+        for variable in variables:
+            name = variable.get('name').replace(' ', '_')
+            ID = variable.get('ID')
+            variable_dict[ID] = name
+
+        self.initialize_cell_dict() # this is where it was originally called, so leaving this here just in case
+
+        substrate_scalar_prefixes = ['chemotactic_sensitivities','secretion_rates','uptake_rates','saturation_densities','net_export_rates','internalized_total_substrates','fraction_released_at_death','fraction_transferred_when_ingested']
+        substrate_scalar_replace = {
+            'chemotactic_sensitivities': lambda x: f'chemotactic response to {x}',
+            'secretion_rates': lambda x:  f'(rate of) {x} secretion ',
+            'uptake_rates': lambda x: f'(rate of) {x} uptake',
+            'saturation_densities': lambda x: f'{x} secretion target',
+            'net_export_rates': lambda x: f'(rate of) {x} export',
+            'internalized_total_substrates': lambda x: f'(amount of) intracellular {x}',
+            'fraction_released_at_death': lambda x: f'fraction released at death of {x}',
+            'fraction_transferred_when_ingested': lambda x: f'fraction transferred when ingested of {x}'
+        }
+        cell_scalar_prefixes = ['cell_adhesion_affinities','live_phagocytosis_rates','attack_rates','immunogenicities','fusion_rates','transformation_rates','asymmetric_division_probabilities']
+        cell_scalar_replace = {
+            'cell_adhesion_affinities': lambda x: f'adhesive affinity to {x}',
+            'live_phagocytosis_rates': lambda x: f'(rate of) phagocytose {x}',
+            'attack_rates': lambda x: f'(rate of) attack {x}',
+            'immunogenicities': lambda x: f'immunogenicity to {x}',
+            'fusion_rates': lambda x: f'(rate of) fuse to {x}',
+            'transformation_rates': lambda x: f'(rate of) transform to {x}',
+            'asymmetric_division_probabilities': lambda x: f'(probability of) asymmetric division to {x}'
+        }
+
+        for ind, scalar in enumerate(self.cell_scalars_l):
+            scalar_found, new_name = find_name_in_dict(scalar, variable_dict, substrate_scalar_prefixes, substrate_scalar_replace)
+            if not scalar_found:
+                scalar_found, new_name = find_name_in_dict(scalar, self.cell_dict, cell_scalar_prefixes, cell_scalar_replace, state_type='cell definition')
+            if scalar_found:
+                self.cell_scalars_l[ind] = new_name
+                self.cell_scalar_human2mcds_dict[new_name] = scalar
+                continue
+            
     def add_partial_cell_vars(self):
         print("\n-------  vis_base:  add_partial_cell_vars():   self.output_dir= ",self.output_dir)
 
@@ -2631,20 +2762,89 @@ class VisBase():
         self.cell_scalars_l = list(mcds.data['discrete_cells']['data'])
 
         # Let's remove the ID which seems to be problematic. And reverse the order of vars so custom vars are at the top.
-        self.cell_scalars_l.remove('ID')
+        labels_to_ignore = [
+            "ID",
+            "position",
+            "total_volume",
+            "cell_type",
+            "cycle_model",
+            "current_phase",
+            "elapsed_time_in_phase",
+            "nuclear_volume",
+            "cytoplasmic_volume",
+            "fluid_fraction",
+            "calcified_fraction",
+            "orientation",
+            "polarity",
+            "velocity",
+            "pressure",
+            "number_of_nuclei",
+            "total_attack_time",
+            "contact_with_basement_membrane",
+            "current_cycle_phase_exit_rate",
+            "elapsed_time_in_phase",
+            "dead",
+            "current_death_model",
+            "death_rates",
+            "cytoplasmic_biomass_change_rate",
+            "nuclear_biomass_change_rate",
+            "fluid_change_rate",
+            "calcification_rate",
+            "target_solid_cytoplasmic",
+            "target_solid_nuclear",
+            "target_fluid_fraction",
+            "radius",
+            "nuclear_radius",
+            "surface_area",
+            "cell_cell_adhesion_strength",
+            "cell_BM_adhesion_strength",
+            "cell_cell_repulsion_strength",
+            "cell_BM_repulsion_strength",
+            "cell_adhesion_affinities",
+            "relative_maximum_adhesion_distance",
+            "maximum_number_of_attachments",
+            "attachment_elastic_constant",
+            "attachment_rate",
+            "detachment_rate",
+            "is_motile",
+            "persistence_time",
+            "migration_speed",
+            "migration_bias_direction",
+            "migration_bias",
+            "motility_vector",
+            "chemotaxis_index",
+            "chemotaxis_direction",
+            "chemotactic_sensitivities",
+            "secretion_rates",
+            "uptake_rates",
+            "saturation_densities",
+            "net_export_rates",
+            "internalized_total_substrates",
+            "fraction_released_at_death",
+            "fraction_transferred_when_ingested",
+            "apoptotic_phagocytosis_rate",
+            "necrotic_phagocytosis_rate",
+            "other_dead_phagocytosis_rate",
+            "live_phagocytosis_rates",
+            "attack_rates",
+            "immunogenicities",
+            "attack_target",
+            "attack_damage_rate",
+            "attack_duration",
+            "attack_total_damage_delivered",
+            "fusion_rates",
+            "transformation_rates",
+            "asymmetric_division_probabilities"
+        ]
+       
+        scalar_starts_with_some_label = lambda x: any(x.startswith(label) for label in labels_to_ignore)
+        self.cell_scalars_l = [x for x in self.cell_scalars_l if x not in labels_to_ignore and not scalar_starts_with_some_label(x)]
         self.cell_scalars_l.reverse()
 
-        # determine how to just extract the custom data vars
-        for idx in range(len(self.cell_scalars_l)):
-            if self.cell_scalars_l[idx].find("transformation_rates") >= 0:
-                break
-        # print("   post: idx=",idx)
-        self.cell_scalars_l = self.cell_scalars_l[0:idx]
-        # print("\n   post only custom data: ",self.cell_scalars_l)
+        idx = len(self.cell_scalars_l) # the custom vars
 
         # then append some preferred scalar values, alphabetically
         self.cell_scalars_l.extend(['cell_type','current_phase','cycle_model','damage','elapsed_time_in_phase','pressure'])
-        # print("   post append typical: ",self.cell_scalars_l)
 
         self.cell_scalar_combobox.addItems(self.cell_scalars_l)
         self.cell_scalar_combobox.insertSeparator(idx)
@@ -3025,6 +3225,7 @@ class VisBase():
             #         display_type=DISPLAY_TYPE.SPHERE,
             #     ),
             # },
+
             time_units=UnitData("m"),  # minutes; trying to just use "frame" --> undefined error, 
         )
 
@@ -3067,3 +3268,92 @@ class VisBase():
         print(f"--> {model_name}.simularium")
 
         print("Load this model at: https://simularium.allencell.org/viewer")
+
+    def make_movie_cb(self):
+        # Check if ffmpeg is installed
+        if not shutil.which("ffmpeg"):
+            msgBox = QMessageBox()
+            msgBox.setTextFormat(Qt.RichText)
+            msgBox.setText("WARNING: ffmpeg is not installed. Please install ffmpeg to generate the movie.")
+            msgBox.setStandardButtons(QMessageBox.Ok)
+            msgBox.exec()
+            return
+        print("Creating movie...")
+        fig, ax = plt.subplots()
+        ax.axis('off')  # Turn off the axis
+        fig.subplots_adjust(left=0, right=1, top=1, bottom=0)  # Remove borders
+        ims = []
+        original_frame = self.current_svg_frame  # Save the original frame number
+
+        # Determine the total number of frames
+        svg_pattern = self.output_dir + "/" + "snapshot*.svg"
+        svg_files = glob.glob(svg_pattern)
+        svg_files.sort()
+        max_frame = len(svg_files) - 1
+
+        # Simulate play button click
+        self.animating_flag = True
+        self.play_button.setText("Pause")
+        self.timer.start(1)
+
+        self.cancel_movie = False  # Add a flag to cancel the movie creation
+
+        for frame in range(max_frame):
+            if self.animating_flag is False:  self.cancel_movie = True # Check if the pause button was pressed
+            if self.cancel_movie:  # Check if the cancel button was pressed
+                print("Movie creation canceled.")
+                break
+            self.current_svg_frame = frame
+            self.update_plots()
+            self.canvas.draw_idle()  # Force a redraw of the canvas
+            self.canvas.flush_events()  # Ensure the canvas is updated
+            im = ax.imshow(self.canvas.buffer_rgba(), animated=True)
+            ims.append([im])
+
+        # Stop the animation
+        self.animating_flag = False
+        self.play_button.setText("Play")
+        self.timer.stop()
+
+        if not self.cancel_movie:  # Only save the movie if it was not canceled
+            # Get the movie name from the movie_name_edit field and ensure it has .mp4 extension
+            movie_name = self.movie_name_edit.text()
+            if not movie_name.endswith(".mp4"):
+                movie_name += ".mp4"
+
+            ani = animation.ArtistAnimation(fig, ims, interval=100, blit=True)
+            ani.save(movie_name, writer="ffmpeg", dpi=200)
+            print(f"Movie saved as {movie_name}")
+            # Show a message box with the movie name
+            msgBox = QMessageBox()
+            msgBox.setTextFormat(Qt.RichText)
+            msgBox.setText(f"Movie saved as <b>{movie_name}</b>")
+            msgBox.setStandardButtons(QMessageBox.Ok)
+            msgBox.exec()
+
+        self.current_svg_frame = original_frame  # Restore the original frame number
+
+    def cancel_movie_cb(self):
+        self.cancel_movie = True
+        
+def find_name_in_dict(scalar, state_dict, prefixes, replace_dict, state_type='substrate'):
+    # make a static variable for this function
+    if not hasattr(find_name_in_dict, "warned_ids") or find_name_in_dict.current_warning_state_type != state_type:
+        find_name_in_dict.warned_ids = []
+        find_name_in_dict.current_warning_state_type = state_type
+    for prefix in prefixes:
+        if scalar.startswith(prefix):
+            id = scalar.split(prefix)[1]
+            if id == '': # if there is only one substrate/celltype, no id is added to the name
+                id = '0'
+            else:
+                # strip the leading underscore
+                id = id[1:]
+            if id not in state_dict.keys():
+                if id not in find_name_in_dict.warned_ids:
+                    print(f"WARNING: Could not find the name of the {state_type} with ID {id}.")
+                    find_name_in_dict.warned_ids.append(id)
+                return True, scalar
+            return True, replace_dict[prefix](state_dict[id])
+    return False, scalar
+

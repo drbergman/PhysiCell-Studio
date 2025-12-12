@@ -15,42 +15,13 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtWidgets import QSpacerItem
 from PyQt5.QtGui import QDoubleValidator
 
-class QCheckBox_custom(QCheckBox):  # it's insane to have to do this!
-    def __init__(self,name):
-        super(QCheckBox, self).__init__(name)
-
-        checkbox_style = """
-                QCheckBox::indicator:checked {
-                    background-color: rgb(255,255,255);
-                    border: 1px solid #5A5A5A;
-                    width : 15px;
-                    height : 15px;
-                    border-radius : 3px;
-                    image: url(images:checkmark.png);
-                }
-                QCheckBox::indicator:unchecked
-                {
-                    background-color: rgb(255,255,255);
-                    border: 1px solid #5A5A5A;
-                    width : 15px;
-                    height : 15px;
-                    border-radius : 3px;
-                }
-                """
-        self.setStyleSheet(checkbox_style)
+from studio_classes import StudioTab, QCheckBox_custom
 
 class QHLine(QFrame):
     def __init__(self):
         super(QHLine, self).__init__()
         self.setFrameShape(QFrame.HLine)
         self.setFrameShadow(QFrame.Sunken)
-
-# Overloading the QCheckBox widget 
-class MyQCheckBox(QCheckBox):
-    vname = None
-    # idx = None  # index
-    wrow = 0  # widget's row in a table
-    wcol = 0  # widget's column in a table
 
 class MyQComboBox(QComboBox):
     vname = None
@@ -66,17 +37,11 @@ class MyQLineEdit(QLineEdit):
     wcol = 0
     prev = None
 
-
-class UserParams(QWidget):
-    def __init__(self):
-        super().__init__()
-
-        # self.current_param = None
+class UserParams(StudioTab):
+    def __init__(self, xml_creator):
+        super().__init__(xml_creator)
         self.xml_root = None
         self.count = 100
-        # self.max_rows = 100  # initially (TODO: check if enough for initial .xml)
-        # self.max_rows = 200  # initially (TODO: check if enough for initial .xml)
-        # self.max_rows = 125  # initially (TODO: check if enough for initial .xml)
 
         # rf. https://www.w3.org/TR/SVG11/types.html#ColorKeywords   - well, but not true on Mac?
         self.row_color1 = "background-color: Tan"
@@ -89,27 +54,6 @@ class UserParams(QWidget):
         self.combobox_width = 90
 
         self.scroll_area = QScrollArea()
-        # splitter.addWidget(self.scroll)
-        # self.cell_def_horiz_layout.addWidget(self.scroll)
-
-        stylesheet = """ 
-            QComboBox{
-                color: #000000;
-                background-color: #FFFFFF; 
-            }
-            QPushButton{
-                color: #000000;
-                background-color: #FFFFFF; 
-                border-style: outset;
-                border-radius: 10px;
-                border-color: black;
-                padding: 4px;
-            }
-            """
-                # border-style: outset;
-                # border-radius: 10px;
-                # border-color: black;
-                # padding: 4px;
 
         self.user_params = QWidget()
 
@@ -117,23 +61,15 @@ class UserParams(QWidget):
         self.max_rows = 100
         self.max_cols = 5
 
-        # self.enable_entire_table()
-        # self.table_disabled = False
-
         self.utable.setColumnCount(self.max_cols)
         self.utable.setRowCount(self.max_rows)
         self.utable.setHorizontalHeaderLabels(['Name','Type','Value','Units','Description'])
 
-        # self.user_params.setStyleSheet(stylesheet)
-
         self.main_layout = QVBoxLayout()
-        # self.main_layout.addStretch(0)
 
         #------------------
-        button_width = 200
+        # button_width = 200
         controls_hbox = QHBoxLayout()
-
-        # self.main_layout.addLayout(hbox)
 
         hlayout = QHBoxLayout()
         self.name_search = QLineEdit()
@@ -180,6 +116,7 @@ class UserParams(QWidget):
             w_varname.wrow = irow
             w_varname.wcol = self.var_icol_name
             w_varname.textChanged[str].connect(self.name_changed_cb)  # being explicit about passing a string 
+            w_varname.editingFinished.connect(self.name_change_finished_cb) 
 
             # ------- type
             w_var_type = MyQComboBox()
@@ -364,7 +301,8 @@ class UserParams(QWidget):
         self.add_row_utable(self.count - 1)
 
         # self.enable_all_custom_data()
-
+        if varname == "random_seed":
+            self.xml_creator.config_tab.random_seed_warning_label.hide_icon()
     #----------------------------------------
     # Not currently used
     def disable_table_cells_for_duplicate_name(self, widget=None):
@@ -569,6 +507,10 @@ class UserParams(QWidget):
                 self.add_row_utable(self.count + ival)
             self.count += N
 
+    def name_change_finished_cb(self):
+        if self.sender().text()=="random_seed":
+            self.xml_creator.config_tab.random_seed_warning_label.show_icon()
+
     #----------------------------------------
     def units_changed_cb(self, text):
         debug_me = False
@@ -626,59 +568,40 @@ class UserParams(QWidget):
         # print(f'\n\n------------  user_params_tab: fill_gui --------------')
         # pass
         uep_user_params = self.xml_root.find(".//user_parameters")
-        # custom_data_path = ".//cell_definition[" + str(self.idx_current_cell_def) + "]//custom_data//"
-        # logging.debug(f'uep_user_params= {uep_user_params}')
+
+        if uep_user_params is None:
+            return
 
         idx = 0
         # rwh/TODO: if we have more vars than we initially created rows for, we'll need
         # to call 'append_more_cb' for the excess.
 
-        # <number_of_cells type="int" units="none" description="initial number of cells (for each cell type)">0</number_of_cells>
         for var in uep_user_params:
-            # type_cast = {"double":"float", "int":"int", "bool":"bool", "string":"", "divider":"Text"}
-            # print(idx, ") ",var)
-            # print(idx, ") tag= ",var.tag)
-            # print(idx, ") text= ",var.text)
             self.utable.cellWidget(idx,self.var_icol_name).setText(var.tag)
             self.utable.cellWidget(idx,self.var_icol_value).setText(var.text)
-            # self.utable.cellWidget(idx,self.var_icol_value).setText(var.text)
 
             if 'type' in var.keys():
-                # print("\n------------  var.attrib['type'] = ", var.attrib['type'])
                 if "divider" in var.attrib['type']:  # just for visual separation in Jupyter notebook
                     continue
 
                 # select appropriate dropdown/combobox item (double, int, bool, text)
                 elif "double" in var.attrib['type']:
-                    # self.type[idx].setCurrentIndex(0)   # combobox item
                     self.utable.cellWidget(idx,self.var_icol_type).setCurrentIndex(0)
                 elif "int" in var.attrib['type']:
-                    # self.type[idx].setCurrentIndex(1)
                     self.utable.cellWidget(idx,self.var_icol_type).setCurrentIndex(1)
                 elif "bool" in var.attrib['type']:
-                    # self.type[idx].setCurrentIndex(2)
                     self.utable.cellWidget(idx,self.var_icol_type).setCurrentIndex(2)
                 else:
-                    # self.type[idx].setCurrentIndex(3)
                     self.utable.cellWidget(idx,self.var_icol_type).setCurrentIndex(3)
             else:  # default 'double'
-                # self.type[idx].setCurrentIndex(0)
                 self.utable.cellWidget(idx,self.var_icol_type).setCurrentIndex(0)
 
             if 'units' in var.keys():
-                # self.units[idx].setText(var.attrib['units'])
                 self.utable.cellWidget(idx,self.var_icol_units).setText(var.attrib['units'])
             if 'description' in var.keys():
-                # self.description[idx].setText(var.attrib['description'])
-                # print("----- found description: ",var.attrib['description'])
                 self.utable.cellWidget(idx,self.var_icol_desc).setText(var.attrib['description'])
-            # else:
-            #     print("----- no description found. ")
 
             idx += 1
-
-        # self.count = idx
-        # self.enable_entire_table()
 
     #--------------------------------------------------------
     # Generate the .xml to reflect changes in the GUI
