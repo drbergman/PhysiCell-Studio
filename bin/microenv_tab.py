@@ -15,11 +15,11 @@ import xml.etree.ElementTree as ET  # https://docs.python.org/2/library/xml.etre
 from studio_classes import QLineEdit_custom, FolderPathValidator, FileNameValidator, QLabelSeparator
 
 from PyQt5 import QtCore, QtGui
-# from PyQt5.QtWidgets import *
-from PyQt5.QtWidgets import QFrame,QWidget,QLineEdit,QHBoxLayout,QVBoxLayout,QPushButton,QLabel,QScrollArea,QTreeWidget,QTreeWidgetItem,QSplitter,QMessageBox,QTabWidget,QComboBox
+# # from PyQt5.QtWidgets import *
+from PyQt5.QtWidgets import QFrame,QWidget,QLineEdit,QHBoxLayout,QVBoxLayout,QPushButton,QLabel,QScrollArea,QTreeWidget,QTreeWidgetItem,QSplitter,QMessageBox,QTabWidget
 
 from PyQt5.QtGui import QIcon, QDoubleValidator
-from studio_classes import QCheckBox_custom
+from studio_classes import QCheckBox_custom, QComboBox_custom
 
 class QHLine(QFrame):
     def __init__(self):
@@ -173,7 +173,7 @@ class SubstrateDef(QWidget):
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
 
-        self.pk_model_combobox = QComboBox()
+        self.pk_model_combobox = QComboBox_custom()
         self.pk_model_combobox.currentIndexChanged.connect(self.pk_model_combobox_changed_cb)
         self.pk_model_combobox.addItem("None")
         self.pk_model_combobox.addItem("Constant")
@@ -186,7 +186,7 @@ class SubstrateDef(QWidget):
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
 
-        self.pk_schedule_format_combobox = QComboBox() # put this here before connecting pk_model_combobox to cb to prevent error
+        self.pk_schedule_format_combobox = QComboBox_custom() # put this here before connecting pk_model_combobox to cb to prevent error
         self.pk_schedule_format_combobox.setEnabled(False)
         self.pk_schedule_format_combobox.addItem("parameters")
         self.pk_schedule_format_combobox.setStyleSheet("background-color: lightgray; color: black")
@@ -754,73 +754,6 @@ class SubstrateDef(QWidget):
     def diffusion_coef_changed(self, text):
         self.param_d[self.current_substrate]["diffusion_coef"] = text
 
-    def pk_model_combobox_changed_cb(self, idx):
-        if self.current_substrate is not None:
-            self.param_d[self.current_substrate]["pk_model"] = self.pk_model_combobox.currentText()
-        if self.pk_setup_complete is False:
-            return
-        if self.pk_model_combobox.currentText() == "None" or self.pk_model_combobox.currentText() == "SBML":
-            self.disable_all_schedule()
-            self.disable_rate_parameters()
-            self.pk_csv_folder.setEnabled(False)
-            self.pk_csv_filename.setEnabled(False)
-        elif self.pk_model_combobox.currentText() == "Constant":
-            self.pk_schedule_format_combobox.setCurrentIndex(self.pk_schedule_format_combobox.findText("csv"))
-            self.pk_schedule_format_combobox.setEnabled(False)
-            self.pk_schedule_format_combobox.setStyleSheet("background-color: lightgray; color: black")
-            self.disable_rate_parameters()
-            self.pk_csv_folder.setEnabled(True)
-            self.pk_csv_filename.setEnabled(True)
-        else:
-            self.enable_all_schedule()
-            self.enable_rate_parameters()
-
-        if self.pk_model_combobox.currentText() == "None":
-            self.pk_biot_number.setEnabled(False)
-            self.pk_biot_number.setStyleSheet("background-color: lightgray; color: black")
-        else:
-            self.pk_biot_number.setEnabled(True)
-            self.pk_biot_number.setText(str(self.param_d[self.current_substrate]["biot_number"]))
-            self.pk_biot_number.setStyleSheet("background-color: white; color: black")
-
-        if self.pk_model_combobox.currentText() == "SBML":
-            self.pk_sbml_folder.setEnabled(True)
-            self.pk_sbml_folder.setText(str(self.param_d[self.current_substrate]["sbml_folder"]))
-            self.pk_sbml_filename.setEnabled(True)
-            self.pk_sbml_filename.setText(str(self.param_d[self.current_substrate]["sbml_filename"]))
-        else:
-            self.pk_sbml_folder.setEnabled(False)
-            self.pk_sbml_folder.setText(str(self.param_d[self.current_substrate]["sbml_folder"]))
-            self.pk_sbml_filename.setEnabled(False)
-            self.pk_sbml_filename.setText(str(self.param_d[self.current_substrate]["sbml_filename"]))
-            
-
-    def enable_rate_parameters(self):
-        self.disable_rate_parameters() # simple way to turn off any unneeded parameters
-
-        self.pk_elimination_rate.setEnabled(True)
-        self.pk_elimination_rate.setText(str(self.param_d[self.current_substrate]["elimination_rate"]))
-        self.pk_elimination_rate.setStyleSheet("background-color: white; color: black")
-        
-        if self.pk_model_combobox.currentText() == "2C":
-            self.pk_k12.setEnabled(True)
-            self.pk_k12.setText(str(self.param_d[self.current_substrate]["k12"]))
-            self.pk_k12.setStyleSheet("background-color: white; color: black")
-
-            self.pk_k21.setEnabled(True)
-            self.pk_k21.setText(str(self.param_d[self.current_substrate]["k21"]))
-            self.pk_k21.setStyleSheet("background-color: white; color: black")
-
-            self.pk_volume_ratio.setEnabled(True)
-            self.pk_volume_ratio.setText(str(self.param_d[self.current_substrate]["volume_ratio"]))
-            self.pk_volume_ratio.setStyleSheet("background-color: white; color: black")
-
-    def enable_all_schedule(self):
-        self.pk_schedule_format_combobox.setEnabled(True)
-        self.pk_schedule_format_combobox.setStyleSheet("QComboBox{color: #000000; background-color: #FFFFFF;}")
-        if self.pk_schedule_format_combobox.currentText() == "parameters":
-            self.enable_schedule_parameters()
-
     def enable_schedule_parameters(self):
         self.pk_total_doses.setEnabled(True)
         self.pk_total_doses.setText(str(self.param_d[self.current_substrate]["total_doses"]))
@@ -846,101 +779,10 @@ class SubstrateDef(QWidget):
         self.pk_loading_dose.setText(str(self.param_d[self.current_substrate]["loading_dose"]))
         self.pk_loading_dose.setStyleSheet("background-color: white; color: black")
 
-    def disable_rate_parameters(self):
-        self.pk_elimination_rate.setEnabled(False)
-        self.pk_elimination_rate.setStyleSheet("background-color: lightgray; color: black")
-
-        self.pk_k12.setEnabled(False)
-        self.pk_k12.setStyleSheet("background-color: lightgray; color: black")
-
-        self.pk_k21.setEnabled(False)
-        self.pk_k21.setStyleSheet("background-color: lightgray; color: black")
-
-        self.pk_volume_ratio.setEnabled(False)
-        self.pk_volume_ratio.setStyleSheet("background-color: lightgray; color: black")
-
     def disable_all_schedule(self):
         self.pk_schedule_format_combobox.setEnabled(False)
         self.pk_schedule_format_combobox.setStyleSheet("background-color: lightgray; color: black")
         self.disable_schedule_parameters()
-
-    def disable_schedule_parameters(self):
-        self.pk_total_doses.setEnabled(False)
-        self.pk_total_doses.setStyleSheet("background-color: lightgray; color: black")
-
-        self.pk_loading_doses.setEnabled(False)
-        self.pk_loading_doses.setStyleSheet("background-color: lightgray; color: black")
-        
-        self.pk_first_dose_time.setEnabled(False)
-        self.pk_first_dose_time.setStyleSheet("background-color: lightgray; color: black")
-        
-        self.pk_dose_interval.setEnabled(False)
-        self.pk_dose_interval.setStyleSheet("background-color: lightgray; color: black")
-        
-        self.pk_regular_dose.setEnabled(False)
-        self.pk_regular_dose.setStyleSheet("background-color: lightgray; color: black")
-        
-        self.pk_loading_dose.setEnabled(False)
-        self.pk_loading_dose.setStyleSheet("background-color: lightgray; color: black")
-
-    def pk_schedule_format_combobox_changed_cb(self, idx):
-        if self.current_substrate is not None:
-            self.param_d[self.current_substrate]["schedule_format"] = self.pk_schedule_format_combobox.currentText()
-
-        if self.pk_model_combobox.currentText() == "None" or self.pk_model_combobox.currentText() == "SBML" or self.pk_schedule_format_combobox.currentText() != "parameters":
-            self.disable_schedule_parameters()
-            if self.pk_schedule_format_combobox.currentText() == "csv":
-                self.pk_csv_folder.setEnabled(True)
-                self.pk_csv_filename.setEnabled(True)
-        else:
-            self.enable_schedule_parameters()
-
-    def pk_total_doses_changed_cb(self, text):
-        self.param_d[self.current_substrate]["total_doses"] = text
-
-    def pk_loading_doses_changed_cb(self, text):
-        self.param_d[self.current_substrate]["loading_doses"] = text
-
-    def pk_first_dose_time_changed_cb(self, text):
-        self.param_d[self.current_substrate]["first_dose_time"] = text
-
-    def pk_dose_interval_changed_cb(self, text):
-        self.param_d[self.current_substrate]["dose_interval"] = text
-
-    def pk_regular_dose_changed_cb(self, text):
-        self.param_d[self.current_substrate]["regular_dose"] = text
-
-    def pk_loading_dose_changed_cb(self, text):
-        self.param_d[self.current_substrate]["loading_dose"] = text
-
-    def pk_elimination_rate_changed_cb(self, text):
-        self.param_d[self.current_substrate]["elimination_rate"] = text
-
-    def pk_k12_changed_cb(self, text):
-        self.param_d[self.current_substrate]["k12"] = text
-
-    def pk_k21_changed_cb(self, text):
-        self.param_d[self.current_substrate]["k21"] = text
-
-    def pk_volume_ratio_changed_cb(self, text):
-        self.param_d[self.current_substrate]["volume_ratio"] = text
-
-    def pk_biot_number_changed_cb(self, text):
-        self.param_d[self.current_substrate]["biot_number"] = text
-
-    def pk_csv_folder_changed_cb(self, text):
-        self.param_d[self.current_substrate]["pk_csv_folder"] = text
-        self.pk_csv_filename.check_validity(self.pk_csv_filename.text())
-
-    def pk_csv_filename_changed_cb(self, text):
-        self.param_d[self.current_substrate]["pk_csv_filename"] = text
-
-    def pk_sbml_folder_changed_cb(self, text):
-        self.param_d[self.current_substrate]["sbml_folder"] = text
-        self.pk_sbml_filename.check_validity(self.pk_sbml_filename.text())
-
-    def pk_sbml_filename_changed_cb(self, text):
-        self.param_d[self.current_substrate]["sbml_filename"] = text
 
     def pk_model_combobox_changed_cb(self, idx):
         if self.current_substrate is not None:
@@ -981,7 +823,6 @@ class SubstrateDef(QWidget):
             self.pk_sbml_folder.setText(str(self.param_d[self.current_substrate]["sbml_folder"]))
             self.pk_sbml_filename.setEnabled(False)
             self.pk_sbml_filename.setText(str(self.param_d[self.current_substrate]["sbml_filename"]))
-            
 
     def enable_rate_parameters(self):
         self.disable_rate_parameters() # simple way to turn off any unneeded parameters
@@ -1005,34 +846,8 @@ class SubstrateDef(QWidget):
 
     def enable_all_schedule(self):
         self.pk_schedule_format_combobox.setEnabled(True)
-        self.pk_schedule_format_combobox.setStyleSheet("QComboBox{color: #000000; background-color: #FFFFFF;}")
         if self.pk_schedule_format_combobox.currentText() == "parameters":
             self.enable_schedule_parameters()
-
-    def enable_schedule_parameters(self):
-        self.pk_total_doses.setEnabled(True)
-        self.pk_total_doses.setText(str(self.param_d[self.current_substrate]["total_doses"]))
-        self.pk_total_doses.setStyleSheet("background-color: white; color: black")
-        
-        self.pk_loading_doses.setEnabled(True)
-        self.pk_loading_doses.setText(str(self.param_d[self.current_substrate]["loading_doses"]))
-        self.pk_loading_doses.setStyleSheet("background-color: white; color: black")
-
-        self.pk_first_dose_time.setEnabled(True)
-        self.pk_first_dose_time.setText(str(self.param_d[self.current_substrate]["first_dose_time"]))
-        self.pk_first_dose_time.setStyleSheet("background-color: white; color: black")
-
-        self.pk_dose_interval.setEnabled(True)
-        self.pk_dose_interval.setText(str(self.param_d[self.current_substrate]["dose_interval"]))
-        self.pk_dose_interval.setStyleSheet("background-color: white; color: black")
-
-        self.pk_regular_dose.setEnabled(True)
-        self.pk_regular_dose.setText(str(self.param_d[self.current_substrate]["regular_dose"]))
-        self.pk_regular_dose.setStyleSheet("background-color: white; color: black")
-
-        self.pk_loading_dose.setEnabled(True)
-        self.pk_loading_dose.setText(str(self.param_d[self.current_substrate]["loading_dose"]))
-        self.pk_loading_dose.setStyleSheet("background-color: white; color: black")
 
     def disable_rate_parameters(self):
         self.pk_elimination_rate.setEnabled(False)
@@ -1046,11 +861,6 @@ class SubstrateDef(QWidget):
 
         self.pk_volume_ratio.setEnabled(False)
         self.pk_volume_ratio.setStyleSheet("background-color: lightgray; color: black")
-
-    def disable_all_schedule(self):
-        self.pk_schedule_format_combobox.setEnabled(False)
-        self.pk_schedule_format_combobox.setStyleSheet("background-color: lightgray; color: black")
-        self.disable_schedule_parameters()
 
     def disable_schedule_parameters(self):
         self.pk_total_doses.setEnabled(False)
@@ -1132,6 +942,7 @@ class SubstrateDef(QWidget):
 
     def decay_rate_changed(self, text):
         self.param_d[self.current_substrate]["decay_rate"] = text
+
     def init_cond_changed(self, text):
         self.param_d[self.current_substrate]["init_cond"] = text
 

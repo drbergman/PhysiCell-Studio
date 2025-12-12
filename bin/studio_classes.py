@@ -214,6 +214,7 @@ class QComboBox_custom(QComboBox):
     def __init__(self):
         super().__init__()
         self.setStyleSheet("QComboBox{color: #000000; background-color: #FFFFFF;}")
+
 class ExtendedCombo( QComboBox ):
     def __init__( self,  parent = None):
         super( ExtendedCombo, self ).__init__( parent )
