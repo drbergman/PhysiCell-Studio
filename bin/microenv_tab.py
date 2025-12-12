@@ -189,7 +189,6 @@ class SubstrateDef(QWidget):
         self.pk_schedule_format_combobox = QComboBox_custom() # put this here before connecting pk_model_combobox to cb to prevent error
         self.pk_schedule_format_combobox.setEnabled(False)
         self.pk_schedule_format_combobox.addItem("parameters")
-        self.pk_schedule_format_combobox.setStyleSheet("background-color: lightgray; color: black")
         self.pk_schedule_format_combobox.addItem("csv")
         self.pk_schedule_format_combobox.currentIndexChanged.connect(self.pk_schedule_format_combobox_changed_cb)
         hbox.addWidget(self.pk_schedule_format_combobox)
@@ -198,10 +197,9 @@ class SubstrateDef(QWidget):
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
 
-        self.pk_biot_number = QLineEdit()
+        self.pk_biot_number = QLineEdit_custom()
         self.pk_biot_number.setFixedWidth(60)
         self.pk_biot_number.setEnabled(False)
-        self.pk_biot_number.setStyleSheet("background-color: lightgray; color: black")
         self.pk_biot_number.setValidator(QtGui.QDoubleValidator())
         self.pk_biot_number.textChanged.connect(self.pk_biot_number_changed_cb)
         hbox.addWidget(self.pk_biot_number)
@@ -222,10 +220,9 @@ class SubstrateDef(QWidget):
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
 
-        self.pk_total_doses = QLineEdit()
+        self.pk_total_doses = QLineEdit_custom()
         self.pk_total_doses.setFixedWidth(30)
         self.pk_total_doses.setEnabled(False)
-        self.pk_total_doses.setStyleSheet("background-color: lightgray; color: black")
         self.pk_total_doses.setValidator(QtGui.QIntValidator())
         self.pk_total_doses.textChanged.connect(self.pk_total_doses_changed_cb)
         hbox.addWidget(self.pk_total_doses)
@@ -234,10 +231,9 @@ class SubstrateDef(QWidget):
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
 
-        self.pk_loading_doses = QLineEdit()
+        self.pk_loading_doses = QLineEdit_custom()
         self.pk_loading_doses.setFixedWidth(30)
         self.pk_loading_doses.setEnabled(False)
-        self.pk_loading_doses.setStyleSheet("background-color: lightgray; color: black")
         self.pk_loading_doses.setValidator(QtGui.QIntValidator())
         self.pk_loading_doses.textChanged.connect(self.pk_loading_doses_changed_cb)
         hbox.addWidget(self.pk_loading_doses)
@@ -256,10 +252,9 @@ class SubstrateDef(QWidget):
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
 
-        self.pk_regular_dose = QLineEdit()
+        self.pk_regular_dose = QLineEdit_custom()
         self.pk_regular_dose.setFixedWidth(60)
         self.pk_regular_dose.setEnabled(False)
-        self.pk_regular_dose.setStyleSheet("background-color: lightgray; color: black")
         self.pk_regular_dose.setValidator(QtGui.QDoubleValidator())
         self.pk_regular_dose.textChanged.connect(self.pk_regular_dose_changed_cb)
         hbox.addWidget(self.pk_regular_dose)
@@ -268,10 +263,9 @@ class SubstrateDef(QWidget):
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
 
-        self.pk_loading_dose = QLineEdit()
+        self.pk_loading_dose = QLineEdit_custom()
         self.pk_loading_dose.setFixedWidth(60)
         self.pk_loading_dose.setEnabled(False)
-        self.pk_loading_dose.setStyleSheet("background-color: lightgray; color: black")
         self.pk_loading_dose.setValidator(QtGui.QDoubleValidator())
         self.pk_loading_dose.textChanged.connect(self.pk_loading_dose_changed_cb)
         hbox.addWidget(self.pk_loading_dose)
@@ -290,10 +284,9 @@ class SubstrateDef(QWidget):
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
 
-        self.pk_first_dose_time = QLineEdit()
+        self.pk_first_dose_time = QLineEdit_custom()
         self.pk_first_dose_time.setFixedWidth(30)
         self.pk_first_dose_time.setEnabled(False)
-        self.pk_first_dose_time.setStyleSheet("background-color: lightgray; color: black")
         self.pk_first_dose_time.setValidator(QtGui.QDoubleValidator())
         self.pk_first_dose_time.textChanged.connect(self.pk_first_dose_time_changed_cb)
         hbox.addWidget(self.pk_first_dose_time)
@@ -306,10 +299,9 @@ class SubstrateDef(QWidget):
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
 
-        self.pk_dose_interval = QLineEdit()
+        self.pk_dose_interval = QLineEdit_custom()
         self.pk_dose_interval.setFixedWidth(30)
         self.pk_dose_interval.setEnabled(False)
-        self.pk_dose_interval.setStyleSheet("background-color: lightgray; color: black")
         self.pk_dose_interval.setValidator(QtGui.QDoubleValidator())
         self.pk_dose_interval.textChanged.connect(self.pk_dose_interval_changed_cb)
         hbox.addWidget(self.pk_dose_interval)
@@ -331,10 +323,9 @@ class SubstrateDef(QWidget):
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
 
-        self.pk_elimination_rate = QLineEdit()
+        self.pk_elimination_rate = QLineEdit_custom()
         self.pk_elimination_rate.setFixedWidth(60)
         self.pk_elimination_rate.setEnabled(False)
-        self.pk_elimination_rate.setStyleSheet("background-color: lightgray; color: black")
         self.pk_elimination_rate.setValidator(QtGui.QDoubleValidator())
         self.pk_elimination_rate.textChanged.connect(self.pk_elimination_rate_changed_cb)
         hbox.addWidget(self.pk_elimination_rate)
@@ -347,10 +338,9 @@ class SubstrateDef(QWidget):
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
 
-        self.pk_k12 = QLineEdit()
+        self.pk_k12 = QLineEdit_custom()
         self.pk_k12.setFixedWidth(60)
         self.pk_k12.setEnabled(False)
-        self.pk_k12.setStyleSheet("background-color: lightgray; color: black")
         self.pk_k12.setValidator(QtGui.QDoubleValidator())
         self.pk_k12.textChanged.connect(self.pk_k12_changed_cb)
         hbox.addWidget(self.pk_k12)
@@ -363,10 +353,9 @@ class SubstrateDef(QWidget):
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
 
-        self.pk_k21 = QLineEdit()
+        self.pk_k21 = QLineEdit_custom()
         self.pk_k21.setFixedWidth(60)
         self.pk_k21.setEnabled(False)
-        self.pk_k21.setStyleSheet("background-color: lightgray; color: black")
         self.pk_k21.setValidator(QtGui.QDoubleValidator())
         self.pk_k21.textChanged.connect(self.pk_k21_changed_cb)
         hbox.addWidget(self.pk_k21)
@@ -379,10 +368,9 @@ class SubstrateDef(QWidget):
         label.setAlignment(QtCore.Qt.AlignRight)
         hbox.addWidget(label)
 
-        self.pk_volume_ratio = QLineEdit()
+        self.pk_volume_ratio = QLineEdit_custom()
         self.pk_volume_ratio.setFixedWidth(60)
         self.pk_volume_ratio.setEnabled(False)
-        self.pk_volume_ratio.setStyleSheet("background-color: lightgray; color: black")
         self.pk_volume_ratio.setValidator(QtGui.QDoubleValidator())
         self.pk_volume_ratio.textChanged.connect(self.pk_volume_ratio_changed_cb)
         hbox.addWidget(self.pk_volume_ratio)
@@ -757,31 +745,24 @@ class SubstrateDef(QWidget):
     def enable_schedule_parameters(self):
         self.pk_total_doses.setEnabled(True)
         self.pk_total_doses.setText(str(self.param_d[self.current_substrate]["total_doses"]))
-        self.pk_total_doses.setStyleSheet("background-color: white; color: black")
         
         self.pk_loading_doses.setEnabled(True)
         self.pk_loading_doses.setText(str(self.param_d[self.current_substrate]["loading_doses"]))
-        self.pk_loading_doses.setStyleSheet("background-color: white; color: black")
 
         self.pk_first_dose_time.setEnabled(True)
         self.pk_first_dose_time.setText(str(self.param_d[self.current_substrate]["first_dose_time"]))
-        self.pk_first_dose_time.setStyleSheet("background-color: white; color: black")
 
         self.pk_dose_interval.setEnabled(True)
         self.pk_dose_interval.setText(str(self.param_d[self.current_substrate]["dose_interval"]))
-        self.pk_dose_interval.setStyleSheet("background-color: white; color: black")
 
         self.pk_regular_dose.setEnabled(True)
         self.pk_regular_dose.setText(str(self.param_d[self.current_substrate]["regular_dose"]))
-        self.pk_regular_dose.setStyleSheet("background-color: white; color: black")
 
         self.pk_loading_dose.setEnabled(True)
         self.pk_loading_dose.setText(str(self.param_d[self.current_substrate]["loading_dose"]))
-        self.pk_loading_dose.setStyleSheet("background-color: white; color: black")
 
     def disable_all_schedule(self):
         self.pk_schedule_format_combobox.setEnabled(False)
-        self.pk_schedule_format_combobox.setStyleSheet("background-color: lightgray; color: black")
         self.disable_schedule_parameters()
 
     def pk_model_combobox_changed_cb(self, idx):
@@ -797,7 +778,6 @@ class SubstrateDef(QWidget):
         elif self.pk_model_combobox.currentText() == "Constant":
             self.pk_schedule_format_combobox.setCurrentIndex(self.pk_schedule_format_combobox.findText("csv"))
             self.pk_schedule_format_combobox.setEnabled(False)
-            self.pk_schedule_format_combobox.setStyleSheet("background-color: lightgray; color: black")
             self.disable_rate_parameters()
             self.pk_csv_folder.setEnabled(True)
             self.pk_csv_filename.setEnabled(True)
@@ -807,11 +787,9 @@ class SubstrateDef(QWidget):
 
         if self.pk_model_combobox.currentText() == "None":
             self.pk_biot_number.setEnabled(False)
-            self.pk_biot_number.setStyleSheet("background-color: lightgray; color: black")
         else:
             self.pk_biot_number.setEnabled(True)
             self.pk_biot_number.setText(str(self.param_d[self.current_substrate]["biot_number"]))
-            self.pk_biot_number.setStyleSheet("background-color: white; color: black")
 
         if self.pk_model_combobox.currentText() == "SBML":
             self.pk_sbml_folder.setEnabled(True)
@@ -829,20 +807,16 @@ class SubstrateDef(QWidget):
 
         self.pk_elimination_rate.setEnabled(True)
         self.pk_elimination_rate.setText(str(self.param_d[self.current_substrate]["elimination_rate"]))
-        self.pk_elimination_rate.setStyleSheet("background-color: white; color: black")
         
         if self.pk_model_combobox.currentText() == "2C":
             self.pk_k12.setEnabled(True)
             self.pk_k12.setText(str(self.param_d[self.current_substrate]["k12"]))
-            self.pk_k12.setStyleSheet("background-color: white; color: black")
 
             self.pk_k21.setEnabled(True)
             self.pk_k21.setText(str(self.param_d[self.current_substrate]["k21"]))
-            self.pk_k21.setStyleSheet("background-color: white; color: black")
 
             self.pk_volume_ratio.setEnabled(True)
             self.pk_volume_ratio.setText(str(self.param_d[self.current_substrate]["volume_ratio"]))
-            self.pk_volume_ratio.setStyleSheet("background-color: white; color: black")
 
     def enable_all_schedule(self):
         self.pk_schedule_format_combobox.setEnabled(True)
@@ -851,35 +825,17 @@ class SubstrateDef(QWidget):
 
     def disable_rate_parameters(self):
         self.pk_elimination_rate.setEnabled(False)
-        self.pk_elimination_rate.setStyleSheet("background-color: lightgray; color: black")
-
         self.pk_k12.setEnabled(False)
-        self.pk_k12.setStyleSheet("background-color: lightgray; color: black")
-
         self.pk_k21.setEnabled(False)
-        self.pk_k21.setStyleSheet("background-color: lightgray; color: black")
-
         self.pk_volume_ratio.setEnabled(False)
-        self.pk_volume_ratio.setStyleSheet("background-color: lightgray; color: black")
 
     def disable_schedule_parameters(self):
         self.pk_total_doses.setEnabled(False)
-        self.pk_total_doses.setStyleSheet("background-color: lightgray; color: black")
-
         self.pk_loading_doses.setEnabled(False)
-        self.pk_loading_doses.setStyleSheet("background-color: lightgray; color: black")
-        
         self.pk_first_dose_time.setEnabled(False)
-        self.pk_first_dose_time.setStyleSheet("background-color: lightgray; color: black")
-        
         self.pk_dose_interval.setEnabled(False)
-        self.pk_dose_interval.setStyleSheet("background-color: lightgray; color: black")
-        
         self.pk_regular_dose.setEnabled(False)
-        self.pk_regular_dose.setStyleSheet("background-color: lightgray; color: black")
-        
         self.pk_loading_dose.setEnabled(False)
-        self.pk_loading_dose.setStyleSheet("background-color: lightgray; color: black")
 
     def pk_schedule_format_combobox_changed_cb(self, idx):
         if self.current_substrate is not None:

@@ -149,7 +149,7 @@ class QLineEdit_custom(QLineEdit):
             QLineEdit:disabled
             {
                 color: black;
-                background-color:gray;
+                background-color:lightgray;
             }
             """
 
@@ -160,7 +160,7 @@ class QLineEdit_custom(QLineEdit):
             }
             QLineEdit:disabled {
                 color: black;
-                background-color:gray;
+                background-color:lightgray;
             }
             """
 
@@ -213,7 +213,18 @@ class QRadioButton_custom(QRadioButton):
 class QComboBox_custom(QComboBox):
     def __init__(self):
         super().__init__()
-        self.setStyleSheet("QComboBox{color: #000000; background-color: #FFFFFF;}")
+
+        combobox_style = """
+        QComboBox {
+            color: black;
+            background-color: white;
+        }
+        QComboBox:disabled {
+            color: black;
+            background-color:lightgray;
+        }
+        """
+        self.setStyleSheet(combobox_style)
 
 class ExtendedCombo( QComboBox ):
     def __init__( self,  parent = None):
